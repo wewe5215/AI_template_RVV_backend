@@ -16,7 +16,7 @@
 
 #include "device_functions-generated.h"
 #include "raii_wrapper.h"
-
+#include <time.h>
 namespace {
 std::string GetEnumString(AITemplateDtype dtype) {
   switch (dtype) {
@@ -32,6 +32,8 @@ std::string GetEnumString(AITemplateDtype dtype) {
       return "kLong";
     case AITemplateDtype::kBFloat16:
       return "kBFloat16";
+    case AITemplateDtype::k_Float16:
+      return "kFloat16";
     default:
       return "unknown";
   }
@@ -62,27 +64,12 @@ ModelContainer::ModelContainer(
     throw std::runtime_error("Number of models must be positive");
   }
   dmlc::InitLogging("aitemplate"); // TODO(xxx): render network name
-  int runtime_version;
-  int driver_version;
-  DEVICE_CHECK(GetDriverVersion(&driver_version));
-  DEVICE_CHECK(GetRuntimeVersion(&runtime_version));
-  LOG(INFO) << "Device Runtime Version: " << runtime_version
-            << "; Driver Version: " << driver_version;
-
-  int dev_id;
-  DevicePropertyType prop;
-  DEVICE_CHECK(GetDevice(&dev_id));
-  DEVICE_CHECK(GetDeviceProperties(&prop, dev_id));
-
   bool useDebugLogging = false;
   if (auto var = std::getenv("LOGLEVEL")) {
     if (var[0] == 'd' || var[0] == 'D') {
       useDebugLogging = true;
     }
   }
-  LOG(INFO)
-      << (useDebugLogging ? PrintDebugDeviceProperties(prop)
-                          : PrintInfoDeviceProperties(prop));
 
   LOG(INFO) << "Init AITemplate Runtime with " << num_models << " concurrency";
   models_.reserve(num_models);
@@ -148,9 +135,6 @@ void ModelContainer::Run(
     pending_models_.push_back(model);
   }
   pending_models_available_.notify_one();
-  if (sync) {
-    StreamSynchronize(stream);
-  }
 }
 
 void ModelContainer::Profile(
@@ -189,14 +173,14 @@ void ModelContainer::RunWithOutputsOnHost(
     StreamType stream,
     bool graph_mode,
     int64_t** output_shapes_out) {
-  std::vector<std::pair<GPUPtr, size_t>> owned_outputs_ptrs;
+  std::vector<std::pair<Ptr, size_t>> owned_outputs_ptrs;
   std::vector<AITData> owned_outputs;
   owned_outputs_ptrs.reserve(num_outputs);
   owned_outputs.reserve(num_outputs);
   for (size_t i = 0; i < num_outputs; ++i) {
     size_t num_bytes = MaxOutputStorageBytes(i);
     owned_outputs_ptrs.emplace_back(
-        RAII_DeviceMalloc(num_bytes, allocator_), num_bytes);
+        RAII_DeviceMalloc(num_bytes), num_bytes);
     owned_outputs.emplace_back(
         owned_outputs_ptrs.back().first.get(),
         outputs[i].shape,
@@ -216,10 +200,8 @@ void ModelContainer::RunWithOutputsOnHost(
     auto& owned_output = owned_outputs_ptrs[i];
     auto& ptr = owned_output.first;
     auto num_bytes = owned_output.second;
-    DEVICE_CHECK(CopyToHost(outputs[i].ptr, ptr.get(), num_bytes, stream));
+    std::memcpy(outputs[i].ptr, ptr.get(), num_bytes);
   }
-
-  DEVICE_CHECK(StreamSynchronize(stream));
 }
 
 float ModelContainer::Benchmark(
@@ -249,118 +231,16 @@ float ModelContainer::Benchmark(
     constants_lk.lock();
   }
 
-  if (num_threads == 1) {
-    return BenchmarkImpl(
-               inputs,
-               num_inputs,
-               outputs,
-               num_outputs,
-               stream,
-               graph_mode,
-               count,
-               output_shapes_out) /
-        count;
-  }
-  // Clone the outputs, each thread needs its own set
-  std::vector<std::vector<GPUPtr>> per_thread_outputs_ptrs;
-  std::vector<std::vector<AITData>> per_thread_outputs;
-  std::vector<StreamPtr> per_thread_streams;
-  per_thread_outputs_ptrs.reserve(num_threads - 1);
-  per_thread_outputs.reserve(num_threads - 1);
-
-  if (use_unique_stream_per_thread) {
-    per_thread_streams.reserve(num_threads);
-    for (size_t i = 0; i < num_threads; ++i) {
-      per_thread_streams.push_back(RAII_StreamCreate(/*non_blocking=*/true));
-    }
-  }
-
-  for (size_t i = 1; i < num_threads; ++i) {
-    std::vector<GPUPtr> cloned_outputs_ptrs;
-    std::vector<AITData> cloned_outputs;
-
-    cloned_outputs_ptrs.reserve(num_outputs);
-    cloned_outputs.reserve(num_outputs);
-
-    for (size_t j = 0; j < num_outputs; ++j) {
-      size_t num_bytes = MaxOutputStorageBytes(j);
-      cloned_outputs_ptrs.emplace_back(
-          RAII_DeviceMalloc(num_bytes, allocator_));
-      auto* new_pointer = cloned_outputs_ptrs.back().get();
-      DEVICE_CHECK(
-          DeviceToDeviceCopy(new_pointer, outputs[j].ptr, num_bytes, stream));
-      cloned_outputs.emplace_back(
-          new_pointer, outputs[j].shape, outputs[j].dtype);
-    }
-    per_thread_outputs_ptrs.push_back(std::move(cloned_outputs_ptrs));
-    per_thread_outputs.push_back(std::move(cloned_outputs));
-  }
-  DEVICE_CHECK(StreamSynchronize(stream));
-
-  auto get_stream = [stream, use_unique_stream_per_thread, &per_thread_streams](
-                        size_t thread_idx) {
-    if (!use_unique_stream_per_thread) {
-      return stream;
-    }
-    return per_thread_streams[thread_idx].get();
-  };
-
-  auto thread_func = [&](size_t thread_idx) {
-    AITData* thread_outputs =
-        thread_idx == 0 ? outputs : per_thread_outputs[thread_idx - 1].data();
-    StreamType thread_stream = get_stream(thread_idx);
-    auto* thread_output_shapes_out =
-        thread_idx == 0 ? output_shapes_out : nullptr;
-    return BenchmarkImpl(
-        inputs,
-        num_inputs,
-        thread_outputs,
-        num_outputs,
-        thread_stream,
-        graph_mode,
-        count,
-        thread_output_shapes_out);
-  };
-
-  std::vector<std::future<float>> futures;
-  futures.reserve(num_threads);
-  for (size_t i = 0; i < num_threads; ++i) {
-    futures.push_back(std::async(std::launch::async, thread_func, i));
-  }
-
-  auto max_time = std::accumulate(
-      futures.begin(), futures.end(), 0.f, [](float cur_val, auto& future) {
-        return std::max(future.get(), cur_val);
-      });
-
-  // Verify that all the outputs are the same
-  for (size_t i = 0; i < num_outputs; ++i) {
-    auto output_size = MaxOutputStorageBytes(i);
-    auto output_host = std::make_unique<uint8_t[]>(output_size);
-    // NB: technically, we don't have to copy to host here, but using
-    // std::memcmp is easier than writing a kernel that does comparisons
-    // for both backends, and performance is not important here.
-    DEVICE_CHECK(
-        CopyToHost(output_host.get(), outputs[i].ptr, output_size, stream));
-    DEVICE_CHECK(StreamSynchronize(stream));
-
-    for (size_t thread_idx = 1; thread_idx < num_threads; ++thread_idx) {
-      auto* thread_output = per_thread_outputs[thread_idx - 1][i].ptr;
-      auto thread_output_host = std::make_unique<uint8_t[]>(output_size);
-      auto thread_stream = get_stream(thread_idx);
-      DEVICE_CHECK(CopyToHost(
-          thread_output_host.get(), thread_output, output_size, thread_stream));
-      DEVICE_CHECK(StreamSynchronize(thread_stream));
-      if (std::memcmp(
-              output_host.get(), thread_output_host.get(), output_size)) {
-        throw std::runtime_error(
-            "Output " + std::to_string(i) +
-            " did not match for a spawned thread!");
-      }
-    }
-  }
-  auto total_num_iters = num_threads * count;
-  return max_time / total_num_iters;
+  return BenchmarkImpl(
+              inputs,
+              num_inputs,
+              outputs,
+              num_outputs,
+              stream,
+              graph_mode,
+              count,
+              output_shapes_out) /
+      count;
 }
 
 void ModelContainer::SetConstantImpl(
@@ -438,11 +318,9 @@ void ModelContainer::SetConstantImpl(
       uint8_t* constants_ptr = GetInactiveConstantsBuffer();
       size_t idx = bound_it->second;
       // TODO: check whether src is host or device memory.
-      DEVICE_CHECK(DeviceToDeviceCopy(
-          constants_ptr + bound_constant_offsets_[idx],
-          src,
-          bound_constant_size_[idx],
-          stream));
+      std::memcpy(constants_ptr + bound_constant_offsets_[idx],
+                  src,
+                  bound_constant_size_[idx]);
     }
   }
 
@@ -493,7 +371,7 @@ uint8_t* ModelContainer::GetInactiveConstantsBuffer() {
   uint8_t* constants_ptr{nullptr};
   if (use_constants_primary_buffer_) {
     if (constants_secondary_ == nullptr) {
-      constants_secondary_ = RAII_DeviceMalloc(constants_size_, allocator_);
+      constants_secondary_ = RAII_DeviceMalloc(constants_size_);
     }
     constants_ptr = static_cast<uint8_t*>(constants_secondary_.get());
   } else {
@@ -590,7 +468,10 @@ void ModelContainer::WaitForAllModels(bool include_constant_folder) {
   // Wait for all on-going inferences to finish.
   for (auto* model : pending_models_) {
     try {
-      model->WaitForCompletion();
+      if (!model->WaitForCompletion()) {
+          LOG(WARNING)
+              << "Model inferencing.";
+      }
       // Something has gone horribly wrong if we hit these catch cases, but
       // there's not much we can do about it. Just put the model back into the
       // pool and carry on with folding.
@@ -652,9 +533,6 @@ void ModelContainer::FoldConstants(
   } else {
     std::lock_guard constant_folding_lk(constants_sync_mutex_);
     FoldConstantsImpl(stream);
-  }
-  if (sync) {
-    DEVICE_CHECK(StreamSynchronize(stream));
   }
 }
 
@@ -863,13 +741,10 @@ float ModelContainer::BenchmarkImpl(
     size_t count,
     int64_t** output_shapes_out) {
   auto* model = GetAvailableModel();
-  float runtime_ms = 0.;
-  auto start_event = RAII_CreateEvent();
-  auto end_event = RAII_CreateEvent();
+  struct timespec start, end;
   try {
     PrepareForRun(model, inputs, num_inputs, outputs, num_outputs);
-    DEVICE_CHECK(EventRecord(start_event.get(), stream));
-
+    clock_gettime(CLOCK_MONOTONIC, &start);
     for (size_t i = 0; i < count; ++i) {
       model->Run(stream, graph_mode);
     }
@@ -891,13 +766,10 @@ float ModelContainer::BenchmarkImpl(
     pending_models_.push_back(model);
   }
   pending_models_available_.notify_one();
-
-  DEVICE_CHECK(EventRecord(end_event.get(), stream));
-  DEVICE_CHECK(EventSynchronize(end_event.get()));
-  DEVICE_CHECK(
-      EventElapsedTime(&runtime_ms, start_event.get(), end_event.get()));
-  LOG(INFO) << "Benchmark runtime ms/iter: " << runtime_ms / count;
-  return runtime_ms;
+  clock_gettime(CLOCK_MONOTONIC, &end);
+  float elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+  LOG(INFO) << "Benchmark runtime s/iter: " << elapsed / count;
+  return elapsed;
 }
 
 } // namespace ait

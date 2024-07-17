@@ -71,14 +71,15 @@ static void make_random_float_values(
 
 static void make_random_float16_values(
     std::mt19937& rnd_generator,
-    half* h_data,
+    _Float16* h_data,
     size_t numel,
     float lb,
     float ub) {
   std::uniform_real_distribution<> dist(lb, ub);
   for (size_t i = 0; i < numel; i++) {
     float v = static_cast<float>(dist(rnd_generator));
-    h_data[i] = __float2half_rn(v);
+    // fixme: if encountered precision loss, then change the type conversion method
+    h_data[i] = (_Float16)(v);
   }
 }
 
@@ -91,24 +92,23 @@ static void make_random_bfloat16_values(
   std::uniform_real_distribution<> dist(lb, ub);
   for (size_t i = 0; i < numel; i++) {
     float v = static_cast<float>(dist(rnd_generator));
-    h_data[i] = __float2bfloat16_rn(v);
+    // fixme: if encountered precision loss, then change the type conversion method
+    h_data[i] = (uint16_t)(v);
   }
 }
 
-static GPUPtr make_random_data(
-    AITemplateAllocator& allocator,
+static Ptr make_random_data(
     std::mt19937& rnd_generator,
     const AITemplateParamShape& shape,
     const AITemplateDtype& dtype) {
   size_t numel = shape.Numel();
   size_t num_bytes = numel * AITemplateDtypeSizeBytes(dtype);
-  void* h_data;
-  DEVICE_CHECK(DeviceMallocHost(&h_data, num_bytes));
+  Ptr h_data = RAII_DeviceMalloc(num_bytes);
   switch (dtype) {
     case AITemplateDtype::kInt:
       make_random_integer_values<int>(
           rnd_generator,
-          static_cast<int*>(h_data),
+          static_cast<int*>(h_data.get()),
           numel,
           /*lb*/ -10,
           /*ub*/ 10);
@@ -116,7 +116,7 @@ static GPUPtr make_random_data(
     case AITemplateDtype::kLong:
       make_random_integer_values<int64_t>(
           rnd_generator,
-          static_cast<int64_t*>(h_data),
+          static_cast<int64_t*>(h_data.get()),
           numel,
           /*lb*/ -10,
           /*ub*/ 10);
@@ -124,7 +124,7 @@ static GPUPtr make_random_data(
     case AITemplateDtype::kFloat:
       make_random_float_values(
           rnd_generator,
-          static_cast<float*>(h_data),
+          static_cast<float*>(h_data.get()),
           numel,
           /*lb*/ 1.0,
           /*ub*/ 2.0);
@@ -132,34 +132,32 @@ static GPUPtr make_random_data(
     case AITemplateDtype::kBFloat16:
       make_random_bfloat16_values(
           rnd_generator,
-          static_cast<bfloat16*>(h_data),
+          static_cast<uint16_t*>(h_data.get()),
           numel,
           /*lb*/ 1.0,
           /*ub*/ 2.0);
       break;
-    case AITemplateDtype::kHalf:
+    case AITemplateDtype::k_Float16:
       make_random_float16_values(
           rnd_generator,
-          static_cast<half*>(h_data),
+          static_cast<_Float16*>(h_data.get()),
           numel,
           /*lb*/ 1.0,
           /*ub*/ 2.0);
       break;
     case AITemplateDtype::kBool:
       make_random_integer_values<bool>(
-          rnd_generator, static_cast<bool*>(h_data), numel, /*lb*/ 0, /*ub*/ 1);
+          rnd_generator,
+          static_cast<bool*>(h_data.get()),
+          numel,
+          /*lb*/ 0,
+          /*ub*/ 1);
       break;
     default:
       throw std::runtime_error("unsupported dtype for making random data");
   }
 
-  GPUPtr d_ptr = RAII_DeviceMalloc(num_bytes, allocator);
-  DEVICE_CHECK(CopyToDevice(d_ptr.get(), h_data, num_bytes));
-
-  // free memory
-  DEVICE_CHECK(FreeDeviceHostMemory(h_data));
-
-  return d_ptr;
+  return h_data;
 }
 
 using OutputDataPtr = std::unique_ptr<void, std::function<void(void*)>>;
@@ -197,7 +195,6 @@ struct OutputData {
 
 static AITemplateError run(
     AITemplateModelHandle handle,
-    AITemplateAllocator& allocator,
     std::vector<OutputData>& outputs) {
   size_t num_outputs = 0;
   AITemplateModelContainerGetNumOutputs(handle, &num_outputs);
@@ -220,10 +217,9 @@ static AITemplateError run(
         std::make_unique<int64_t[]>(shape.size);
     ait_output_shapes_out.push_back(shape_ptr.get());
     size_t num_bytes = shape.Numel() * AITemplateDtypeSizeBytes(dtype);
-    void* h_data;
-    DEVICE_CHECK(DeviceMallocHost(&h_data, num_bytes));
+    void* h_data = (void*)malloc(num_bytes);
     ait_outputs.emplace_back(h_data, shape, dtype);
-    auto deleter = [](void* data) { FreeDeviceHostMemory(data); };
+    auto deleter = [](void* data) { free(data); };
     OutputDataPtr h_output_ptr(h_data, deleter);
     outputs.emplace_back(
         h_output_ptr, shape_ptr, (int)shape.size, (int)i, dtype, name);
@@ -232,7 +228,7 @@ static AITemplateError run(
   size_t num_inputs = 0;
   AITemplateModelContainerGetNumInputs(handle, &num_inputs);
   // Holding unique_ptr(s) that will be auto-released.
-  std::vector<GPUPtr> input_ptrs;
+  std::vector<Ptr> input_ptrs;
   input_ptrs.reserve(num_inputs);
 
   std::map<std::string, unsigned> input_name_to_index;
@@ -256,19 +252,17 @@ static AITemplateError run(
     // tmp folder, the person who will be diagnosing the issue could make any
     // changes to the code. We don't force us to predict the user's behavior.
     input_ptrs.emplace_back(
-        make_random_data(allocator, rnd_generator, shape, dtype));
+        make_random_data(rnd_generator, shape, dtype));
     inputs[i] = AITData(input_ptrs.back().get(), shape, dtype);
   }
 
   bool graph_mode = false;
-  auto stream = RAII_StreamCreate(/*non_blocking=*/true);
   return AITemplateModelContainerRunWithOutputsOnHost(
       handle,
       inputs.data(),
       num_inputs,
       ait_outputs.data(),
       num_outputs,
-      reinterpret_cast<AITemplateStreamHandle>(stream.get()),
       graph_mode,
       ait_output_shapes_out.data());
 }
@@ -295,21 +289,18 @@ struct AITStandaloneTestcase {
       inputs; // this will be filled the AITData instances for the inputs
 
   std::vector<int64_t> shape_data_owner;
-  std::vector<GPUPtr> gpu_data_owner;
+  std::vector<Ptr> data_owner;
 
   const std::string test_data_path; // path to test data file
   AITemplateModelHandle& handle;
-  AITemplateAllocator& allocator;
 
   float atol;
   float rtol;
 
   AITStandaloneTestcase(
       const char* test_data_path_,
-      AITemplateModelHandle& handle_, // model handle
-      AITemplateAllocator& allocator_)
+      AITemplateModelHandle& handle_)
       : handle(handle_),
-        allocator(allocator_),
         test_data_path(test_data_path_) {
     _load();
   }
@@ -327,7 +318,7 @@ struct AITStandaloneTestcase {
     read_element(fh, atol); // absolute error tolerance
     read_element(fh, rtol); // relative error tolerance
 
-    gpu_data_owner.reserve(num_inputs + num_outputs);
+    data_owner.reserve(num_inputs + num_outputs);
     ait_output_shapes_out.reserve(num_outputs);
 
     std::map<std::string, unsigned> input_name_to_index;
@@ -419,19 +410,13 @@ struct AITStandaloneTestcase {
         throw std::runtime_error("Tensor data total size mismatch.");
       }
       // allocate memory for tensor raw data on host
-      void* h_data;
-      DEVICE_CHECK(DeviceMallocHost(&h_data, num_bytes));
+      Ptr h_data = RAII_DeviceMalloc(num_bytes);
       // read tensor raw data from file
       fh.read(reinterpret_cast<char*>(h_data), read_total_tensor_bytes);
       // Allocate corresponding device memory and copy tensor raw data to device
-      gpu_data_owner.emplace_back(RAII_DeviceMalloc(num_bytes, allocator));
-      DEVICE_CHECK(
-          CopyToDevice(gpu_data_owner.back().get(), h_data, num_bytes));
+      data_owner.emplace_back(h_data);
 
-      // free host memory for tensor
-      DEVICE_CHECK(FreeDeviceHostMemory(h_data));
-
-      inputs.push_back(AITData(gpu_data_owner.back().get(), shape, dtype));
+      inputs.push_back(AITData(data_owner.back().get(), shape, dtype));
     }
     std::cout << "Finished loading testcase inputs." << "\n";
     if (fh.peek() == std::ifstream::traits_type::eof()) {
@@ -457,9 +442,9 @@ struct AITStandaloneTestcase {
       size_t max_numel = shape.Numel();
       size_t max_num_bytes = max_numel * AITemplateDtypeSizeBytes(dtype);
 
-      gpu_data_owner.emplace_back(RAII_DeviceMalloc(max_num_bytes, allocator));
+      data_owner.emplace_back(RAII_DeviceMalloc(max_num_bytes));
       gpu_outputs.push_back(
-          AITData(gpu_data_owner.back().get(), max_shape, dtype));
+          AITData(data_owner.back().get(), max_shape, dtype));
 
       std::cout << "Loading expected output: " << name << ", at idx: " << i;
 
@@ -521,12 +506,8 @@ struct AITStandaloneTestcase {
         throw std::runtime_error("Tensor data total size mismatch.");
       }
       // allocate memory for tensor raw data on host
-      void* h_data_expected;
-      void* h_data;
-      DEVICE_CHECK(
-          DeviceMallocHost(&h_data, max_num_bytes)); // max size required here
-      DEVICE_CHECK(DeviceMallocHost(&h_data_expected, num_bytes));
-
+      void* h_data_expected = (void*)malloc(num_bytes);
+      void* h_data = (void*)malloc(max_num_bytes);
       // read tensor raw data from file
       fh.read(
           reinterpret_cast<char*>(h_data_expected), read_total_tensor_bytes);
@@ -541,10 +522,8 @@ struct AITStandaloneTestcase {
   }
 
   AITemplateError run(
-      AITemplateModelHandle handle,
-      AITemplateAllocator& allocator) {
+      AITemplateModelHandle handle) {
     bool graph_mode = false;
-    auto stream = RAII_StreamCreate(/*non_blocking=*/true);
 
     return AITemplateModelContainerRunWithOutputsOnHost(
         handle,
@@ -552,18 +531,15 @@ struct AITStandaloneTestcase {
         inputs.size(),
         host_outputs.data(),
         host_outputs.size(),
-        reinterpret_cast<AITemplateStreamHandle>(stream.get()),
         graph_mode,
         ait_output_shapes_out.data());
   }
 
   float benchmark(
       AITemplateModelHandle handle,
-      AITemplateAllocator& allocator,
       size_t count,
       size_t num_threads) {
     bool graph_mode = false;
-    auto stream = RAII_StreamCreate(/*non_blocking=*/true);
     float runtime_ms = -999.0f;
     AITemplateError err = AITemplateModelContainerBenchmark(
         handle,
@@ -571,7 +547,6 @@ struct AITStandaloneTestcase {
         inputs.size(),
         gpu_outputs.data(),
         gpu_outputs.size(),
-        reinterpret_cast<AITemplateStreamHandle>(stream.get()),
         graph_mode,
         count,
         num_threads,
@@ -605,8 +580,8 @@ struct AITStandaloneTestcase {
           passed =
               passed and _compare_results_to_expected<bfloat16>(output_idx);
           break;
-        case AITemplateDtype::kHalf:
-          passed = passed and _compare_results_to_expected<half>(output_idx);
+        case AITemplateDtype::k_Float16:
+          passed = passed and _compare_results_to_expected<_Float16>(output_idx);
           break;
         case AITemplateDtype::kBool:
           passed = passed and _compare_results_to_expected<bool>(output_idx);
@@ -674,14 +649,10 @@ int run_testcase(const char* input_file, bool benchmark) {
   {
     AITemplateModelHandle handle;
     AITemplateModelContainerCreate(&handle, /*num_runtimes*/ 1);
-    AITemplateAllocator* allocator;
-    AIT_ERROR_CHECK(AITemplateAllocatorCreate(
-        &allocator, AITemplateAllocatorType::kDefault));
+    auto deleter = [](void* data) { free(data); };
+    AITStandaloneTestcase test(input_file, handle);
 
-    auto deleter = [](void* data) { FreeDeviceHostMemory(data); };
-    AITStandaloneTestcase test(input_file, handle, *allocator);
-
-    AIT_ERROR_CHECK(test.run(handle, *allocator));
+    AIT_ERROR_CHECK(test.run(handle));
     std::cout << "Finished test run with input " << input_file << "\n";
     int retval = -1;
     if (!test.compare_results_to_expected()) {
@@ -694,13 +665,9 @@ int run_testcase(const char* input_file, bool benchmark) {
     std::cout << "Benchmarking with testcase " << input_file << "\n";
     AITemplateModelHandle handle;
     AITemplateModelContainerCreate(&handle, /*num_runtimes*/ 1);
-    AITemplateAllocator* allocator;
-    AIT_ERROR_CHECK(AITemplateAllocatorCreate(
-        &allocator, AITemplateAllocatorType::kDefault));
-
-    auto deleter = [](void* data) { FreeDeviceHostMemory(data); };
-    AITStandaloneTestcase benchmarker(input_file, handle, *allocator);
-    float runtime_ms = benchmarker.benchmark(handle, *allocator, 10, 1);
+    auto deleter = [](void* data) { free(data); };
+    AITStandaloneTestcase benchmarker(input_file, handle);
+    float runtime_ms = benchmarker.benchmark(handle, 10, 1);
     if (runtime_ms >= 0.0) {
       std::cout << "Benchmark result: " << input_file
                 << " repetitions: 10, ms/iter: " << runtime_ms << "\n";
@@ -713,14 +680,11 @@ int run_testcase(const char* input_file, bool benchmark) {
 int run_with_random_inputs() {
   AITemplateModelHandle handle;
   AITemplateModelContainerCreate(&handle, /*num_runtimes*/ 1);
-  AITemplateAllocator* allocator;
-  AIT_ERROR_CHECK(
-      AITemplateAllocatorCreate(&allocator, AITemplateAllocatorType::kDefault));
 
-  auto deleter = [](void* data) { FreeDeviceHostMemory(data); };
+  auto deleter = [](void* data) { free(data); };
 
   std::vector<OutputData> outputs;
-  AIT_ERROR_CHECK(run(handle, *allocator, outputs));
+  AIT_ERROR_CHECK(run(handle, outputs));
 
   // print out something
   for (const auto& output : outputs) {
@@ -731,8 +695,6 @@ int run_with_random_inputs() {
     }
     std::cout << "\n";
   }
-
-  AIT_ERROR_CHECK(AITemplateAllocatorDelete(allocator));
   // We are done and delete the handle.
   AITemplateModelContainerDelete(handle);
   return 0;

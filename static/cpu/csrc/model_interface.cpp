@@ -45,13 +45,12 @@ namespace {
 class DefaultAllocator : public AITemplateAllocator {
  public:
   void* Allocate(size_t n_bytes) override {
-    void* result;
-    DEVICE_CHECK(DeviceMalloc(&result, n_bytes));
+    void* result = (void*)malloc(n_bytes);
     return result;
   }
 
   void Free(void* ptr) override {
-    DEVICE_CHECK(FreeDeviceMemory(ptr));
+    DEVICE_CHECK(free(ptr));
   }
 };
 
@@ -79,8 +78,7 @@ extern "C" {
 
 AITemplateError AITemplateModelContainerCreate(
     AITemplateModelHandle* ret,
-    size_t num_runtimes,
-    AITemplateAllocator* allocator) {
+    size_t num_runtimes) {
   if (num_runtimes == 0) {
     LOG(ERROR) << "num_runtimes must be positive, but got 0";
     return AITemplateError::AITemplateFailure;
@@ -125,28 +123,24 @@ AIT_EXPORT AITemplateError AITemplateModelContainerSetManyConstants(
 
 AITemplateError AITemplateModelContainerSetDoubleBufferConstant(
     AITemplateModelHandle handle,
-    AITemplateStreamHandle stream_handle,
     const char* name,
     const AITData* tensor) {
   RETURN_ERROR_IF_NULL(handle)
   RETURN_ERROR_IF_NULL(tensor)
   auto* m = reinterpret_cast<ait::ModelContainer*>(handle);
-  auto stream = reinterpret_cast<ait::StreamType>(stream_handle);
   CONVERT_EXCEPTION_TO_ERROR_CODE(
-      { m->SetDoubleBufferConstant(name, *tensor, stream); })
+      { m->SetDoubleBufferConstant(name, *tensor, (ait::StreamType) nullptr); })
 }
 
 AIT_EXPORT AITemplateError AITemplateModelContainerSetManyDoubleBufferConstants(
     AITemplateModelHandle handle,
-    AITemplateStreamHandle stream_handle,
     const char** names,
     const AITData* tensors,
     size_t num_tensors) {
   RETURN_ERROR_IF_NULL(handle)
   auto* m = reinterpret_cast<ait::ModelContainer*>(handle);
-  auto stream = reinterpret_cast<ait::StreamType>(stream_handle);
   CONVERT_EXCEPTION_TO_ERROR_CODE(
-      { m->SetManyDoubleBufferConstants(names, tensors, num_tensors, stream); })
+      { m->SetManyDoubleBufferConstants(names, tensors, num_tensors, (ait::StreamType) nullptr); })
 }
 
 AITemplateError AITemplateModelContainerGetNumConstants(
@@ -211,20 +205,18 @@ AITemplateError AITemplateModelContainerRun(
     size_t num_inputs,
     AITData* outputs,
     size_t num_outputs,
-    AITemplateStreamHandle stream_handle,
     bool sync,
     bool graph_mode,
     int64_t** output_shapes_out) {
   RETURN_ERROR_IF_NULL(handle)
   auto* m = reinterpret_cast<ait::ModelContainer*>(handle);
-  auto stream = reinterpret_cast<ait::StreamType>(stream_handle);
   CONVERT_EXCEPTION_TO_ERROR_CODE({
     m->Run(
         inputs,
         num_inputs,
         outputs,
         num_outputs,
-        stream,
+        (ait::StreamType) nullptr,
         sync,
         graph_mode,
         output_shapes_out);
@@ -237,19 +229,17 @@ AITemplateError AITemplateModelContainerRunWithOutputsOnHost(
     size_t num_inputs,
     AITData* outputs,
     size_t num_outputs,
-    AITemplateStreamHandle stream_handle,
     bool graph_mode,
     int64_t** output_shapes_out) {
   RETURN_ERROR_IF_NULL(handle)
   auto* m = reinterpret_cast<ait::ModelContainer*>(handle);
-  auto stream = reinterpret_cast<ait::StreamType>(stream_handle);
   CONVERT_EXCEPTION_TO_ERROR_CODE({
     m->RunWithOutputsOnHost(
         inputs,
         num_inputs,
         outputs,
         num_outputs,
-        stream,
+        (ait::StreamType) nullptr,
         graph_mode,
         output_shapes_out);
   })
@@ -261,16 +251,14 @@ AITemplateError AITemplateModelContainerProfile(
     size_t num_inputs,
     AITData* outputs,
     size_t num_outputs,
-    AITemplateStreamHandle stream_handle,
     size_t num_iters,
     const char* filename) {
   RETURN_ERROR_IF_NULL(handle);
   RETURN_ERROR_IF_NULL(filename);
   auto* m = reinterpret_cast<ait::ModelContainer*>(handle);
-  auto stream = reinterpret_cast<ait::StreamType>(stream_handle);
   CONVERT_EXCEPTION_TO_ERROR_CODE({
     m->Profile(
-        inputs, num_inputs, outputs, num_outputs, stream, num_iters, filename);
+        inputs, num_inputs, outputs, num_outputs, (ait::StreamType) nullptr, num_iters, filename);
   })
 }
 
@@ -280,7 +268,6 @@ AITemplateError AITemplateModelContainerBenchmark(
     size_t num_inputs,
     AITData* outputs,
     size_t num_outputs,
-    AITemplateStreamHandle stream_handle,
     bool graph_mode,
     size_t count,
     size_t num_threads,
@@ -290,14 +277,13 @@ AITemplateError AITemplateModelContainerBenchmark(
   RETURN_ERROR_IF_NULL(handle)
   RETURN_ERROR_IF_NULL(runtime_ms)
   auto* m = reinterpret_cast<ait::ModelContainer*>(handle);
-  auto stream = reinterpret_cast<ait::StreamType>(stream_handle);
   CONVERT_EXCEPTION_TO_ERROR_CODE({
     *runtime_ms = m->Benchmark(
         inputs,
         num_inputs,
         outputs,
         num_outputs,
-        stream,
+        (ait::StreamType) nullptr,
         graph_mode,
         count,
         num_threads,
@@ -397,22 +383,18 @@ AITemplateError AITemplateModelContainerGetNumRuntimes(
 
 AITemplateError AITemplateModelContainerFoldConstants(
     AITemplateModelHandle handle,
-    AITemplateStreamHandle stream_handle,
     bool sync) {
   RETURN_ERROR_IF_NULL(handle)
   auto* m = reinterpret_cast<ait::ModelContainer*>(handle);
-  auto stream = reinterpret_cast<ait::StreamType>(stream_handle);
-  CONVERT_EXCEPTION_TO_ERROR_CODE({ m->FoldConstants(stream, sync, false); })
+  CONVERT_EXCEPTION_TO_ERROR_CODE({ m->FoldConstants((ait::StreamType) nullptr, sync, false); })
 }
 
 AITemplateError AITemplateModelContainerFoldConstantsInDoubleBuffer(
     AITemplateModelHandle handle,
-    AITemplateStreamHandle stream_handle,
     bool sync) {
   RETURN_ERROR_IF_NULL(handle)
   auto* m = reinterpret_cast<ait::ModelContainer*>(handle);
-  auto stream = reinterpret_cast<ait::StreamType>(stream_handle);
-  CONVERT_EXCEPTION_TO_ERROR_CODE({ m->FoldConstants(stream, sync, true); })
+  CONVERT_EXCEPTION_TO_ERROR_CODE({ m->FoldConstants((ait::StreamType) nullptr, sync, true); })
 }
 
 AITemplateError AITemplateModelContainerSwapConstants(

@@ -53,11 +53,8 @@ void GetConstantsBin(void** address, size_t* size) {
 
   HGLOBAL hResourceData = LoadResource(SavedDllHandle, hResource);
   if (!hResourceData) {
-    // could not load a resource
-    auto errorCode = GetLastError();
     TRIGGER_ERROR(std::string(
-        "LoadResource() call in GetConstantsBin() has failed with error " +
-        std::to_string(errorCode)));
+        "LoadResource() call in GetConstantsBin() has failed with error"));
   }
 
   DWORD resourceSize = SizeofResource(SavedDllHandle, hResource);
