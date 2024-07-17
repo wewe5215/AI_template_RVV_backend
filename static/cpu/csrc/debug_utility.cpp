@@ -17,7 +17,7 @@
 
 namespace {
 
-__global__ void inf_and_nan_checker(const half* tensor, int64_t elem_cnt) {
+void inf_and_nan_checker(const half* tensor, int64_t elem_cnt) {
   int64_t nan_num = 0, pos_inf = 0, neg_inf = 0;
   for (int64_t i = 0; i < elem_cnt; i++) {
     float v = (float)(*(tensor + i));
@@ -54,8 +54,7 @@ void InvokeInfAndNanChecker(
     int64_t elem_cnt,
     ait::StreamType stream) {
   printf("Tensor (%s) ", tensor_name);
-  inf_and_nan_checker<<<1, 1, 0, stream>>>(tensor, elem_cnt);
-  ait::StreamSynchronize(stream);
+  inf_and_nan_checker(tensor, elem_cnt);
 }
 
 } // namespace ait
