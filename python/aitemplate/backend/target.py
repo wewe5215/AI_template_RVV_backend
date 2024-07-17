@@ -48,6 +48,7 @@ class TargetType(IntEnum):
 
     cuda = 1
     rocm = 2
+    rvv  = 3
 
 
 class Target:
@@ -522,4 +523,9 @@ def CUDA(template_path: str = CUTLASS_PATH, arch: str = "80", **kwargs):
 def ROCM(template_path: str = COMPOSABLE_KERNEL_PATH, arch: str = "gfx908", **kwargs):
     """Create a ROCM target."""
     func = registry.get("rocm.create_target")
+    return func(template_path, arch, **kwargs)
+
+def RVV(template_path: str = "", arch: str = "rv64gcv_zvfh", **kwargs):
+    """Create a RVV target."""
+    func = registry.get("rvv.create_target")
     return func(template_path, arch, **kwargs)

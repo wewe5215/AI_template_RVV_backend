@@ -39,6 +39,7 @@ class TestEnv(Enum):
     CUDA_SM80 = 2
     CUDA_SM90 = 3
     ROCM = 100
+    RVV = 200
 
 
 def _ROCM_filter(method_name: str) -> bool:

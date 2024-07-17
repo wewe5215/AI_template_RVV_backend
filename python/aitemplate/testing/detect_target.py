@@ -19,7 +19,7 @@ import logging
 import os
 from subprocess import PIPE, Popen
 
-from aitemplate.backend.target import CUDA, ROCM
+from aitemplate.backend.target import CUDA, ROCM, RVV
 
 # pylint: disable=W0702, W0612,R1732
 
@@ -129,4 +129,6 @@ def detect_target(**kwargs):
 
         _LOGGER.info("Set target to ROCM")
         return ROCM(arch=flag, **kwargs)
-    raise RuntimeError("Unsupported platform")
+    else:
+        _LOGGER.info("Set target to RVV")
+        return RVV(arch="rv64gcv_zvfh", **kwargs)
