@@ -72,6 +72,7 @@ enum class AITemplateDtype {
   kLong,
   kBool,
   kBFloat16,
+  k_Float16,
 };
 
 struct AITData {
@@ -92,6 +93,7 @@ inline size_t AITemplateDtypeSizeBytes(AITemplateDtype dtype) {
   switch (dtype) {
     case AITemplateDtype::kHalf:
     case AITemplateDtype::kBFloat16:
+    case AITemplateDtype::k_Float16:
       return 2;
     case AITemplateDtype::kFloat:
       return 4;
@@ -107,8 +109,6 @@ inline size_t AITemplateDtypeSizeBytes(AITemplateDtype dtype) {
   throw std::runtime_error("dtype handling is not implemented!");
 }
 
-struct AITemplateStreamOpaque {};
-using AITemplateStreamHandle = AITemplateStreamOpaque*;
 
 // Allocator to use for GPU mallocs and frees. Allocations will only happen
 // when the ModelContainer is created.
@@ -139,8 +139,7 @@ extern "C" {
 // * We assume that the allocator lives at least as long as the ModelContainer.
 AIT_EXPORT AITemplateError AITemplateModelContainerCreate(
     AITemplateModelHandle* ret,
-    size_t num_runtimes,
-    AITemplateAllocator* allocator = nullptr);
+    size_t num_runtimes);
 
 AIT_EXPORT AITemplateError
 AITemplateModelContainerDelete(AITemplateModelHandle handle);
@@ -158,13 +157,11 @@ AIT_EXPORT AITemplateError AITemplateModelContainerSetManyConstants(
 
 AIT_EXPORT AITemplateError AITemplateModelContainerSetDoubleBufferConstant(
     AITemplateModelHandle handle,
-    AITemplateStreamHandle stream_handle,
     const char* name,
     const AITData* tensor);
 
 AIT_EXPORT AITemplateError AITemplateModelContainerSetManyDoubleBufferConstants(
     AITemplateModelHandle handle,
-    AITemplateStreamHandle stream_handle,
     const char** names,
     const AITData* tensors,
     size_t num_tensors);
@@ -197,7 +194,6 @@ AIT_EXPORT AITemplateError AITemplateModelContainerRun(
     size_t num_inputs,
     AITData* outputs,
     size_t num_outputs,
-    AITemplateStreamHandle stream_handle,
     bool sync,
     bool graph_mode,
     int64_t** output_shapes_out);
@@ -212,7 +208,6 @@ AIT_EXPORT AITemplateError AITemplateModelContainerRunWithOutputsOnHost(
     size_t num_inputs,
     AITData* outputs,
     size_t num_outputs,
-    AITemplateStreamHandle stream_handle,
     bool graph_mode,
     int64_t** output_shapes_out);
 
@@ -223,7 +218,6 @@ AIT_EXPORT AITemplateError AITemplateModelContainerProfile(
     size_t num_inputs,
     AITData* outputs,
     size_t num_outputs,
-    AITemplateStreamHandle stream_handle,
     size_t num_iters,
     const char* filename);
 
@@ -233,7 +227,6 @@ AIT_EXPORT AITemplateError AITemplateModelContainerBenchmark(
     size_t num_inputs,
     AITData* outputs,
     size_t num_outputs,
-    AITemplateStreamHandle stream_handle,
     bool graph_mode,
     size_t count,
     size_t num_threads,
@@ -285,12 +278,10 @@ AIT_EXPORT AITemplateError AITemplateModelContainerGetNumRuntimes(
 
 AIT_EXPORT AITemplateError AITemplateModelContainerFoldConstants(
     AITemplateModelHandle handle,
-    AITemplateStreamHandle stream_handle,
     bool sync);
 
 AIT_EXPORT AITemplateError AITemplateModelContainerFoldConstantsInDoubleBuffer(
     AITemplateModelHandle handle,
-    AITemplateStreamHandle stream_handle,
     bool sync);
 
 AIT_EXPORT AITemplateError

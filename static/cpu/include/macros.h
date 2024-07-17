@@ -20,13 +20,12 @@
 #include "device_functions-generated.h"
 
 #define DEVICE_CHECK(call)                                           \
-  if ((call) != GetDeviceSuccess()) {                                \
+  if (!call) {                                \
     throw std::runtime_error(                                        \
-        #call " API call failed: " + GetLastErrorString() + " at " + \
+        #call " API call failed: " + " at " + \
         __FILE__ + ", line" + std::to_string(__LINE__));             \
   }
 
-#define LAUNCH_CHECK() DEVICE_CHECK(GetLastError())
 
 #define CHECK_VECTOR_ACCESS(vector, idx)                                 \
   if (idx >= vector.size()) {                                            \

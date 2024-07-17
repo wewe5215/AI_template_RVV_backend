@@ -19,18 +19,6 @@
 
 namespace ait {
 
-inline void DeviceCheckLastError(const char* file, int line) {
-  auto device_error = GetLastError();
-  if (device_error != GetDeviceSuccess()) {
-    std::string msg = std::string("Got error: ") +
-        cudaGetErrorString(device_error) +
-        " enum: " + std::to_string(device_error) + " at " + file + ": " +
-        std::to_string(line);
-    LOG(ERROR) << msg;
-    throw std::runtime_error(msg);
-  }
-}
-
 // This serves as a base class for AIT runtime objects, e.g. the compiled
 // model and the constant folder. It uses CRTP as a mechanism to call into
 // a few base class methods (dynamic dispatch is not needed in ModelContainer,
@@ -57,10 +45,9 @@ class ModelBase {
       size_t num_inputs,
       size_t num_outputs,
       size_t num_unbound_constants,
-      uint8_t* constants,
-      AITemplateAllocator& allocator)
-      : blob_(RAII_DeviceMalloc(blob_size, allocator)),
-        workspace_(RAII_DeviceMalloc(workspace_size, allocator)),
+      uint8_t* constants)
+      : blob_(RAII_DeviceMalloc(blob_size)),
+        workspace_(RAII_DeviceMalloc(workspace_size)),
         params_(num_inputs + num_outputs + num_unbound_constants),
         workspace_size_{workspace_size},
         unique_workspace_size_{unique_workspace_size},
@@ -70,27 +57,10 @@ class ModelBase {
     global_workspace_ =
         static_cast<uint8_t*>(workspace_.get()) + unique_workspace_size;
     unique_workspace_ = static_cast<uint8_t*>(workspace_.get());
-    DEVICE_CHECK(GetDevice(&device_idx_))
-    DEVICE_CHECK(CreateEvent(&run_finished_));
-#if defined(__NVCC__) || (defined(__clang__) && defined(__CUDA__))
-    DEVICE_CHECK(cudaDeviceGetAttribute(
-        &max_smem_size_, cudaDevAttrMaxSharedMemoryPerBlockOptin, device_idx_));
-#endif
-    DEVICE_CHECK(GetDeviceProperties(&device_properties_, device_idx_));
-    DEVICE_CHECK(StreamCreate(&graph_capture_stream_, /*non_blocking=*/true));
   }
 
  public:
   virtual ~ModelBase() {
-    if (run_finished_ != nullptr) {
-      DestroyEvent(run_finished_);
-    }
-    if (graph_capture_stream_ != nullptr) {
-      StreamDestroy(graph_capture_stream_);
-    }
-    if (graph_exec_ != nullptr) {
-      GraphExecDestroy(graph_exec_);
-    }
   }
 
   ModelBase(ModelBase&&) = delete;
@@ -101,13 +71,11 @@ class ModelBase {
   void Run(StreamType stream, bool graph_mode) {
     auto* model = static_cast<ModelType*>(this);
     model->SetUpInputsOutputs();
-    if (target_has_graph_mode && graph_mode) {
-      RunAsGraph(stream);
-    } else {
-      model->RunImpl(stream);
-    }
+    run_finished_ = false;
+    model->RunImpl(stream);
+    // fixme:the following code need to be removed
     model->DeviceToDeviceCopies(stream);
-    DEVICE_CHECK(EventRecord(run_finished_, stream));
+    run_finished_ = true;
   }
 
   void Profile(StreamType stream, size_t iters, const std::string& filename) {
@@ -117,19 +85,18 @@ class ModelBase {
   }
 
   bool IsPending() {
-    auto query = QueryEvent(run_finished_);
-    if (query == GetDeviceNotReady()) {
+    auto query = run_finished_;
+    if (query == false) {
       return true;
     }
-    if (query != GetDeviceSuccess()) {
-      LOG(WARNING) << "Pending model run did not finish successfully. Error: "
-                   << GetErrorString(query);
+    if (query != true) {
+      LOG(WARNING) << "Pending model run did not finish successfully.";
     }
     return false;
   }
 
-  void WaitForCompletion() {
-    DEVICE_CHECK(EventSynchronize(run_finished_));
+  bool WaitForCompletion() {
+    return run_finished_;
   }
 
   size_t NumInputs() const {
@@ -202,65 +169,14 @@ class ModelBase {
     }
   }
 
-  DeviceError EndCapture(GraphType* graph_ptr) {
-    auto err = StreamEndCapture(graph_capture_stream_, graph_ptr);
-    if (err != GetDeviceSuccess()) {
-      // If we can't take the stream out of capture mode, something is probably
-      // wrong with CUDA graph for this model (e.g. there might have been an
-      // illegal capture mode operation). Disable graph mode to avoid such
-      // issues in future iterations.
-      target_has_graph_mode = false;
-      LOG(WARNING) << "Graph capture failed to end. Disabling graph mode.";
-      return err;
-    }
-    return GetDeviceSuccess();
-  }
-
-  void RunAsGraph(StreamType stream) {
-    DEVICE_CHECK(StreamBeginCapture(graph_capture_stream_, /*global=*/false));
-    try {
-      static_cast<ModelType*>(this)->RunImpl(graph_capture_stream_);
-    } catch (...) {
-      GraphType graph;
-      // No need to DEVICE_CHECK here, we want to see the original exception.
-      EndCapture(&graph);
-      if (graph != nullptr && GraphDestroy(graph) != GetDeviceSuccess()) {
-        LOG(WARNING)
-            << "Graph destruction failed while handling exception! Memory will be leaked.";
-      }
-      throw;
-    }
-
-    // The following function ends the capture and creates a graph
-    // inside a unique_ptr that cleans up it when it goes out of scope.
-    // Note that it throws an exception if EndCapture fails.
-    auto graph = RAII_EndCaptureAndCreateGraph(
-        [this](GraphType* graph_ptr) { return EndCapture(graph_ptr); });
-
-    if (graph_exec_ == nullptr) {
-      DEVICE_CHECK(GraphInstantiate(&graph_exec_, graph.get()));
-    } else if (
-        GraphExecUpdate(graph_exec_, graph.get()) != GetDeviceSuccess()) {
-      // Consume the last cuda error, which may affect the next GraphExecLaunch
-      // call.
-      GetLastError();
-      DEVICE_CHECK(GraphExecDestroy(graph_exec_));
-      DEVICE_CHECK(GraphInstantiate(&graph_exec_, graph.get()));
-    }
-
-    DEVICE_CHECK(GraphExecLaunch(graph_exec_, stream));
-  }
 
  protected:
-  int device_idx_;
-  int max_smem_size_{0};
-  DevicePropertyType device_properties_;
   // This event tracks when the inference is finished
   // so that this Model may be reclaimed by its owning
   // ModelContainer.
-  EventType run_finished_;
+  bool run_finished_;
   // A blob of memory used for storing intermediate tensors.
-  GPUPtr blob_;
+  Ptr blob_;
   // Memory for constants that were folded into the *.so. Unowned by Model,
   // owned by ModelContainer.
   // TODO: make this const. It can't be const right now because we derive
@@ -274,7 +190,7 @@ class ModelBase {
   size_t unique_workspace_size_;
   // The workspace blob is used as scratch memory. See
   // _generate_workspace in memory planning for more information.
-  GPUPtr workspace_;
+  Ptr workspace_;
   uint8_t* global_workspace_{nullptr};
   uint8_t* unique_workspace_{nullptr};
 
@@ -315,9 +231,6 @@ class ModelBase {
   // or outputs. The first num_inputs elements are the inputs.
   // Constants are not included.
   std::vector<ParamInfo> params_;
-
-  GraphExecType graph_exec_ = nullptr;
-  StreamType graph_capture_stream_;
 
   std::unordered_map<std::string, const void**> constant_name_to_ptr_;
 };

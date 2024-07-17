@@ -76,12 +76,12 @@ class ModelContainerBase {
   // Offsets here correspond to the offsets of constants for bounded constants.
   std::vector<size_t> bound_constant_offsets_;
 
-  // size for constants_ GPUPtr
+  // size for constants_ Ptr
   size_t constants_size_;
   // Pieces of memory for holding all constants, controled by
   // use_constants_primary_buffer_
-  GPUPtr constants_primary_;
-  GPUPtr constants_secondary_;
+  Ptr constants_primary_;
+  Ptr constants_secondary_;
   bool use_constants_primary_buffer_;
   // State of whether SetConstants/FoldConstants was called.
   BufferState buffer_state_;
