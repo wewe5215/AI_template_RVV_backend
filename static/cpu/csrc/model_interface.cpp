@@ -12,11 +12,11 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 //
-#include "model_interface.h"
+#include "../include/model_interface.h"
 #include <iostream>
 #include <unordered_map>
-#include "model-generated.h"
-#include "model_container.h"
+#include "../include/model-generated.h"
+#include "../include/model_container.h"
 
 // Important: don't let exceptions escape the functions below.
 // They can cause problems when -fvisibility=hidden. But more
@@ -50,7 +50,7 @@ class DefaultAllocator : public AITemplateAllocator {
   }
 
   void Free(void* ptr) override {
-    DEVICE_CHECK(free(ptr));
+    free(ptr);
   }
 };
 
@@ -84,8 +84,7 @@ AITemplateError AITemplateModelContainerCreate(
     return AITemplateError::AITemplateFailure;
   }
   RETURN_ERROR_IF_NULL(ret)
-  AITemplateAllocator& allocator_ref =
-      allocator == nullptr ? ait::default_allocator : *allocator;
+  AITemplateAllocator& allocator_ref = ait::default_allocator;
   CONVERT_EXCEPTION_TO_ERROR_CODE({
     auto* m = ait::CreateModelContainer(num_runtimes, allocator_ref);
     *ret = reinterpret_cast<AITemplateModelHandle>(m);

@@ -38,9 +38,9 @@
 #include <string>
 #include <vector>
 
-#include "macros.h"
-#include "model_interface.h"
-#include "raii_wrapper.h"
+#include "../include/macros.h"
+#include "../include/model_interface.h"
+#include "../include/raii_wrapper.h"
 
 using namespace ait;
 
@@ -137,7 +137,7 @@ static Ptr make_random_data(
           /*lb*/ 1.0,
           /*ub*/ 2.0);
       break;
-    case AITemplateDtype::k_Float16:
+    case AITemplateDtype::kHalf:
       make_random_float16_values(
           rnd_generator,
           static_cast<_Float16*>(h_data.get()),
@@ -410,12 +410,13 @@ struct AITStandaloneTestcase {
         throw std::runtime_error("Tensor data total size mismatch.");
       }
       // allocate memory for tensor raw data on host
-      Ptr h_data = RAII_DeviceMalloc(num_bytes);
+      void* h_data = (void*)malloc(num_bytes);
       // read tensor raw data from file
       fh.read(reinterpret_cast<char*>(h_data), read_total_tensor_bytes);
       // Allocate corresponding device memory and copy tensor raw data to device
-      data_owner.emplace_back(h_data);
-
+      data_owner.emplace_back(RAII_DeviceMalloc(num_bytes));
+      std::memcpy(data_owner.back().get(), h_data, num_bytes);
+      free(h_data);
       inputs.push_back(AITData(data_owner.back().get(), shape, dtype));
     }
     std::cout << "Finished loading testcase inputs." << "\n";

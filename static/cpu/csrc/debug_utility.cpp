@@ -13,11 +13,11 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 //
-#include "debug_utility.h"
+#include "../include/../include/debug_utility.h"
 
 namespace {
 
-void inf_and_nan_checker(const half* tensor, int64_t elem_cnt) {
+void inf_and_nan_checker(const _Float16* tensor, int64_t elem_cnt) {
   int64_t nan_num = 0, pos_inf = 0, neg_inf = 0;
   for (int64_t i = 0; i < elem_cnt; i++) {
     float v = (float)(*(tensor + i));
@@ -49,7 +49,7 @@ void inf_and_nan_checker(const half* tensor, int64_t elem_cnt) {
 
 namespace ait {
 void InvokeInfAndNanChecker(
-    const half* tensor,
+    const _Float16* tensor,
     const char* tensor_name,
     int64_t elem_cnt,
     ait::StreamType stream) {

@@ -12,10 +12,10 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 //
-#include "model_container.h"
+#include "../include/model_container.h"
 
-#include "device_functions-generated.h"
-#include "raii_wrapper.h"
+#include "../include/device_functions-generated.h"
+#include "../include/raii_wrapper.h"
 #include <time.h>
 namespace {
 std::string GetEnumString(AITemplateDtype dtype) {
@@ -767,8 +767,8 @@ float ModelContainer::BenchmarkImpl(
   }
   pending_models_available_.notify_one();
   clock_gettime(CLOCK_MONOTONIC, &end);
-  float elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
-  LOG(INFO) << "Benchmark runtime s/iter: " << elapsed / count;
+  float elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e6;
+  LOG(INFO) << "Benchmark runtime ms/iter: " << elapsed / count;
   return elapsed;
 }
 

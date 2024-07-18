@@ -32,7 +32,7 @@ void outputs_checker(const T* tensor, int64_t elem_cnt) {
 
 namespace ait {
 void InvokeInfAndNanChecker(
-    const half* tensor,
+    const _Float16* tensor,
     const char* tensor_name,
     int64_t elem_cnt,
     ait::StreamType stream);
