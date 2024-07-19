@@ -301,3 +301,20 @@ def enable_cuda_source_navigation_fix():
     files and disable code navigation.
     """
     return os.getenv("AIT_ENABLE_CUDA_SOURCE_NAVIGATION_FIX", "0") == "1"
+
+def get_clang_debug_level():
+    """
+    Return level of clang debug information. Default to no debug info.
+    backed by env var AIT_CLANG_DEBUG_LEVEL. Which may either be a string
+    which is directly passed through to nvcc on the commandline, or an
+    integer (as String) from 0 to 2 with the following meaning:
+        - 0: No debug info ( default )
+        - 1: Full debug information.
+    """
+    level = os.getenv("AIT_CLANG_DEBUG_LEVEL", "0")
+    return level
+
+def get_mrvv_vector_bits() -> str:
+    vector_bits = os.getenv("AIT_MRVV_VECTOR_BITS", "256")
+
+    return vector_bits
