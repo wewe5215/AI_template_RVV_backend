@@ -51,9 +51,10 @@ class RVV(Target):
 
     def __init__(
         self,
-        ait_static_files_path=AIT_STATIC_FILES_PATH,
+        template_path = "",
         arch="rv64gcv_zvfh",
         RVV_version=None,
+        ait_static_files_path=AIT_STATIC_FILES_PATH,
         **kwargs,
     ):
         """RVV target init.
@@ -64,10 +65,8 @@ class RVV(Target):
         ait_static_files_path : str
             Absolute path to the AIT static/ directory
         """
-        super().__init__(ait_static_files_path)
+        super().__init__()
         self._target_type = 3
-        self._template_path = ""
-        self._ait_include_path = ait_static_files_path
         self._arch = arch
         self._kwargs = kwargs
         self._compile_options = self._build_compile_options()
@@ -89,18 +88,45 @@ class RVV(Target):
     def get_host_compiler_options(self) -> List[str]:
         return self._build_gnu_host_compiler_options()
 
+    def _get_clang_debug_options(self) -> List[str]:
+        CLANG_DEBUG_LEVEL_STRINGS = [[], ["-g", "-G"]]
+        level = environ.get_clang_debug_level()
+        if level.isdigit():
+            level = int(level)
+            assert (
+                level >= 0 and level < 2
+            ), "Debug level out of range. Must be 0 (no debug info), 1 (with debug info)"
+            return CLANG_DEBUG_LEVEL_STRINGS[level]
+        return [level]
 
+    def _build_clang_compiler_options(self) -> List[str]:
+        options = [
+            "--target=riscv64-unknown-elf",
+            "--sysroot=$(RISCV)/riscv64-unknown-elf",
+            "--gcc-toolchain=$(RISCV)",
+            "-menable-experimental-extensions",
+            environ.get_compiler_opt_level(),
+            "-std=c++17",
+            f"-march={self._arch}",
+            f"-mrvv-vector-bits={environ.get_mrvv_vector_bits()}",
+            "-v",
+        ]
+        options.extend(self._get_clang_debug_options())
+        return options
+
+    def get_device_compiler_options(self) -> List[str]:
+        return self._build_clang_compiler_options()
 
     def _build_compile_options(self):
-        host_compiler_options = self._build_gnu_host_compiler_options()
-        return " ".join(host_compiler_options)
+        options = self._build_gnu_host_compiler_options() + self._build_clang_compiler_options
+        return " ".join(options)
 
     def src_extension(self):
-        return ".c"
+        return ".cpp"
 
 
     def cc(self):
-        cc = "clang"
+        cc = "clang++"
         return cc
 
     def compile_cmd(self, executable=False):
