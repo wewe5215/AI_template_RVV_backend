@@ -581,7 +581,7 @@ struct AITStandaloneTestcase {
           passed =
               passed and _compare_results_to_expected<bfloat16>(output_idx);
           break;
-        case AITemplateDtype::k_Float16:
+        case AITemplateDtype::kHalf:
           passed = passed and _compare_results_to_expected<_Float16>(output_idx);
           break;
         case AITemplateDtype::kBool:
