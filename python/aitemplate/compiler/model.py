@@ -202,6 +202,7 @@ class Model:
         lib_path: str,
         num_runtimes: int = AIT_DEFAULT_NUM_RUNTIMES,
         allocator_kind: Optional[AITemplateAllocatorKind] = None,
+        is_cpu: bool = True,
     ):
         """
         Instantiates a wrapper around the C++ model_interface.
@@ -229,18 +230,23 @@ class Model:
         self.lib_path = lib_path
         self.handle = ctypes.c_void_p()
         self.allocator_handle = ctypes.c_void_p()
+        self.is_cpu = is_cpu
         if allocator_kind is not None:
             self.DLL.AITemplateAllocatorCreate(
                 ctypes.byref(self.allocator_handle),
                 ctypes.c_int(allocator_kind.value),
             )
-
-        self.DLL.AITemplateModelContainerCreate(
-            ctypes.pointer(self.handle),
-            ctypes.c_size_t(num_runtimes),
-            self.allocator_handle,
-        )
-
+        if is_cpu:
+            self.DLL.AITemplateModelContainerCreate(
+                ctypes.pointer(self.handle),
+                ctypes.c_size_t(num_runtimes)
+            )
+        else:
+            self.DLL.AITemplateModelContainerCreate(
+                ctypes.pointer(self.handle),
+                ctypes.c_size_t(num_runtimes),
+                self.allocator_handle,
+            )
         # We use this list to add reference counts of Torch tensors
         # to avoid lifetime issues caused by user misuse.
         self.torch_constant_tensors = {}
@@ -266,8 +272,9 @@ class Model:
 
     def close(self):
         # Copy to avoid set size changed during iteration
-        for ptr in list(self._allocated_ait_data):
-            self.free_gpu_memory(ptr, sync=True)
+        if self.is_cpu == False:
+            for ptr in list(self._allocated_ait_data):
+                self.free_gpu_memory(ptr, sync=True)
 
         # Check that it exists since we may have thrown
         # an exception before initializing it.
@@ -429,30 +436,53 @@ class Model:
             outputs,
             stream_ptr,
         )
-
+        # TODO : if cpu --> no c_stream
         if not outputs_on_host:
-            self.DLL.AITemplateModelContainerRun(
-                self.handle,
-                c_inputs,
-                ctypes.c_size_t(len(inputs)),
-                c_outputs,
-                ctypes.c_size_t(len(outputs)),
-                c_stream,
-                ctypes.c_bool(sync),
-                ctypes.c_bool(graph_mode),
-                c_output_shapes_out,
-            )
+            if self.is_cpu:
+                self.DLL.AITemplateModelContainerRun(
+                    self.handle,
+                    c_inputs,
+                    ctypes.c_size_t(len(inputs)),
+                    c_outputs,
+                    ctypes.c_size_t(len(outputs)),
+                    ctypes.c_bool(sync),
+                    ctypes.c_bool(graph_mode),
+                    c_output_shapes_out,
+                )
+            else:
+                self.DLL.AITemplateModelContainerRun(
+                    self.handle,
+                    c_inputs,
+                    ctypes.c_size_t(len(inputs)),
+                    c_outputs,
+                    ctypes.c_size_t(len(outputs)),
+                    c_stream,
+                    ctypes.c_bool(sync),
+                    ctypes.c_bool(graph_mode),
+                    c_output_shapes_out,
+                )
         else:
-            self.DLL.AITemplateModelContainerRunWithOutputsOnHost(
-                self.handle,
-                c_inputs,
-                ctypes.c_size_t(len(inputs)),
-                c_outputs,
-                ctypes.c_size_t(len(outputs)),
-                c_stream,
-                ctypes.c_bool(graph_mode),
-                c_output_shapes_out,
-            )
+            if self.is_cpu:
+                self.DLL.AITemplateModelContainerRunWithOutputsOnHost(
+                    self.handle,
+                    c_inputs,
+                    ctypes.c_size_t(len(inputs)),
+                    c_outputs,
+                    ctypes.c_size_t(len(outputs)),
+                    ctypes.c_bool(graph_mode),
+                    c_output_shapes_out,
+                )
+            else:
+                self.DLL.AITemplateModelContainerRunWithOutputsOnHost(
+                    self.handle,
+                    c_inputs,
+                    ctypes.c_size_t(len(inputs)),
+                    c_outputs,
+                    ctypes.c_size_t(len(outputs)),
+                    c_stream,
+                    ctypes.c_bool(graph_mode),
+                    c_output_shapes_out,
+                )
 
         return self._make_ait_outputs(outputs, c_output_shapes_out)
 
@@ -518,16 +548,27 @@ class Model:
             outputs,
             stream_ptr,
         )
-        self.DLL.AITemplateModelContainerProfile(
-            self.handle,
-            c_inputs,
-            ctypes.c_size_t(len(inputs)),
-            c_outputs,
-            ctypes.c_size_t(len(outputs)),
-            c_stream,
-            ctypes.c_size_t(num_iters),
-            ctypes.c_char_p(filename.encode("utf-8")),
-        )
+        if self.is_cpu:
+            self.DLL.AITemplateModelContainerProfile(
+                self.handle,
+                c_inputs,
+                ctypes.c_size_t(len(inputs)),
+                c_outputs,
+                ctypes.c_size_t(len(outputs)),
+                ctypes.c_size_t(num_iters),
+                ctypes.c_char_p(filename.encode("utf-8")),
+            )
+        else:
+            self.DLL.AITemplateModelContainerProfile(
+                self.handle,
+                c_inputs,
+                ctypes.c_size_t(len(inputs)),
+                c_outputs,
+                ctypes.c_size_t(len(outputs)),
+                c_stream,
+                ctypes.c_size_t(num_iters),
+                ctypes.c_char_p(filename.encode("utf-8")),
+            )
 
     def profile_with_tensors(
         self,
@@ -537,14 +578,15 @@ class Model:
         filename: str,
         stream_ptr: Optional[int] = None,
     ) -> None:
-        _check_tensors_contiguous_and_on_gpu(
-            inputs,
-            name="inputs",
-        )
-        _check_tensors_contiguous_and_on_gpu(
-            outputs,
-            name="outputs",
-        )
+        if self.is_cpu == False:
+            _check_tensors_contiguous_and_on_gpu(
+                inputs,
+                name="inputs",
+            )
+            _check_tensors_contiguous_and_on_gpu(
+                outputs,
+                name="outputs",
+            )
         self.profile(
             _convert_tensor_args(inputs),
             _convert_tensor_args(outputs),
@@ -585,15 +627,15 @@ class Model:
         of torch.Tensors ordered according to GetInputNameToIndexMap. Outputs
         can also be a dictionary, or a list ordered according to GetOutputNameToIndexMap.
         """
-
-        _check_tensors_contiguous_and_on_gpu(
-            inputs,
-            name="inputs",
-        )
-        _check_tensors_contiguous_and_on_gpu(
-            outputs,
-            name="outputs",
-        )
+        if self.is_cpu == False:
+            _check_tensors_contiguous_and_on_gpu(
+                inputs,
+                name="inputs",
+            )
+            _check_tensors_contiguous_and_on_gpu(
+                outputs,
+                name="outputs",
+            )
         outputs_ait = self.run(
             _convert_tensor_args(inputs),
             _convert_tensor_args(outputs),
@@ -682,20 +724,35 @@ class Model:
         time_ms = []
         runtime_ms = ctypes.c_float()
         for _ in range(repeat):
-            self.DLL.AITemplateModelContainerBenchmark(
-                self.handle,
-                c_inputs,
-                ctypes.c_size_t(len(inputs)),
-                c_outputs,
-                ctypes.c_size_t(len(outputs)),
-                c_stream,
-                ctypes.c_bool(graph_mode),
-                ctypes.c_size_t(count),
-                ctypes.c_size_t(num_threads),
-                ctypes.c_bool(use_unique_stream_per_thread),
-                ctypes.byref(runtime_ms),
-                c_output_shapes_out,
-            )
+            if self.is_cpu:
+                self.DLL.AITemplateModelContainerBenchmark(
+                    self.handle,
+                    c_inputs,
+                    ctypes.c_size_t(len(inputs)),
+                    c_outputs,
+                    ctypes.c_size_t(len(outputs)),
+                    ctypes.c_bool(graph_mode),
+                    ctypes.c_size_t(count),
+                    ctypes.c_size_t(num_threads),
+                    ctypes.c_bool(use_unique_stream_per_thread),
+                    ctypes.byref(runtime_ms),
+                    c_output_shapes_out,
+                )
+            else:
+                self.DLL.AITemplateModelContainerBenchmark(
+                    self.handle,
+                    c_inputs,
+                    ctypes.c_size_t(len(inputs)),
+                    c_outputs,
+                    ctypes.c_size_t(len(outputs)),
+                    c_stream,
+                    ctypes.c_bool(graph_mode),
+                    ctypes.c_size_t(count),
+                    ctypes.c_size_t(num_threads),
+                    ctypes.c_bool(use_unique_stream_per_thread),
+                    ctypes.byref(runtime_ms),
+                    c_output_shapes_out,
+                )
             time_ms.append(runtime_ms.value)
         mean = np.mean(time_ms)
         std = np.std(time_ms)
@@ -716,15 +773,15 @@ class Model:
         """
         Benchmark the model. See run_with_tensors() for information on most parameters.
         """
-
-        _check_tensors_contiguous_and_on_gpu(
-            inputs,
-            name="inputs",
-        )
-        _check_tensors_contiguous_and_on_gpu(
-            outputs,
-            name="outputs",
-        )
+        if self.is_cpu == False:
+            _check_tensors_contiguous_and_on_gpu(
+                inputs,
+                name="inputs",
+            )
+            _check_tensors_contiguous_and_on_gpu(
+                outputs,
+                name="outputs",
+            )
 
         mean, std, ait_outputs = self.benchmark(
             _convert_tensor_args(inputs),
@@ -1032,17 +1089,23 @@ class Model:
         """
         dtype = str(arr.dtype)
         shape = list(arr.shape)
-        gpu_mem = self.allocate_gpu_memory(arr.nbytes, stream_ptr=stream_ptr, sync=sync)
-        self._allocated_ait_data.add(gpu_mem)
-        self.memcpy(
-            gpu_mem,
-            arr.ctypes._data.value,
-            arr.nbytes,
-            AITemplateMemcpyKind.HostToDevice,
-            sync=sync,
-            stream_ptr=stream_ptr,
-        )
-        return AITData(gpu_mem, shape, dtype)
+        if self.is_cpu:
+            mem = bytearray(arr.nbytes)
+            self._allocated_ait_data.add(mem)
+            ctypes.memmove(mem, arr.ctypes._data.value, arr.nbytes)
+            return AITData(mem, shape, dtype)
+        else:
+            gpu_mem = self.allocate_gpu_memory(arr.nbytes, stream_ptr=stream_ptr, sync=sync)
+            self._allocated_ait_data.add(gpu_mem)
+            self.memcpy(
+                gpu_mem,
+                arr.ctypes._data.value,
+                arr.nbytes,
+                AITemplateMemcpyKind.HostToDevice,
+                sync=sync,
+                stream_ptr=stream_ptr,
+            )
+            return AITData(gpu_mem, shape, dtype)
 
     def ait_data_to_numpy(
         self,
@@ -1055,14 +1118,17 @@ class Model:
         Copies on the given stream.
         """
         arr = np.empty(ait_data.shape, dtype=ait_data.dtype)
-        self.memcpy(
-            arr.ctypes._data.value,
-            ait_data.data_ptr,
-            arr.nbytes,
-            AITemplateMemcpyKind.DeviceToHost,
-            sync=sync,
-            stream_ptr=stream_ptr,
-        )
+        if self.is_cpu:
+            ctypes.memmove(arr.ctypes._data.value, ait_data.data_ptr, arr.nbytes)
+        else:
+            self.memcpy(
+                arr.ctypes._data.value,
+                ait_data.data_ptr,
+                arr.nbytes,
+                AITemplateMemcpyKind.DeviceToHost,
+                sync=sync,
+                stream_ptr=stream_ptr,
+            )
         return arr
 
     def fold_constants(
@@ -1072,17 +1138,29 @@ class Model:
         double_buffer: bool = False,
     ):
         if double_buffer:
-            self.DLL.AITemplateModelContainerFoldConstantsInDoubleBuffer(
-                self.handle,
-                ctypes.c_void_p(stream_ptr),
-                ctypes.c_bool(sync),
-            )
+            if self.is_cpu:
+                self.DLL.AITemplateModelContainerFoldConstantsInDoubleBuffer(
+                    self.handle,
+                    ctypes.c_bool(sync),
+                )
+            else:
+                self.DLL.AITemplateModelContainerFoldConstantsInDoubleBuffer(
+                    self.handle,
+                    ctypes.c_void_p(stream_ptr),
+                    ctypes.c_bool(sync),
+                )
         else:
-            self.DLL.AITemplateModelContainerFoldConstants(
-                self.handle,
-                ctypes.c_void_p(stream_ptr),
-                ctypes.c_bool(sync),
-            )
+            if self.is_cpu:
+                self.DLL.AITemplateModelContainerFoldConstants(
+                    self.handle,
+                    ctypes.c_bool(sync),
+                )
+            else:
+                self.DLL.AITemplateModelContainerFoldConstants(
+                    self.handle,
+                    ctypes.c_void_p(stream_ptr),
+                    ctypes.c_bool(sync),
+                )
 
     def swap_constants(self):
         self.DLL.AITemplateModelContainerSwapConstants(self.handle)
