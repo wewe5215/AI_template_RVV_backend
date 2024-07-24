@@ -30,11 +30,12 @@ CFLAGS += -O3 -std=c++17 -fPIC -Wall -Wconversion -fno-strict-aliasing -fvisibil
 # LDFLAGS := -L$(RISCV)/lib -lc++ -lc++abi -lm -lpthread -ldl
 # Additional Includes for XNNPACK
 CFLAGS += -I$(XNN_PACK)/include
+CFLAGS += -I$(XNN_LIB_DIR)/pthreadpool-source/include
 CFLAGS += -L$(XNN_LIB_DIR) $(XNN_LIB_DIR)/*.a
 CFLAGS += -L$(XNN_LIB_DIR)/cpuinfo
 CFLAGS += -L$(XNN_LIB_DIR)/kleidiai
 CFLAGS += -L$(XNN_LIB_DIR)/pthreadpool
-CFLAGS += -lxnnpack -lkleidiai -lpthreadpool -lcpuinfo -lpthread
+CFLAGS += -lxnnpack -lkleidiai -lpthreadpool -lcpuinfo -lpthread -g
 obj_files = conv2d_bias_add_relu_0.o model_container_base.o model_interface.o debug_utility.o model_container.o
 
 # Pattern Rules
@@ -55,7 +56,7 @@ libtest.so: $(obj_files)
 run:
 # $(CLANG) $(CFLAGS) -o standalone standalone.cpp -L. -ltest
 # $(SPIKE) $(PK) standalone
-	$(CC) $(CFLAGS) -o standalone standalone.cpp -L. -ltest
+	$(CC) $(CFLAGS) -g -o standalone standalone.cpp -L. -ltest
 	./standalone
 
 clean:

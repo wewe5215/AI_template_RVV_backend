@@ -65,14 +65,15 @@ void conv2d_bias_add_relu_0 (
   int i32_out_h = *out_h;
   int i32_out_w = *out_w;
   xnn_operator_t op = nullptr;
+  const xnn_status status_init = xnn_initialize(nullptr);
+  CHECK_EQ(status_init, xnn_status_success);
   const xnn_status status = xnn_create_convolution2d_nhwc_f32(
     PH, PW, PH, PW, i32_kernel_h, i32_kernel_w,
     SH, SW, DH, DW, 1, CI,
-    CO, 1 * CI, 1 * CO, reinterpret_cast<float*>(weight_ptr), reinterpret_cast<float*>(bias_ptr),
+    CO, 1 * CI, 1 * CO, (float*)(weight_ptr), (float*)(bias_ptr),
     0, std::numeric_limits<float>::infinity(),
     /*flags=*/0, nullptr, nullptr, &op);
   std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op(op, xnn_delete_operator);
-
 
   CHECK_EQ(status, xnn_status_success);
   CHECK_NE(op, nullptr);
@@ -89,8 +90,8 @@ void conv2d_bias_add_relu_0 (
   CHECK_EQ(xnn_setup_convolution2d_nhwc_f32(
       op, 
       /*workspace=*/nullptr, 
-      reinterpret_cast<float*>(in_ptr), 
-      reinterpret_cast<float*>(out_ptr)), xnn_status_success);
+      (float*)(in_ptr), 
+      (float*)(out_ptr)), xnn_status_success);
 
   CHECK_EQ(xnn_run_operator(op, /*threadpool=*/nullptr), xnn_status_success);
   return;

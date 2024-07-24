@@ -38,17 +38,20 @@ ModelContainerBase::ModelContainerBase(
      param_names_[0] = "input_0";
      param_names_[1] = "input_1";
      param_names_[2] = "input_2";
-     param_names_[3] = "output_0";
-     param_dtypes_[0] = AITemplateDtype::kHalf;
-     param_dtypes_[1] = AITemplateDtype::kHalf;
-     param_dtypes_[2] = AITemplateDtype::kHalf;
-     param_dtypes_[3] = AITemplateDtype::kHalf;
+     param_names_[3] = "input_3";
+     param_names_[4] = "output_0";
+     param_dtypes_[0] = AITemplateDtype::kFloat;
+     param_dtypes_[1] = AITemplateDtype::kFloat;
+     param_dtypes_[2] = AITemplateDtype::kFloat;
+     param_dtypes_[3] = AITemplateDtype::kFloat;
+     param_dtypes_[4] = AITemplateDtype::kFloat;
 
 
-     max_param_shapes_[0] = {4, 14, 14, 256};
-     max_param_shapes_[1] = {256, 2, 2, 256};
+     max_param_shapes_[0] = {4, 28, 28, 128};
+     max_param_shapes_[1] = {256, 3, 3, 128};
      max_param_shapes_[2] = {256};
      max_param_shapes_[3] = {4, 28, 28, 256};
+     max_param_shapes_[4] = {4, 28, 28, 256};
   for (size_t i = 0; i < num_params_; ++i) {
     max_param_numel_[i] = std::accumulate(
       max_param_shapes_[i].begin(),
@@ -78,6 +81,6 @@ ModelContainerBase::ModelContainerBase(
 
 ModelContainer* CreateModelContainer(size_t num_runtimes, AITemplateAllocator& allocator) {
   // num_runtimes, num_inputs, num_outputs, num_bound_constants, num_unbound_constants, params_size, allocator
-  return new ModelContainer(num_runtimes, 3, 1, 0, 0, 0, allocator);
+  return new ModelContainer(num_runtimes, 4, 1, 0, 0, 0, allocator);
 }
 } // namespace ait
