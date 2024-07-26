@@ -41,6 +41,76 @@ class CPUBackendSpec(BackendSpec):
             FuncEnum.DIV: "/",
         }
     )
+    # it seems like this factory will not be used
+    dtype_to_backend_fp16_dtype: Dict[str, str] = field(
+        default_factory=lambda: {
+            "float16": "__Float16",
+        }
+    )
+
+    dtype_to_backend_dtype: Dict[str, str] = field(
+        default_factory=lambda: {
+            "bool": "bool",
+            "float16": "__Float16",
+            "bfloat16": "uint16_t",
+            "float32": "float",
+            "float": "float",
+            "int64": "int64_t",
+            "int32": "int32_t"
+        }
+    )
+
+    # find the size in bytes of a given backend type
+    sizeof_types: Dict[str, int] = field(
+        default_factory=lambda: {
+            "bool": 1,
+            "float32": 4,
+            "__Float16": 2,
+            "__fp16": 2,
+            "__bf16": 2,
+            "bfloat16": 2,
+            "int64_t": 8,
+            "int32_t": 4,
+            "int16_t": 2,
+            "int8_t": 1,
+            "uint64_t": 8,
+            "uint32_t": 4,
+            "uint16_t": 2,
+            "uint8_t": 1,
+            "float": 4,
+            "uint4": 16,
+            "uint2": 8,
+            "uint": 4,
+        }
+    )
+
+    # find a backend type for a given size in bytes
+    # useful to find types 2 or 4 times larger than a given dtype
+    # for vectorization purposes.
+    type_for_size: Dict[int, str] = field(
+        default_factory=lambda: {
+            1: "uint8_t",
+            2: "__Float16",
+            4: "float",
+            8: "int64_t",
+            16: "int4",
+        }
+    )
+
+    def get_dtype_to_dtype(self, dtype: str, type_dict: Dict[str, str]):
+        data_type = type_dict.get(dtype)
+        if not data_type:
+            raise NotImplementedError("Unsupported dtype {}!".format(dtype))
+        return data_type
+
+    def get_fp16_dtype(self, dtype: str):
+        return self.get_dtype_to_dtype(dtype, self.dtype_to_backend_fp16_dtype)
+
+    def dtype_to_backend_type(self, dtype: str):
+        return self.get_dtype_to_dtype(dtype, self.dtype_to_backend_dtype)
+
+    def dtype_to_lib_type(self, dtype: str):
+        raise NotImplementedError
 
 
 @dataclass
@@ -499,3 +569,72 @@ using bfloat16_2 = nv_bfloat162;
 
     def dtype_to_lib_type(self, dtype: str):
         return self.get_dtype_to_dtype(dtype, self.dtype_to_cutlass_type)
+
+@dataclass
+class RVVSpec(CPUBackendSpec):
+    backend_name = "rvv"
+    index_type = "int64_t"
+    prefix = "rvv"
+    # stream = "stream"
+    # cub = "cub"
+
+    cast_to_ptr_template = jinja2.Template("({{dtype}}*)({{name}})")
+    cast_to_half_ptr_template = jinja2.Template("(__Float16*)({{name}})")
+    cast_to_const_half_ptr_template = jinja2.Template(
+        "(const __Float16*)({{name}})"
+    )
+    header_src_template = jinja2.Template(
+        """
+
+{{extra_header}}
+        """
+    )
+
+    half2_data_ref = ""
+    dtype_to_rvv_type: Dict[str, str] = field(
+        default_factory=lambda: {
+            # for neon intrinsic : __fp16, for rvv intrinsic : __Float16
+            "float16": "__Float16",
+            # maybe use uint16_t to replace bfloat16
+            # "bfloat16": "cutlass::bfloat16_t",
+            "float32": "float",
+            "float": "float",
+        }
+    )
+
+    def dtype_to_lib_type(self, dtype: str):
+        return self.get_dtype_to_dtype(dtype, self.dtype_to_rvv_type)
+    
+# @dataclass
+# class NeonSpec(CPUBackendSpec):
+#     backend_name = "neon"
+#     index_type = "int64_t"
+#     prefix = "neon"
+#     # stream = "stream"
+#     # cub = "cub"
+
+#     cast_to_ptr_template = jinja2.Template("({{dtype}}*)({{name}})")
+#     cast_to_half_ptr_template = jinja2.Template("(__fp16*)({{name}})")
+#     cast_to_const_half_ptr_template = jinja2.Template(
+#         "(const __fp16*)({{name}})"
+#     )
+#     header_src_template = jinja2.Template(
+#         """
+# #include <arm_bf16.h>
+# {{extra_header}}
+#         """
+#     )
+
+#     half2_data_ref = ""
+#     dtype_to_neon_type: Dict[str, str] = field(
+#         default_factory=lambda: {
+#             # for neon intrinsic : __fp16, for rvv intrinsic : __Float16
+#             "float16": "__fp16",
+#             "bfloat16": "__bf16",
+#             "float32": "float",
+#             "float": "float",
+#         }
+#     )
+
+#     def dtype_to_lib_type(self, dtype: str):
+#         return self.get_dtype_to_dtype(dtype, self.dtype_to_neon_type)
