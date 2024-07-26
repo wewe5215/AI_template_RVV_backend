@@ -36,15 +36,14 @@ INSTANCE_TEMPLATE = jinja2.Template(
 {{config}}
 """
 )
-
+## todo : call xnnpack low-level api
 EXEC_TEMPLATE = jinja2.Template(
     """
 {{indent}}//  TODO: cast to right dtype
 {{indent}}};
-{{indent}}{{instance_name}} conv_op;
 {% if is_profiler %}
 {{indent}}size_t workspace_size = conv_op.get_workspace_size(arguments);
-{{indent}}cutlass::device_memory::allocation<uint8_t> local_workspace(workspace_size);
+{{indent}}uint8_t* local_workspace = (uint8_t*)malloc(workspace_size);
 {{indent}}workspace = local_workspace.get();
 {{indent}}GLOBAL_WORKSPACE_SIZE_{{instance_name}} = workspace_size;
 {% endif %}
@@ -57,13 +56,9 @@ SRC_TEMPLATE = jinja2.Template(
     """
 #include <cstdio>
 #include <stdexcept>
-#include <time.h>
 #include "xnnpack.h"
 
 {{extra_header}}
-
-
-{{instances}}
 
 {{functions}}
 """
@@ -248,7 +243,7 @@ PROFILER_MAIN_TEMPLATE = jinja2.Template(
     """
 #include <iostream>
 #include <string>
-
+#include <time.h>
 #include "xnnpack.h"
 
 {{benchmark_decls}}
@@ -348,20 +343,6 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 )
 
 
-
-
-def emit_instance(op):
-    """emit instance"""
-    import cutlass_lib
-
-    if hasattr(op, "binary_op"):
-        emiter = cutlass_lib.conv2d_operation.EmitConv2dWithBroadcastInstance()
-    else:
-        emiter = cutlass_lib.conv2d_operation.EmitConv2dInstance()
-    op_def = emiter.emit(op)
-    return op_def
-
-
 def extract_config(
     func_attrs,
     dtype="float16",
@@ -400,7 +381,7 @@ def gen_profiler(
     workdir,
     profiler_filename,
     shape_template,
-    f_emit_instance=emit_instance,
+    f_emit_instance="",
     is_bias=False,
     is_bias_add=False,
     is_transpose=False,
@@ -431,8 +412,6 @@ def gen_profiler(
     profiler_benchmarks = {}
 
     for instance_idx, (op_name, op) in enumerate(op_instance.items()):
-        config = f_emit_instance(op)
-        config_name = extract_config_name(config)
         instance_name = f"{instance_name_base}_{instance_idx}"
         function_name = f"{op_type}_{op_name}"
 
@@ -441,13 +420,7 @@ def gen_profiler(
             is_profiler=True,
             is_bias=is_bias,
             is_bias_add=is_bias_add,
-            instance_name=instance_name,
             dtype=dtype,
-        )
-        instance = INSTANCE_TEMPLATE.render(
-            config_name=config_name,
-            name=instance_name,
-            config=config,
         )
         function = FUNCTION_TEMPLATE.render(
             is_bias=is_bias,
@@ -459,10 +432,7 @@ def gen_profiler(
             exec_paths=exec_program,
         )
         op_source = SRC_TEMPLATE.render(
-            is_transpose=is_transpose,
-            is_depthwise=is_depthwise,
             extra_header=extra_header,
-            instances=instance,
             functions=function,
         )
 
@@ -587,7 +557,7 @@ def gen_function(
     exec_cond_template,
     shape_eval_template,
     shape_save_template,
-    f_emit_instance=emit_instance,
+    f_emit_instance="",
     is_bias=False,
     is_bias_add=False,
     is_transpose=False,
@@ -598,25 +568,6 @@ def gen_function(
     func_name = func_attrs["name"]
     exec_path = func_attrs["exec_path"]
     op_instance = func_attrs["op_instance"]
-
-    inst_def_flag = set()
-    instances = {}
-    instance_decl = ""
-    for key, value in exec_path.items():
-        fname = "f" + sha1(key.encode()).hexdigest()
-        emitted_instance = f_emit_instance(op_instance[value])
-        if value not in inst_def_flag:
-            inst_def_flag.add(value)
-            config = emitted_instance
-        else:
-            config = ""
-        inst = INSTANCE_TEMPLATE.render(
-            config=config,
-            name=fname,
-            config_name=extract_config_name(emitted_instance),
-        )
-        instances[key] = inst
-        instance_decl += inst
 
     backend_spec = RVVSpec()
     dtype = backend_spec.dtype_to_lib_type(func_attrs["inputs"][0]._attrs["dtype"])
@@ -647,18 +598,12 @@ def gen_function(
     )
     shape_func = shape_eval_func + shape_save_func
 
-    exec_paths = ""
-    for key in instances:
-        fname = "f" + sha1(key.encode()).hexdigest()
-        program = EXEC_TEMPLATE.render(
-            is_bias=is_bias,
-            is_bias_add=is_bias_add,
-            indent=" " * 4,
-            instance_name=fname,
-            dtype=dtype,
-        )
-        exec_inst = exec_cond_template.render(indent="  ", cond=key, program=program)
-        exec_paths += exec_inst
+    program = EXEC_TEMPLATE.render(
+        is_bias=is_bias,
+        is_bias_add=is_bias_add,
+        indent=" " * 4,
+        dtype=dtype,
+    )
 
     function = FUNCTION_TEMPLATE.render(
         is_bias=is_bias,
@@ -667,14 +612,11 @@ def gen_function(
         is_depthwise=is_depthwise,
         function_name=func_name,
         shape_function=shape_func,
-        exec_paths=exec_paths,
+        exec_paths=program,
     )
 
     return SRC_TEMPLATE.render(
-        is_transpose=is_transpose,
-        is_depthwise=is_depthwise,
         extra_header=extra_header,
-        instances=instance_decl,
         functions=function,
     )
 
