@@ -23,54 +23,23 @@ from typing import List
 
 import jinja2
 
-from aitemplate.backend.backend_spec import CUDASpec
-from aitemplate.backend.cuda.gemm_universal.common import add_profiler, build_profiler
+from aitemplate.backend.backend_spec import RVVSpec
+from aitemplate.backend.rvv.gemm_universal.common import add_profiler, build_profiler
 from aitemplate.backend.target import Target
 
 from aitemplate.utils import alignment
 
 
-KERNEL_KEY_TEMPLATE = jinja2.Template(
-    """
-cutlass{{opcode_class}}_{{extended_name}}_{{threadblock}}_{{layout}}_align_{{align_ab}}_{{align_c}}
-"""
-)
 
 INSTANCE_TEMPLATE = jinja2.Template(
     """
 {{config}}
-using {{name}} = cutlass::conv::device::ImplicitGemmConvolution<{{config_name}}>;
 """
 )
 
 EXEC_TEMPLATE = jinja2.Template(
     """
-{{indent}}using ElementComputeEpilogue = typename {{instance_name}}::ElementCompute;
 {{indent}}//  TODO: cast to right dtype
-{{indent}}typename {{instance_name}}::Arguments arguments{
-{{indent}}    problem_size,                                                                 // ConvProblemSize const & problem_size
-{{indent}}    {static_cast<{{dtype}}*>(in_ptr), layout_A},                                  // TensorRefA const & ref_A
-{{indent}}    {static_cast<{{dtype}}*>(weight_ptr), layout_B},                              // TensorRefA const & ref_B
-{% if is_bias %}
-{{indent}}    {static_cast<{{dtype}}*>(bias_ptr), cutlass::layout::TensorNHWC::Stride(0)},  // TensorRefC const & ref_C
-{% elif is_bias_add %}
-{{indent}}    {static_cast<{{dtype}}*>(res_ptr), layout_C},                                 // TensorRefC const & ref_C
-{% else %}
-{{indent}}    {static_cast<{{dtype}}*>(out_ptr), layout_C},                                 // TensorRefC const & ref_C
-{% endif %}
-{{indent}}    {static_cast<{{dtype}}*>(out_ptr), layout_C},                                 // TensorRefC const & ref_D
-{% if is_bias %}
-{{indent}}    {ElementComputeEpilogue(1), ElementComputeEpilogue(1)},                       // typename EpilogueOutputOp::Params const & output_op
-{% elif is_bias_add %}
-{{indent}}    {ElementComputeEpilogue(1), ElementComputeEpilogue(1)},                       // typename EpilogueOutputOp::Params const & output_op
-{{indent}}    cutlass::conv::SplitKMode::kSerial,                                           // SplitKMode const & split_k_mode
-{{indent}}    static_cast<{{dtype}}*>(bias_ptr),                                            // void * ptr_Vector
-{{indent}}    nullptr,                                                                      // void * ptr_Tensor
-{{indent}}    0,                                                                            // typename LayoutC::Stride::Index ldr
-{{indent}}    *out_ch,                                                                      // typename LayoutC::Stride::Index ldt
-{% else %}
-{{indent}}    {ElementComputeEpilogue(1), ElementComputeEpilogue(0)},                       // typename EpilogueOutputOp::Params const & output_op
-{% endif %}
 {{indent}}};
 {{indent}}{{instance_name}} conv_op;
 {% if is_profiler %}
@@ -79,12 +48,7 @@ EXEC_TEMPLATE = jinja2.Template(
 {{indent}}workspace = local_workspace.get();
 {{indent}}GLOBAL_WORKSPACE_SIZE_{{instance_name}} = workspace_size;
 {% endif %}
-{{indent}}auto status = conv_op.can_implement(arguments);
-{{indent}}CUTLASS_CHECK(status);
-{{indent}}status = conv_op.initialize(arguments, workspace);
-{{indent}}CUTLASS_CHECK(status);
-{{indent}}status = conv_op(stream);
-{{indent}}CUTLASS_CHECK(status);
+
 {{indent}}return;
 """
 )
@@ -93,33 +57,11 @@ SRC_TEMPLATE = jinja2.Template(
     """
 #include <cstdio>
 #include <stdexcept>
-
-#include "cutlass/cutlass.h"
-{% if is_transpose %}
-#include "cutlass/conv/kernel/default_conv2d_dgrad.h"
-{% elif is_depthwise %}
-#include "cutlass/conv/kernel/default_depthwise_fprop.h"
-{% else %}
-#include "cutlass/conv/kernel/default_conv2d_fprop.h"
-#include "cutlass/conv/kernel/default_conv2d_group_fprop.h"
-{% endif %}
-#include "cutlass/conv/device/implicit_gemm_convolution.h"
-#include "cutlass/util/host_tensor.h"
-#include "cutlass/util/reference/host/tensor_fill.h"
+#include <time.h>
+#include "xnnpack.h"
 
 {{extra_header}}
 
-#define CUTLASS_CHECK(status)                                                         \\
-  {                                                                                   \\
-    cutlass::Status error = status;                                                   \\
-    if (error != cutlass::Status::kSuccess) {                                         \\
-      static char msg[2048];                                                          \\
-      snprintf(msg, sizeof(msg), "[%s] Got cutlass error: %s at: %s",                 \\
-        __FILE__, cutlassGetStatusString(error), __LINE__);                           \\
-      fprintf(stderr, msg);                                                           \\
-      throw std::runtime_error(msg);                                                  \\
-    }                                                                                 \\
-  }
 
 {{instances}}
 
@@ -155,8 +97,7 @@ void {{function_name}} (
     int padh,
     int stridew,
     int dilationw,
-    int padw,
-    cudaStream_t stream
+    int padw
   ) {
 
   {{shape_function}}
@@ -171,42 +112,6 @@ void {{function_name}} (
   int i32_out_batch = *out_batch;
   int i32_out_h = *out_h;
   int i32_out_w = *out_w;
-
-  using cutlass::layout::TensorNHWC;
-  TensorNHWC layout_A(TensorNHWC::packed(cutlass::make_Coord(i32_batch, i32_in_h, i32_in_w, i32_in_ch)));
-{% if is_depthwise%}
-  TensorNHWC layout_B(TensorNHWC::packed(cutlass::make_Coord(i32_out_ch, i32_kernel_h, i32_kernel_w, 1)));
-{% elif is_transpose %}
-  TensorNHWC layout_B(TensorNHWC::packed(cutlass::make_Coord(i32_in_ch, i32_kernel_h, i32_kernel_w, i32_out_ch)));
-{% else %}
-  TensorNHWC layout_B(TensorNHWC::packed(cutlass::make_Coord(i32_out_ch, i32_kernel_h, i32_kernel_w, i32_in_ch)));
-{% endif %}
-  TensorNHWC layout_C(TensorNHWC::packed(cutlass::make_Coord(i32_out_batch, i32_out_h, i32_out_w, i32_out_ch)));
-
-  cutlass::conv::Conv2dProblemSize problem_size(
-{% if is_transpose %}
-    {i32_out_batch, i32_out_h, i32_out_w, i32_out_ch},    // cutlass::Tensor4DCoord input_size
-{% else %}
-    {i32_batch, i32_in_h, i32_in_w, i32_in_ch},           // cutlass::Tensor4DCoord input_size
-{% endif %}
-{% if is_depthwise%}
-    {i32_out_ch, i32_kernel_h, i32_kernel_w, 1},  // cutlass::Tensor4DCoord filter_size
-{% elif is_transpose%}
-    {i32_in_ch, i32_kernel_h, i32_kernel_w, i32_out_ch},  // cutlass::Tensor4DCoord filter_size
-{% else %}
-    {i32_out_ch, i32_kernel_h, i32_kernel_w, i32_in_ch},  // cutlass::Tensor4DCoord filter_size
-{% endif %}
-    {padh, padh, padw, padw},                                 // cutlass::Tensor4DCoord padding
-    {strideh, stridew},                                     // cutlass::MatrixCoord stride
-    {dilationh, dilationw},                                 // cutlass::MatrixCoord dilation
-{% if is_transpose %}
-    {i32_batch, i32_in_h, i32_in_w, i32_in_ch},           // cutlass::Tensor4DCoord output_size
-{% else %}
-    {i32_out_batch, i32_out_h, i32_out_w, i32_out_ch},    // cutlass::Tensor4DCoord output_size
-{% endif %}
-    cutlass::conv::Mode::kCrossCorrelation,               // cutlass::conv::Mode mode
-    1                                                     // int split_k_slices
-  );
 
   {{exec_paths}}
 
@@ -241,8 +146,7 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
 {{indent}}      {{stridew}},
 {{indent}}      {{dilationw}},
 {{indent}}      {{padw}},
-{{indent}}      global_workspace_,
-{{indent}}      stream
+{{indent}}      global_workspace_
 {{indent}}    );
 {{indent}}  } catch (...) {
 {{indent}}    runtime = 0;
@@ -278,8 +182,7 @@ int benchmark_{{function_name}} (
   int,
   int,
   int,
-  uint8_t*,
-  cudaStream_t
+  uint8_t*
 );
 """
 )
@@ -305,44 +208,23 @@ int benchmark_{{function_name}} (
   int stridew,
   int dilationw,
   int padw,
-  uint8_t* global_workspace_,
-  cudaStream_t stream
+  uint8_t* global_workspace_
 ) {
-  using ElementInputA = typename {{instance_name}}::ElementA;
-  using ElementInputB = typename {{instance_name}}::ElementB;
-  using ElementOutput = typename {{instance_name}}::ElementC;
-
-  cutlass::HostTensor<ElementInputA, typename {{instance_name}}::LayoutA> x({NI, HI, WI, CI});
-  cutlass::HostTensor<ElementInputB, typename {{instance_name}}::LayoutB> w({CO, KH, KW, CI});
-{% if is_bias %}
-  cutlass::HostTensor<ElementInputB, typename {{instance_name}}::LayoutB> b({(int)CO, 1, 1, 1});
-{% elif is_bias_add %}
-  cutlass::HostTensor<ElementInputB, typename {{instance_name}}::LayoutB> b({(int)CO, 1, 1, 1});
-  cutlass::HostTensor<ElementOutput, typename {{instance_name}}::LayoutC> r({NO, HO, WO, CO});
-{% endif %}
-  cutlass::HostTensor<ElementOutput, typename {{instance_name}}::LayoutC> y({NO, HO, WO, CO});
 
   // warmup
 {{func_call}}
-  cudaEvent_t events[2];
-  for (auto & event : events) {
-    cudaEventCreate(&event);
-  }
-  cudaEventRecord(events[0], stream);
+  struct timespec start, end;
+  clock_gettime(CLOCK_MONOTONIC, &start);
   for (int i = 0; i < 5; ++i) {
 {{func_call}}
   }
-  cudaEventRecord(events[1], stream);
-  cudaEventSynchronize(events[1]);
-  float runtime_ms = 0;
-  cudaEventElapsedTime(&runtime_ms, events[0], events[1]);
-  for (auto event : events) {
-    (void)cudaEventDestroy(event);
-  }
+  clock_gettime(CLOCK_MONOTONIC, &end);
+  float runtime_ms = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e6;
+
   // TODO: output workspace
   if (runtime_ms < 0.00001) {
       throw std::runtime_error(
-      "OOB in cutlass."
+      "OOB in xnnpack."
     );
   }
   *runtime = runtime_ms;
@@ -367,7 +249,7 @@ PROFILER_MAIN_TEMPLATE = jinja2.Template(
 #include <iostream>
 #include <string>
 
-#include "cutlass/cutlass.h"
+#include "xnnpack.h"
 
 {{benchmark_decls}}
 
@@ -391,7 +273,6 @@ int main(int argc, char** argv) {
   float runtime = 0;
   size_t workspace_size = 0;
   uint8_t* global_workspace_ = nullptr;
-  cudaStream_t stream = nullptr;
 
 {{benchmark_instances}}
 
@@ -428,8 +309,7 @@ void {{func_name}}(
   int,
   int,
   int,
-  int,
-  cudaStream_t
+  int
 );
 """
 )
@@ -462,35 +342,12 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}    {{padh}},
 {{indent}}    {{stridew}},
 {{indent}}    {{dilationw}},
-{{indent}}    {{padw}},
-{{indent}}    stream
+{{indent}}    {{padw}}
 {{indent}});
 """
 )
 
 
-def kernel_name(op, layout=None):
-    """generate cuda kernel name"""
-    from cutlass_lib import library
-
-    threadblock = op.tile_description.procedural_name()
-    extended_name = op.extended_name()
-    opcode_class_name = library.OpcodeClassNames[
-        op.tile_description.math_instruction.opcode_class
-    ]
-    if layout is None:
-        layout = op.layout_name()
-    align_ab = op.A.alignment
-    align_c = op.C.alignment
-    name = KERNEL_KEY_TEMPLATE.render(
-        threadblock=threadblock,
-        extended_name=extended_name,
-        opcode_class_name=opcode_class_name,
-        layout=layout,
-        align_ab=align_ab,
-        align_c=align_c,
-    )
-    return name.replace("\n", "")
 
 
 def emit_instance(op):
@@ -508,84 +365,33 @@ def emit_instance(op):
 def extract_config(
     func_attrs,
     dtype="float16",
-    skip_simt_kernels=False,
     f_apply_special_config=None,
     op_kind=None,
-    op_layout=None,
 ):
-    """Extracts cutlass config for conv kernels."""
+    """Extracts config for conv kernels."""
     import copy
 
-    import cutlass_lib
-
-    spec = CUDASpec()
+    spec = RVVSpec()
     lib_dtype = spec.dtype_to_lib_type(dtype)
 
     if lib_dtype == "float":
-        data_type = cutlass_lib.library.DataType.f32
-        acc_type = cutlass_lib.library.DataType.f32
-    elif "half" in lib_dtype:
-        data_type = cutlass_lib.library.DataType.f16
-        acc_type = cutlass_lib.library.DataType.f32
+        data_type = "float"
+    elif "float16" in lib_dtype:
+        data_type = "__Float16"
         # check target use fp16 acc
         if "use_fp16_acc" in Target.current()._kwargs:
             if Target.current()._kwargs["use_fp16_acc"]:
-                acc_type = cutlass_lib.library.DataType.f16
-    elif "bfloat16" in lib_dtype:
-        data_type = cutlass_lib.library.DataType.bf16
-        acc_type = cutlass_lib.library.DataType.f32
+                acc_type = "__Float16"
+    # elif "bfloat16" in lib_dtype:
+    #     data_type = "uint16_t"
     else:
         raise RuntimeError(f"Unsupported dtype {lib_dtype}")
 
-    def f_proc_op(op):
-        ret = []
-        if (
-            skip_simt_kernels
-            and op.tile_description.math_instruction.opcode_class
-            == cutlass_lib.library.OpcodeClass.Simt
-        ):
-            return ret
-
-        if (
-            op.A.element == data_type
-            and op.B.element == data_type
-            and op.C.element == data_type
-            and op.iterator_algorithm == cutlass_lib.library.IteratorAlgorithm.Optimized
-            and op.tile_description.math_instruction.element_accumulator == acc_type
-        ):
-            op = copy.deepcopy(op)
-
-            # set epilogue
-            epilogue_name = func_attrs["epilogue"]
-            op.epilogue_functor = cutlass_lib.library.EpilogueFunctorName[epilogue_name]
-            op.element_epilogue = acc_type
-
-            # apply special config if required
-            if f_apply_special_config is not None:
-                op = f_apply_special_config(func_attrs, op)
-
-            # set C alignment depending on the dtype
-            for i in alignment.get_alignments(dtype):
-                op = copy.deepcopy(op)
-                op.C.alignment = i
-                ret.append(op)
-
-        return ret
-
+    conv_ops = [ ]
     if op_kind is None:
-        op_kind = cutlass_lib.library.OperationKind.Conv2d
-    extract_ops = list(Target.current()._operators[op_kind].items())
-    conv_kind = cutlass_lib.library.ConvKind.Fprop
-
-    conv_ops = OrderedDict()
-    for _, value in extract_ops:
-        op = value[0]
-        if op.conv_kind == conv_kind:
-            ret = f_proc_op(op)
-            if len(ret) > 0:
-                for op_inst in ret:
-                    key = kernel_name(op_inst, layout=op_layout)
-                    conv_ops[key] = op_inst
+        conv_ops.append({"operation": "Conv2D", "data_type": f"{data_type}"})
+    if f_apply_special_config is not None:
+        conv_ops = f_apply_special_config(func_attrs, conv_ops)
     return conv_ops
 
 
@@ -606,7 +412,7 @@ def gen_profiler(
     op_type = func_attrs["op"]
     op_instance = func_attrs["op_instance"]
 
-    backend_spec = CUDASpec()
+    backend_spec = RVVSpec()
     dtype = backend_spec.dtype_to_lib_type(func_attrs["inputs"][0]._attrs["dtype"])
 
     func_call_extra_args = {}
@@ -812,7 +618,7 @@ def gen_function(
         instances[key] = inst
         instance_decl += inst
 
-    backend_spec = CUDASpec()
+    backend_spec = RVVSpec()
     dtype = backend_spec.dtype_to_lib_type(func_attrs["inputs"][0]._attrs["dtype"])
     shape_eval_func = shape_eval_template.render(
         indent="  ",
