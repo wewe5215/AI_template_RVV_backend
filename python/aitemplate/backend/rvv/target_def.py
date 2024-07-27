@@ -65,9 +65,10 @@ class RVV(Target):
         ait_static_files_path : str
             Absolute path to the AIT static/ directory
         """
-        super().__init__()
+        super().__init__(ait_static_files_path)
         self._target_type = 3
         self._template_path = template_path
+        self._ait_include_path = ait_static_files_path
         self._arch = arch
         self._kwargs = kwargs
         self._compile_options = self._build_compile_options()
@@ -119,7 +120,7 @@ class RVV(Target):
         return self._build_clang_compiler_options()
 
     def _build_compile_options(self):
-        options = self._build_gnu_host_compiler_options() + self._build_clang_compiler_options
+        options = self._build_gnu_host_compiler_options() + self._build_clang_compiler_options()
         return " ".join(options)
 
     def src_extension(self):
