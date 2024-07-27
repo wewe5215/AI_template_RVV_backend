@@ -156,7 +156,11 @@ setup(
     version=__version__,
     description="AITemplate: Make Templates Great for AI",
     zip_safe=True,
-    install_requires=["jinja2", "numpy", "sympy"],
+    install_requires=[
+        "jinja2",
+        "numpy==1.24.4",  # Specified numpy version
+        "sympy"
+    ],
     packages=find_packages(),
     package_data={
         "aitemplate": [
