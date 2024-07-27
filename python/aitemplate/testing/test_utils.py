@@ -41,6 +41,8 @@ class TestEnv(Enum):
     ROCM = 100
     RVV = 200
 
+def _RVV_filter(method_name: str) -> bool:
+    return method_name.endswith("rvv")
 
 def _ROCM_filter(method_name: str) -> bool:
     return method_name.endswith("rocm")
@@ -60,11 +62,13 @@ _TEST_ENV_TO_FILTER_METHOD: Dict[str, Callable[[str], bool]] = {
             _SM80_filter(method_name)
             or _SM90_filter(method_name)
             or _ROCM_filter(method_name)
+            or _RVV_filter(method_name)
         )
     ),
     TestEnv.CUDA_SM80: _SM80_filter,
     TestEnv.CUDA_SM90: _SM90_filter,
     TestEnv.ROCM: _ROCM_filter,
+    TestEnv.RVV: _RVV_filter,
 }
 
 
@@ -80,6 +84,7 @@ _COMPATIBLE_TEST_ENVS: Dict[TestEnv, Set[TestEnv]] = {
         TestEnv.CUDA_SM80,
         TestEnv.CUDA_SM90,
     },
+    TestEnv.RVV: {TestEnv.RVV},
 }
 
 
@@ -98,6 +103,8 @@ def _get_test_env(target) -> str:
             )
     elif target.name() == "rocm":
         test_env = TestEnv.ROCM
+    elif target.name() == "rvv":
+        test_env = TestEnv.RVV
     else:
         raise RuntimeError(f"Unknown test env, target: {target.name}, {target._arch}")
     if test_env not in _TEST_ENV_TO_FILTER_METHOD:
@@ -182,7 +189,11 @@ def env_variables(**kwargs):
 
 def _get_torch_tensor(torch_fn, shape, dtype):
     dtype = normalize_dtype(dtype)
-    return torch_fn(shape, device="cuda", dtype=string_to_torch_dtype(dtype))
+    target = detect_target()
+    if target.name() == "cuda":
+        return torch_fn(shape, device="cuda", dtype=string_to_torch_dtype(dtype))
+    else:
+        return torch_fn(shape, device="cpu", dtype=string_to_torch_dtype(dtype))
 
 
 def get_random_torch_tensor(shape, dtype="float16"):
@@ -201,9 +212,15 @@ def get_torch_zeros_tensor(shape, dtype="float16"):
 
 def get_torch_full_tensor(shape, fill_value, dtype="float16"):
     dtype = normalize_dtype(dtype)
-    return torch.full(
-        shape, fill_value, device="cuda", dtype=string_to_torch_dtype(dtype)
-    )
+    target = detect_target()
+    if target.name() == "cuda":
+        return torch.full(
+            shape, fill_value, device="cuda", dtype=string_to_torch_dtype(dtype)
+        )
+    else:
+        return torch.full(
+            shape, fill_value, device="cpu", dtype=string_to_torch_dtype(dtype)
+        )
 
 
 def has_op(sorted_ops: List[Operator], op_name: str) -> bool:
@@ -284,26 +301,49 @@ def epilogue_math_name_to_torch_fn(epilogue_math_name: str) -> Callable[[Any], A
 def get_attn_mask_per_causal_type(
     m: int, n: int, causal_type: CausalType, torch_dtype: str
 ) -> torch.Tensor:
-    if causal_type == CausalType.NO_CAUSAL:
-        invalid_attn_mask = torch.ones((m, n), dtype=torch_dtype, device="cuda")
-    elif causal_type == CausalType.LOWER_LEFT_EMPTY:
-        invalid_attn_mask: torch.Tensor = 1.0 - torch.tril(
-            torch.ones(
-                (m, n),
-                dtype=torch.bool,
-                device="cuda",
+    target = detect_target()
+    if target.name() == "cuda":
+        if causal_type == CausalType.NO_CAUSAL:
+            invalid_attn_mask = torch.ones((m, n), dtype=torch_dtype, device="cuda")
+        elif causal_type == CausalType.LOWER_LEFT_EMPTY:
+            invalid_attn_mask: torch.Tensor = 1.0 - torch.tril(
+                torch.ones(
+                    (m, n),
+                    dtype=torch.bool,
+                    device="cuda",
+                )
+            ).fill_diagonal_(False).to(torch_dtype)
+        elif causal_type == CausalType.UPPER_RIGHT_EMPTY:
+            invalid_attn_mask: torch.Tensor = torch.tril(
+                torch.ones(
+                    (m, n),
+                    dtype=torch_dtype,
+                    device="cuda",
+                )
             )
-        ).fill_diagonal_(False).to(torch_dtype)
-    elif causal_type == CausalType.UPPER_RIGHT_EMPTY:
-        invalid_attn_mask: torch.Tensor = torch.tril(
-            torch.ones(
-                (m, n),
-                dtype=torch_dtype,
-                device="cuda",
-            )
-        )
+        else:
+            raise NotImplementedError(f"Unsupported {causal_type=}!")
     else:
-        raise NotImplementedError(f"Unsupported {causal_type=}!")
+        if causal_type == CausalType.NO_CAUSAL:
+            invalid_attn_mask = torch.ones((m, n), dtype=torch_dtype, device="cpu")
+        elif causal_type == CausalType.LOWER_LEFT_EMPTY:
+            invalid_attn_mask: torch.Tensor = 1.0 - torch.tril(
+                torch.ones(
+                    (m, n),
+                    dtype=torch.bool,
+                    device="cpu",
+                )
+            ).fill_diagonal_(False).to(torch_dtype)
+        elif causal_type == CausalType.UPPER_RIGHT_EMPTY:
+            invalid_attn_mask: torch.Tensor = torch.tril(
+                torch.ones(
+                    (m, n),
+                    dtype=torch_dtype,
+                    device="cpu",
+                )
+            )
+        else:
+            raise NotImplementedError(f"Unsupported {causal_type=}!")
     return invalid_attn_mask
 
 
