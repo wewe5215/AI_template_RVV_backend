@@ -24,6 +24,7 @@ from aitemplate.backend import (  # noqa
     registry,
     rocm,
     target,
+    rvv,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "registry",
     "rocm",
     "target",
+    "rvv",
 ]

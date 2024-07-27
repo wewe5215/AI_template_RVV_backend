@@ -67,6 +67,7 @@ class RVV(Target):
         """
         super().__init__()
         self._target_type = 3
+        self._template_path = template_path
         self._arch = arch
         self._kwargs = kwargs
         self._compile_options = self._build_compile_options()
@@ -123,6 +124,10 @@ class RVV(Target):
 
     def src_extension(self):
         return ".cpp"
+    
+    def __enter__(self):
+        super().__enter__()
+        self._operators = []
 
 
     def cc(self):
