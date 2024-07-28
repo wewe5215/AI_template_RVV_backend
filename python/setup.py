@@ -139,10 +139,6 @@ def gen_backend_common_file_list():
     f_cond = lambda x: True if x.endswith(".py") or x.endswith(".cuh") else False
     return gen_file_list(srcs, f_cond)
 
-def gen_cpu_library_file_list():
-    srcs = ["aitemplate/cpu_library"]
-    f_cond = lambda x: True if x.endswith(".py") else False
-    return gen_file_list(srcs, f_cond)
 
 def gen_license_file_list():
     srcs = ["aitemplate/licenses"]
@@ -186,7 +182,6 @@ setup(
         + gen_flash_attention_list()
         + gen_static_list()
         + gen_backend_common_file_list()
-        + gen_cpu_library_file_list()
         + gen_license_file_list(),
     },
     python_requires=">=3.7, <4",
