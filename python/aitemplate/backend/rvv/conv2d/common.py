@@ -40,14 +40,60 @@ INSTANCE_TEMPLATE = jinja2.Template(
 EXEC_TEMPLATE = jinja2.Template(
     """
 {{indent}}//  TODO: cast to right dtype
-{{indent}}};
 {% if is_profiler %}
 {{indent}}size_t workspace_size = conv_op.get_workspace_size(arguments);
 {{indent}}uint8_t* local_workspace = (uint8_t*)malloc(workspace_size);
 {{indent}}workspace = local_workspace.get();
 {{indent}}GLOBAL_WORKSPACE_SIZE_{{instance_name}} = workspace_size;
 {% endif %}
-
+{% if not is_bias %}
+{{indent}}void* bias_ptr = (float*)malloc(out_ch * sizeof(float));
+{{indent}}memset(bias_ptr, 0, out_ch * sizeof(float));
+{% endif %}
+{{indent}}const xnn_status status_init = xnn_initialize(nullptr);
+{{indent}}CHECK_EQ(status_init, xnn_status_success);
+{{indent}}xnn_operator_t op_conv = nullptr;
+{{indent}}// for conv2d_bias
+{{indent}}const xnn_status status = xnn_create_convolution2d_nhwc_f32(
+{{indent}}  PH, PW, PH, PW, i32_kernel_h, i32_kernel_w,
+{{indent}}  SH, SW, DH, DW, 1, CI,
+{{indent}}  CO, 1 * CI, 1 * CO, (float*)(weight_ptr), (float*)(bias_ptr),
+{{indent}}  0, std::numeric_limits<float>::infinity(),
+{{indent}}  /*flags=*/0, nullptr, nullptr, &op_conv);
+{{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op_conv(op_conv, xnn_delete_operator);
+{{indent}}CHECK_EQ(status, xnn_status_success);
+{{indent}}CHECK_NE(op_conv, nullptr);
+{{indent}}size_t workspace_size = SIZE_MAX;
+{{indent}}size_t workspace_alignment = SIZE_MAX;
+{{indent}}CHECK_EQ(
+{{indent}}  xnn_reshape_convolution2d_nhwc_f32(
+{{indent}}    op_conv, i32_batch, i32_in_h, i32_in_w,
+{{indent}}    &workspace_size, &workspace_alignment,
+{{indent}}    /*output_height_out=*/nullptr, /*output_width_out=*/nullptr,
+{{indent}}    /*threadpool=*/nullptr), xnn_status_success);
+{{indent}}CHECK_EQ(workspace_size, 0);
+{{indent}}CHECK_EQ(workspace_alignment, 1);
+{{indent}}CHECK_EQ(xnn_setup_convolution2d_nhwc_f32(
+{{indent}}    op_conv, 
+{{indent}}    /*workspace=*/nullptr, 
+{{indent}}    (float*)(in_ptr), 
+{{indent}}    (float*)(out_ptr)), xnn_status_success);
+{{indent}}CHECK_EQ(xnn_run_operator(op_conv, /*threadpool=*/nullptr), xnn_status_success);
+{% if is_bias_add %}
+// for add
+{{indent}}xnn_operator_t op_add = nullptr;
+{{indent}}CHECK_EQ(xnn_status_success, xnn_create_add_nd_f32(0, std::numeric_limits<float>::infinity(), 0, &op_add));
+{{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op_add(op_add, xnn_delete_operator);
+{{indent}}const size_t a_shape[] = { (size_t)i32_out_batch, (size_t)i32_out_h, (size_t)i32_out_w, (size_t)i32_out_ch};
+{{indent}}const size_t b_shape[] = { (size_t)i32_out_batch, (size_t)i32_out_h, (size_t)i32_out_w, (size_t)i32_out_ch};
+{{indent}}CHECK_EQ(
+{{indent}}xnn_status_success, xnn_reshape_add_nd_f32(
+{{indent}}                        op_add, 4, a_shape, 4, b_shape,
+{{indent}}                        /*threadpool=*/nullptr));
+{{indent}}CHECK_EQ(
+{{indent}}  xnn_status_success, xnn_setup_add_nd_f32(op_add, (float*)(res_ptr), (float*)(out_ptr), (float*)(out_ptr)));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(op_add, /*threadpool=*/nullptr));
+{% endif %}
 {{indent}}return;
 """
 )
@@ -542,15 +588,6 @@ def gen_profiler(
     return build_profiler(file_pairs)
 
 
-def extract_config_name(config):
-    """Extracts config name from a given config."""
-    pattern = re.compile(r"\s*using\s(.*?)\s=")
-    decl = config.split("\n")[2]
-    match = pattern.match(decl)
-    if match is None:
-        raise RuntimeError("Invalid config: \n" + config)
-    return match.groups()[0]
-
 
 def gen_function(
     func_attrs,
@@ -601,7 +638,7 @@ def gen_function(
     program = EXEC_TEMPLATE.render(
         is_bias=is_bias,
         is_bias_add=is_bias_add,
-        indent=" " * 4,
+        indent=" " * 2,
         dtype=dtype,
     )
 
