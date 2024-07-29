@@ -1,463 +1,128 @@
+#  Copyright (c) Meta Platforms, Inc. and affiliates.
 #
-# \file generator.py
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
 #
-# \brief Generates the CUTLASS Library's instances
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 #
-
 import enum
-import os.path
-import shutil
+from copy import deepcopy
+from dataclasses import dataclass
+from enum import auto
+from typing import List
 
-from library import *
+import jinja2
 
-###################################################################################################
+# import library
 
-#
-class Conv2dOperation:
-  #
-  def __init__(self, conv_kind, iterator_algorithm, arch, tile_description, A, B, C, element_epilogue, \
-    stride_support, epilogue_functor = EpilogueFunctor.LinearCombination, swizzling_functor = SwizzlingFunctor.Identity1, \
-    group_mode = GroupMode.NoneGroup):
+from aitemplate.utils.cpu_lib import library
 
-    self.operation_kind = OperationKind.Conv2d
-    self.arch = arch
-    self.tile_description = tile_description
-    self.conv_kind = conv_kind
-    self.A = A
-    self.B = B
-    self.C = C
-    self.element_epilogue = element_epilogue
-    self.epilogue_functor = epilogue_functor
-    self.iterator_algorithm = iterator_algorithm
-    self.stride_support = stride_support
-    self.swizzling_functor = swizzling_functor
-    self.group_mode = group_mode
-  #
-  def is_complex(self):
-    complex_operators = [
-      MathOperation.multiply_add_complex,
-      MathOperation.multiply_add_complex_gaussian
-      ]
-    return self.tile_description.math_instruction.math_operation in complex_operators
-  
-  #
-  def accumulator_type(self):
-    accum = self.tile_description.math_instruction.element_accumulator
 
-    if self.is_complex():
-      return get_complex_from_real(accum)
+class Conv2DSpecialization(enum.Enum):
+    ConvFwdDefault = auto()
+    ConvFwd1x1P0 = auto()
+    ConvFwd1x1S1P0 = auto()
+    ConvFwdOddC = auto()
+    GemmDefault = auto()
+    MNKPadding = auto()
+    ConvBwdDataDefault = auto()
+    ConvBwd1x1S1P0 = auto()
 
-    return accum
 
-  #
-  def core_name(self):
-    ''' The basic operation kind is prefixed with a letter indicating the accumulation type. '''
-
-    intermediate_type = ''
-
-    if self.tile_description.math_instruction.opcode_class == OpcodeClass.TensorOp:
-      inst_shape = "%d%d%d" % tuple(self.tile_description.math_instruction.instruction_shape)
-      if self.tile_description.math_instruction.element_a != self.A.element and \
-        self.tile_description.math_instruction.element_a != self.accumulator_type():
-        intermediate_type = DataTypeNames[self.tile_description.math_instruction.element_a]
-    else:
-      inst_shape = ''
-
-    return "%s%s%s%s_%s" % (ShortDataTypeNames[self.accumulator_type()], \
-      inst_shape, intermediate_type, ConvKindNames[self.conv_kind], IteratorAlgorithmNames[self.iterator_algorithm])
-
-  #
-  def extended_name(self):
-    ''' Append data types if they differ from compute type. '''
-    if self.C.element != self.tile_description.math_instruction.element_accumulator and \
-      self.A.element != self.tile_description.math_instruction.element_accumulator:
-      extended_name = "${element_c}_${core_name}_${element_a}"
-    elif self.C.element == self.tile_description.math_instruction.element_accumulator and  \
-      self.A.element != self.tile_description.math_instruction.element_accumulator:
-      extended_name = "${core_name}_${element_a}"
-    else:
-      extended_name = "${core_name}"
-
-    extended_name = SubstituteTemplate(extended_name, {
-      'element_a': DataTypeNames[self.A.element],
-      'element_c': DataTypeNames[self.C.element],
-      'core_name': self.core_name()
-      })
-
-    return extended_name
-
-  #
-  def layout_name(self):
-    return "%s" % (ShortLayoutTypeNames[self.A.layout])
-
-  #
-  def configuration_name(self):
-    ''' The full procedural name indicates architecture, extended name, tile size, and layout. '''
-
-    opcode_class_name = OpcodeClassNames[self.tile_description.math_instruction.opcode_class]
-    
-    threadblock = self.tile_description.procedural_name()
-
-    # grouped conv
-    if self.group_mode != GroupMode.NoneGroup:
-      group_conv_name = f"{GroupModeNames[self.group_mode]}_"
-    else:
-      group_conv_name = ""
-
-    if self.stride_support == StrideSupport.Unity:
-      configuration_name = "cutlass_${opcode_class}_${extended_name}_${threadblock}_${layout}_unity_stride_${group_conv_name}align${alignment}"
-    else:
-      configuration_name = "cutlass_${opcode_class}_${extended_name}_${threadblock}_${layout}_${group_conv_name}align${alignment}"
-
-    return SubstituteTemplate(
-      configuration_name,
-      {
-        'opcode_class': opcode_class_name,
-        'extended_name': self.extended_name(),
-        'threadblock': threadblock,
-        'layout': self.layout_name(),
-        'alignment': "%d" % self.A.alignment,
-        'group_conv_name': group_conv_name
-      }
-    )
-
-  #
-  def procedural_name(self):
-    ''' The full procedural name indicates architecture, extended name, tile size, and layout. '''
-    return self.configuration_name()
-
-###################################################################################################
-#
-# Emits single instances of a CUTLASS device-wide operator
-#
-###################################################################################################
-
-class EmitConv2dInstance:
-  def __init__(self):
-    self.template = """
-  // Conv2d${conv_kind_name} ${iterator_algorithm_name} kernel instance "${operation_name}"
-  using ${operation_name}_base = 
-  typename cutlass::conv::kernel::DefaultConv2d${conv_kind_name}<
-    ${element_a}, 
-    ${layout_a},
-    ${element_b}, 
-    ${layout_b},
-    ${element_c}, 
-    ${layout_c},
-    ${element_accumulator},
-    ${opcode_class},
-    ${arch},
-    cutlass::gemm::GemmShape<${threadblock_shape_m}, ${threadblock_shape_n}, ${threadblock_shape_k}>,
-    cutlass::gemm::GemmShape<${warp_shape_m}, ${warp_shape_n}, ${warp_shape_k} >,
-    cutlass::gemm::GemmShape<${instruction_shape_m}, ${instruction_shape_n}, ${instruction_shape_k}>,
-    ${epilogue_functor}<
-      ${element_c},
-      ${epilogue_vector_length},
-      ${element_accumulator},
-      ${element_epilogue}
-    >,
-    ${swizzling_functor}, // cutlass::gemm::threadblock::GemmSplitKIdentityThreadblockSwizzle<>,
-    ${stages},
-    ${math_operator},
-    ${iterator_algorithm},
-    ${stride_support},
-    ${align_a},
-    ${align_b}
-  >::Kernel;
-"""
-    self.template_group_conv = """
-  // Conv2d${conv_kind_name} ${iterator_algorithm_name} kernel instance "${operation_name}"
-  using ${operation_name}_base =
-  typename cutlass::conv::kernel::DefaultConv2dGroup${conv_kind_name}<
-    ${element_a},
-    ${layout_a},
-    ${element_b},
-    ${layout_b},
-    ${element_c},
-    ${layout_c},
-    ${element_accumulator},
-    ${opcode_class},
-    ${arch},
-    cutlass::gemm::GemmShape<${threadblock_shape_m}, ${threadblock_shape_n}, ${threadblock_shape_k}>,
-    cutlass::gemm::GemmShape<${warp_shape_m}, ${warp_shape_n}, ${warp_shape_k} >,
-    cutlass::gemm::GemmShape<${instruction_shape_m}, ${instruction_shape_n}, ${instruction_shape_k}>,
-    ${epilogue_functor}<
-      ${element_c},
-      ${epilogue_vector_length},
-      ${element_accumulator},
-      ${element_epilogue}
-    >,
-    ${swizzling_functor}, // cutlass::gemm::threadblock::GemmSplitKIdentityThreadblockSwizzle<>,
-    ${stages},
-    ${math_operator},
-    ${group_mode},
-    ${iterator_algorithm},
-    ${stride_support},
-    ${align_a},
-    ${align_b}
-  >::Kernel;
-"""
-    self.template_depthwise_direct_conv = """
-  // Conv2d${conv_kind_name} ${iterator_algorithm_name} kernel instance "${operation_name}"
-  using ${operation_name}_base =
-  typename cutlass::conv::kernel::DefaultDepthwiseDirect2dConv${conv_kind_name}<
-    ${element_a},
-    ${layout_a},
-    ${element_b},
-    ${layout_b},
-    ${element_c},
-    ${layout_c},
-    ${element_accumulator},
-    ${opcode_class},
-    ${arch},
-    cutlass::gemm::GemmShape<${threadblock_shape_m}, ${threadblock_shape_n}, ${threadblock_shape_k}>,
-    cutlass::conv::TensorNHWCShape<${threadblock_output_shape_n}, ${threadblock_output_shape_p}, ${threadblock_output_shape_q}, ${groups_per_cta}>,
-    cutlass::MatrixShape<${filter_shape_r}, ${filter_shape_s}>,
-    cutlass::gemm::GemmShape<${warp_shape_m}, ${warp_shape_n}, ${warp_shape_k}>,
-    cutlass::gemm::GemmShape<${instruction_shape_m}, ${instruction_shape_n}, ${instruction_shape_k}>,
-    ${epilogue_functor}<
-      ${element_c},
-      ${epilogue_vector_length},
-      ${element_accumulator},
-      ${element_epilogue},
-      cutlass::epilogue::thread::ScaleType::OnlyAlphaScaling
-    >,
-
-    cutlass::conv::threadblock::DepthwiseDirect2dConvIdentityThreadblockSwizzle<
-          1,
-          ${threadblock_output_shape_n},
-          ${threadblock_output_shape_p},
-          ${threadblock_output_shape_q}>, 
-    ${stages},
-    ${math_operator},
-    ${iterator_algorithm},
-    ${stride_support},
-    cutlass::MatrixShape<${stride_r}, ${stride_s}>,
-    cutlass::MatrixShape<${dilation_r}, ${dilation_s}>
-  >::Kernel;
-"""
-
-  def emit(self, operation):
-
-    warp_shape = [int(operation.tile_description.threadblock_shape[idx] / operation.tile_description.warp_count[idx]) for idx in range(3)]
-
-    epilogue_vector_length = int(min(operation.C.alignment * DataTypeSize[operation.C.element], 128) / DataTypeSize[operation.C.element])
-
-    values = {
-      'operation_name': operation.procedural_name(),
-      'conv_kind': ConvKindTag[operation.conv_kind],
-      'conv_kind_name': ConvKindNames[operation.conv_kind].capitalize(),
-      'element_a': DataTypeTag[operation.A.element],
-      'layout_a': LayoutTag[operation.A.layout],
-      'element_b': DataTypeTag[operation.B.element],
-      'layout_b': LayoutTag[operation.B.layout],
-      'element_c': DataTypeTag[operation.C.element],
-      'layout_c': LayoutTag[operation.C.layout],
-      'element_accumulator': DataTypeTag[operation.accumulator_type()], 
-      'opcode_class': OpcodeClassTag[operation.tile_description.math_instruction.opcode_class],
-      'arch': "cutlass::arch::Sm%d" % operation.arch,
-      'threadblock_shape_m': str(operation.tile_description.threadblock_shape[0]),
-      'threadblock_shape_n': str(operation.tile_description.threadblock_shape[1]),
-      'threadblock_shape_k': str(operation.tile_description.threadblock_shape[2]),
-      'warp_shape_m': str(warp_shape[0]),
-      'warp_shape_n': str(warp_shape[1]),
-      'warp_shape_k': str(warp_shape[2]),
-      'instruction_shape_m': str(operation.tile_description.math_instruction.instruction_shape[0]),
-      'instruction_shape_n': str(operation.tile_description.math_instruction.instruction_shape[1]),
-      'instruction_shape_k': str(operation.tile_description.math_instruction.instruction_shape[2]),
-      'epilogue_vector_length': str(epilogue_vector_length),
-      'epilogue_functor': EpilogueFunctorTag[operation.epilogue_functor],
-      'element_epilogue': str(DataTypeTag[operation.element_epilogue]),
-      'swizzling_functor': SwizzlingFunctorTag[operation.swizzling_functor],
-      'stages': str(operation.tile_description.stages),
-      'iterator_algorithm': IteratorAlgorithmTag[operation.iterator_algorithm],
-      'iterator_algorithm_name': IteratorAlgorithmNames[operation.iterator_algorithm].capitalize(),
-      'stride_support': StrideSupportTag[operation.stride_support],
-      'math_operator': 'cutlass::arch::OpMultiplyAddComplex' if operation.is_complex() else \
-      MathOperationTag[operation.tile_description.math_instruction.math_operation],
-      'align_a': str(operation.A.alignment),
-      'align_b': str(operation.B.alignment),
-    }
-
-    if operation.group_mode == GroupMode.NoneGroup:
-      return SubstituteTemplate(self.template, values)
-
-    elif operation.group_mode == GroupMode.Depthwise:
-      values['group_mode'] = GroupModeTag[operation.group_mode]
-      # Setup other template params
-      values['threadblock_output_shape_n'] = str(operation.tile_description.threadblock_output_shape[0])
-      values['threadblock_output_shape_p'] = str(operation.tile_description.threadblock_output_shape[1])
-      values['threadblock_output_shape_q'] = str(operation.tile_description.threadblock_output_shape[2])
-      
-      values['groups_per_cta'] = str(operation.tile_description.threadblock_output_shape[3])
-
-      values['filter_shape_r'] = str(operation.tile_description.filter_shape[0])
-      values['filter_shape_s'] = str(operation.tile_description.filter_shape[1])
-
-      values['stride_r'] = str(operation.tile_description.stride[0])
-      values['stride_s'] = str(operation.tile_description.stride[1])
-
-      values['dilation_r'] = str(operation.tile_description.dilation[0])
-      values['dilation_s'] = str(operation.tile_description.dilation[1])
-
-      return SubstituteTemplate(self.template_depthwise_direct_conv, values)
-
-    else:
-      values['group_mode'] = GroupModeTag[operation.group_mode]
-      return SubstituteTemplate(self.template_group_conv, values)
-
-###################################################################################################
-#
-# Generator functions for all layouts
-#
-###################################################################################################
-
-#
-def GenerateConv2dTensorOp(manifest, tile_descriptions, min_cc, align = 128):
-
-  for tile in tile_descriptions:
-    for conv_kind in [ConvKind.Fprop, ConvKind.Dgrad, ConvKind.Wgrad]:
-
-      if conv_kind == ConvKind.Fprop or (tile.math_instruction.element_accumulator in [DataType.f16, DataType.f32]):
-
-        #
-        output_types = [tile.math_instruction.element_a, tile.math_instruction.element_accumulator] \
-          if DataTypeSize[tile.math_instruction.element_accumulator] == 32 \
-          else [tile.math_instruction.element_accumulator,]
-
-        for output_type in output_types:
-          A = TensorDescription(tile.math_instruction.element_a, LayoutType.TensorNHWC, int(align / DataTypeSize[tile.math_instruction.element_a]))
-          B = TensorDescription(tile.math_instruction.element_b, LayoutType.TensorNHWC, int(align / DataTypeSize[tile.math_instruction.element_b]))
-          C = TensorDescription(output_type,  LayoutType.TensorNHWC, max(1, int(align / DataTypeSize[output_type])))
-
-          manifest.append(Conv2dOperation(conv_kind, min_cc, tile, A, B, C, tile.math_instruction.element_accumulator))
-
-###################################################################################################
-#
-# Emitters functions for all targets
-#
-###################################################################################################
-
-class EmitConv2dConfigurationLibrary:
-  def __init__(self, operation_path, configuration_name):
-    self.configuration_name = configuration_name
-    self.configuration_path = os.path.join(operation_path, "%s.cu" % configuration_name)
-
-    self.instance_emitter = EmitConv2dInstance()
-
-    self.instance_template = """
-${operation_instance}
-
-// Derived class
-struct ${operation_name} : 
-  public ${operation_name}_base { };
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-"""
-    self.header_template = """
-/*
-  Generated by conv2d_operation.py - Do not edit.
-*/
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-#include "cutlass/cutlass.h"
-#include "cutlass/library/library.h"
-#include "cutlass/library/manifest.h"
-
-#include "library_internal.h"
-#include "conv2d_operation.h"
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-"""
-
-    self.configuration_header = """
-
-namespace cutlass {
-namespace library {
-
-// Initialize all instances
-void initialize_${configuration_name}(Manifest &manifest) {
-
-"""
-
-    self.configuration_instance = """
-  using Operation_${operation_name} = cutlass::conv::device::ImplicitGemmConvolution<
-    ${operation_name}>;
-
-  manifest.append(new cutlass::library::Conv2dOperation<
-    Operation_${operation_name}>(
-      "${operation_name}"));
-
-"""
-
-    self.configuration_direct_conv_instance = """
-  using Operation_${operation_name} = cutlass::conv::device::DirectConvolution<
-    ${operation_name}>;
-
-  manifest.append(new cutlass::library::DirectConv2dOperation<
-    Operation_${operation_name}>(
-      "${operation_name}"));
-
-"""
-
-    self.configuration_epilogue = """
+Conv2DSpecializationTag = {
+    Conv2DSpecialization.ConvFwdDefault: "ck::tensor_operation::device::ConvolutionForwardSpecialization::Default",
+    Conv2DSpecialization.ConvFwd1x1P0: "ck::tensor_operation::device::ConvolutionForwardSpecialization::Filter1x1Pad0",
+    Conv2DSpecialization.ConvFwd1x1S1P0: "ck::tensor_operation::device::ConvolutionForwardSpecialization::Filter1x1Stride1Pad0",
+    Conv2DSpecialization.ConvFwdOddC: "ck::tensor_operation::device::ConvolutionForwardSpecialization::OddC",
+    Conv2DSpecialization.GemmDefault: "ck::tensor_operation::device::GemmSpecialization::Default",
+    Conv2DSpecialization.MNKPadding: "ck::tensor_operation::device::GemmSpecialization::MNKPadding",
+    Conv2DSpecialization.ConvBwdDataDefault: "ck::tensor_operation::device::ConvolutionBackwardDataSpecialization::Default",
+    Conv2DSpecialization.ConvBwd1x1S1P0: "ck::tensor_operation::device::ConvolutionBackwardDataSpecialization::Filter1x1Stride1Pad0",
 }
-"""
-    self.epilogue_template = """
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+@dataclass
+class Conv2DOperation:
+    operation_kind: library.Conv2dKind
+    extra_kind: library.TensorOperation
+    A: library.TensorDesc
+    B: library.TensorDesc
+    C: library.TensorDesc
+    a_elem_op: library.TensorOperation
+    b_elem_op: library.TensorOperation
+    epilogue_functor: library.TensorOperation
+    c_data_op: library.MemoryDataOperation
+    conv2d_specialization: Conv2DSpecialization
+    gemm_specialization: Conv2DSpecialization
 
-} // namespace library
-} // namespace cutlass
+    def __str__(self) -> str:
+        io_name = "{conv2d_kind}_{conv2d_specialization}_{gemm_specialization}_{a_dtype}{b_dtype}{c_dtype}_{a_layout}_{b_layout}_{c_layout}".format(
+            conv2d_kind=library.Conv2dKindNames[self.operation_kind],
+            conv2d_specialization=self.conv2d_specialization.value,
+            gemm_specialization=self.gemm_specialization.value,
+            a_dtype=library.ShortDataTypeNames[self.A.element],
+            b_dtype=library.ShortDataTypeNames[self.B.element],
+            c_dtype=library.ShortDataTypeNames[self.C.element],
+            a_layout=library.ShortLayoutTypeNames[self.A.layout],
+            b_layout=library.ShortLayoutTypeNames[self.B.layout],
+            c_layout=library.ShortLayoutTypeNames[self.C.layout],
+        )
+        tile_name = str(self.tile_desc)
+        return "{io_name}_{tile_name}_{epilogue_functor}".format(
+            io_name=io_name,
+            tile_name=tile_name,
+            epilogue_functor=library.ShortTensorOperationNames[self.epilogue_functor],
+        )
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+    def accumulator_type(self):
+        return library.DataType.f32
 
-"""
-
-  #
-  def __enter__(self):
-    self.configuration_file = open(self.configuration_path, "w")
-    self.configuration_file.write(SubstituteTemplate(self.header_template, {
-      'configuration_name': self.configuration_name
-      }))
-    self.operations = []
-    return self
-
-  #
-  def emit(self, operation):
-    self.operations.append(operation)
-    self.configuration_file.write(SubstituteTemplate(self.instance_template, {
-      'configuration_name': self.configuration_name,
-      'operation_name': operation.procedural_name(),
-      'operation_instance': self.instance_emitter.emit(operation)
-      }))
-
-  #
-  def __exit__(self, exception_type, exception_value, traceback):
-
-    self.configuration_file.write(SubstituteTemplate(self.configuration_header, {
-      'configuration_name': self.configuration_name
-      }))
-
-    for operation in self.operations:
-      if operation.group_mode == GroupMode.Depthwise:
-        self.configuration_file.write(SubstituteTemplate(self.configuration_direct_conv_instance, {
-          'configuration_name': self.configuration_name,
-          'operation_name': operation.procedural_name()  
-        }))
-      else: 
-        self.configuration_file.write(SubstituteTemplate(self.configuration_instance, {
-          'configuration_name': self.configuration_name,
-          'operation_name': operation.procedural_name()  
-        }))
-
-    self.configuration_file.write(self.configuration_epilogue)
-    self.configuration_file.write(self.epilogue_template)
-    self.configuration_file.close()
+    def emit(self) -> str:
+        template = jinja2.Template(
+            """"""
+        )
+        return template.render(
+            name=self.__str__(),
+            InLayout=library.LayoutTag[self.A.layout],
+            WeiLayout=library.LayoutTag[self.B.layout],
+            OutLayout=library.LayoutTag[self.C.layout],
+            ADType=library.DataTypeTag[self.A.element],
+            BDType=library.DataTypeTag[self.B.element],
+            CDType=library.DataTypeTag[self.C.element],
+            AccDType=library.DataTypeTag[library.DataType.f32],
+            CShuffleDType=library.DataTypeTag[self.C.element],
+            A_elem_op=library.TensorOperationTag[self.a_elem_op],
+            B_elem_op=library.TensorOperationTag[self.b_elem_op],
+            epilogue_functor=library.TensorOperationTag[self.epilogue_functor],
+            C_data_op=library.MemoryDataOperationTag.get(self.c_data_op, -1),
+            Conv2DSpecialization=Conv2DSpecializationTag[self.conv2d_specialization],
+            GemmSpecialization=Conv2DSpecializationTag[self.gemm_specialization],
+            func=library.ShortTensorOperationNames[self.epilogue_functor],
+        )
 
 
-###################################################################################################
-###################################################################################################
+if __name__ == "__main__":
+    A = library.TensorDesc(library.DataType.f16, library.LayoutType.RowMajor)
+    B = library.TensorDesc(library.DataType.f16, library.LayoutType.ColumnMajor)
+    C = library.TensorDesc(library.DataType.f16, library.LayoutType.RowMajor)
+    Conv2DOp = Conv2DOperation(
+        operation_kind=library.Conv2dKind.Conv2d,
+        extra_kind=library.TensorOperation.PassThrough,
+        A=A,
+        B=B,
+        C=C,
+        a_elem_op=library.TensorOperation.PassThrough,
+        b_elem_op=library.TensorOperation.PassThrough,
+        epilogue_functor=library.TensorOperation.PassThrough,
+        c_data_op="",
+        conv2d_specialization=Conv2DSpecialization.ConvFwdDefault,
+        gemm_specialization=Conv2DSpecialization.GemmDefault,
+    )
+    print(str(Conv2DOp))
+    print(Conv2DOp.emit())
