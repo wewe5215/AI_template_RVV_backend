@@ -140,11 +140,11 @@ class RVV(Target):
         except BaseException:
             try:
                 cur_path = os.path.dirname(os.path.realpath(__file__))
-                ck_lib_path = os.path.normpath(
+                cpu_lib_path = os.path.normpath(
                     os.path.join(cur_path, "..", "..", "utils", "cpu_lib")
                 )
                 f_make_lib = registry.get("rvv.cpu_lib")
-                dst_path = f_make_lib(ck_lib_path)
+                dst_path = f_make_lib(cpu_lib_path)
                 sys.path.insert(1, dst_path)
             except BaseException as err:
                 raise RuntimeError("Failed to create cpu library") from err
