@@ -126,9 +126,37 @@ class RVV(Target):
     def src_extension(self):
         return ".cpp"
     
+    def _gen_rvv_lib_pkg(self):
+        """Build composable kernel python library.
+
+        Raises
+        ------
+        RuntimeError
+            Failed to create cpu library.
+        """
+        self.lib_folder = None
+        try:
+            import cpu_lib  # noqa: F401
+        except BaseException:
+            try:
+                cur_path = os.path.dirname(os.path.realpath(__file__))
+                ck_lib_path = os.path.normpath(
+                    os.path.join(cur_path, "..", "..", "utils", "cpu_lib")
+                )
+                f_make_lib = registry.get("rvv.cpu_lib")
+                dst_path = f_make_lib(ck_lib_path)
+                sys.path.insert(1, dst_path)
+            except BaseException as err:
+                raise RuntimeError("Failed to create cpu library") from err
+            self.lib_folder = dst_path
+
     def __enter__(self):
         super().__enter__()
-        self._operators = []
+         # Generate library.
+        self._gen_rvv_lib_pkg()
+        # Choose the right ops to launch.
+        f_gen_ops = registry.get("rvv.gen_xnnpack_ops")
+        self._operators = f_gen_ops(self._arch)
 
 
     def cc(self):
