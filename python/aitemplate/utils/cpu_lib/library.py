@@ -216,6 +216,9 @@ class TensorOperation(enum.Enum):
     Copysign = auto()
     Div = auto()
     Mul = auto()
+    Max = auto()
+    Min = auto()
+    Sqrtdiff = auto()
     UnaryAbs = auto()
     UnaryBankersRounding = auto()
     UnaryCeiling = auto()
@@ -244,6 +247,9 @@ TensorOperationTag = {
     TensorOperation.Copysign: "copysign_nd",
     TensorOperation.Div: "divide_nd",
     TensorOperation.Mul: "multiply_nd",
+    TensorOperation.Max: "maximum_nd",
+    TensorOperation.Min: "minimum_nd",
+    TensorOperation.Sqrtdiff: "squared_difference_nd",
     TensorOperation.UnaryAbs: "abs_nc",
     TensorOperation.UnaryBankersRounding: "bankers_rounding_nc",
     TensorOperation.UnaryCeiling: "ceiling_nc",

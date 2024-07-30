@@ -23,7 +23,7 @@ import jinja2
 # import library
 from aitemplate.utils.cpu_lib import library
 
-
+# TODO : revise min/max for relu
 class Conv2DSpecialization(enum.Enum):
     # ConvNchwF32 = auto()
     # ConvNchwF16 = auto()
@@ -49,7 +49,40 @@ Conv2DSpecializationTag = {
     Conv2DSpecialization.ConvNhwcQs8: "convolution2d_nhwc_qs8",
     Conv2DSpecialization.ConvNhwcQu8: "convolution2d_nhwc_qu8",
 }
-
+# add, sub, mul, div (f16, f32)
+binary_func_minmax_flag_op = jinja2.Template(
+"""
+{{indent}}xnn_operator_t binary_func_minmax_flag_op = nullptr;
+{{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{operation}}_{{DataType}}(0, std::numeric_limits<{{DataName}}>::infinity(), 0, &binary_func_minmax_flag_op));
+{{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_binary_func_minmax_flag_op(binary_func_minmax_flag_op, xnn_delete_operator);
+{{indent}}const size_t a_shape[] = { (size_t)i32_out_batch, (size_t)i32_out_h, (size_t)i32_out_w, (size_t)i32_out_ch};
+{{indent}}const size_t b_shape[] = { (size_t)i32_out_batch, (size_t)i32_out_h, (size_t)i32_out_w, (size_t)i32_out_ch};
+{{indent}}CHECK_EQ(
+{{indent}}xnn_status_success, xnn_reshape_{{operation}}_{{DataType}}(
+{{indent}}                        binary_func_minmax_flag_op, 4, a_shape, 4, b_shape,
+{{indent}}                        /*threadpool=*/nullptr));
+{{indent}}CHECK_EQ(
+{{indent}}  xnn_status_success, xnn_setup_{{operation}}_{{DataType}}(binary_func_minmax_flag_op, ({{DataName}}*)(res_ptr), ({{DataName}}*)(out_ptr), ({{DataName}}*)(out_ptr)));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(binary_func_minmax_flag_op, /*threadpool=*/nullptr));
+"""
+)
+# copysign(f32), maximum(f16, f32), minimum(f16, f32), squared_difference(f16, f32), mul(s32), 
+binary_func_flag_op = jinja2.Template(
+"""
+{{indent}}xnn_operator_t binary_func_flag_op = nullptr;
+{{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{operation}}_{{DataType}}(0, &binary_func_flag_op));
+{{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_binary_func_flag_op(binary_func_flag_op, xnn_delete_operator);
+{{indent}}const size_t a_shape[] = { (size_t)i32_out_batch, (size_t)i32_out_h, (size_t)i32_out_w, (size_t)i32_out_ch};
+{{indent}}const size_t b_shape[] = { (size_t)i32_out_batch, (size_t)i32_out_h, (size_t)i32_out_w, (size_t)i32_out_ch};
+{{indent}}CHECK_EQ(
+{{indent}}xnn_status_success, xnn_reshape_{{operation}}_{{DataType}}(
+{{indent}}                        binary_func_flag_op, a_shape, input1_dims.data(), b_shape, input2_dims.data(),
+{{indent}}                        /*threadpool=*/nullptr));
+{{indent}}CHECK_EQ(
+{{indent}}xnn_status_success, xnn_setup_{{operation}}_{{DataType}}(binary_func_flag_op, ({{DataName}}*)(res_ptr), ({{DataName}}*)(out_ptr), ({{DataName}}*)(out_ptr)));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(binary_func_flag_op, /*threadpool=*/nullptr));
+"""
+)
 @dataclass
 class Conv2DOperation:
     operation_kind: library.Conv2dKind
@@ -76,8 +109,32 @@ class Conv2DOperation:
 
     def accumulator_type(self):
         return library.DataType.f32
-
     def emit(self) -> str:
+        def generate_tensorOP(operation_type, element):
+            code_gen = ""
+            if operation_type == library.TensorOperation.PassThrough:
+                code_gen = ""
+            # add, mul, div, sub without quantization
+            elif operation_type == library.TensorOperation.Add or \
+                operation_type == library.TensorOperation.Mul or \
+                operation_type == library.TensorOperation.Div or \
+                operation_type == library.TensorOperation.Sub :
+                code_gen = binary_func_minmax_flag_op.render(
+                    indent="  ",
+                    operation = library.TensorOperationTag[operation_type],
+                    DataType = library.DataTypeNames[element],
+                    DataName = library.DataTypeTag[element],
+                )
+            elif (operation_type == library.TensorOperation.Copysign and library.DataTypeNames[element] == 'f32') or \
+                 operation_type == library.TensorOperation.Max or operation_type == library.TensorOperation.Min or \
+                 operation_type == library.TensorOperation.Sqrtdiff:
+                code_gen = binary_func_flag_op.render(
+                    indent="  ",
+                    operation = library.TensorOperationTag[operation_type],
+                    DataType = library.DataTypeNames[element],
+                    DataName = library.DataTypeTag[element],
+                )
+            return code_gen
         template = jinja2.Template(
             """
 {{indent}}//{{name}}
@@ -109,27 +166,10 @@ class Conv2DOperation:
 {{indent}}CHECK_EQ(xnn_run_operator(op_conv, /*threadpool=*/nullptr), xnn_status_success);
             """
         )
-        # 
-        binary_func_minmax_flag_op = jinja2.Template(
-            """
-{{indent}}xnn_operator_t binary_func_minmax_flag_op = nullptr;
-{{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{epilogue_functor}}_{{DataType}}(0, std::numeric_limits<{{DataName}}>::infinity(), 0, &binary_func_minmax_flag_op));
-{{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_binary_func_minmax_flag_op(binary_func_minmax_flag_op, xnn_delete_operator);
-{{indent}}const size_t a_shape[] = { (size_t)i32_out_batch, (size_t)i32_out_h, (size_t)i32_out_w, (size_t)i32_out_ch};
-{{indent}}const size_t b_shape[] = { (size_t)i32_out_batch, (size_t)i32_out_h, (size_t)i32_out_w, (size_t)i32_out_ch};
-{{indent}}CHECK_EQ(
-{{indent}}xnn_status_success, xnn_reshape_{{epilogue_functor}}_{{DataType}}(
-{{indent}}                        binary_func_minmax_flag_op, 4, a_shape, 4, b_shape,
-{{indent}}                        /*threadpool=*/nullptr));
-{{indent}}CHECK_EQ(
-{{indent}}  xnn_status_success, xnn_setup_{{epilogue_functor}}_{{DataType}}(binary_func_minmax_flag_op, ({{DataName}}*)(res_ptr), ({{DataName}}*)(out_ptr), ({{DataName}}*)(out_ptr)));
-{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(binary_func_minmax_flag_op, /*threadpool=*/nullptr));
-            """
-        )
         code_snippet = jinja2.Template(
             """
 {{conv2d}}
-
+{{extra_kind}}
 {{epilogue_functor}}
             """
         )
@@ -144,20 +184,11 @@ class Conv2DOperation:
             epilogue_functor=library.TensorOperationTag[self.epilogue_functor],
             Conv2DSpecialization=Conv2DSpecializationTag[self.conv2d_specialization],
         )
-        functor = ""
-        # add, mul, div, sub without quantization
-        if self.epilogue_functor == library.TensorOperation.Add or \
-            self.epilogue_functor == library.TensorOperation.Mul or \
-            self.epilogue_functor == library.TensorOperation.Div or \
-            self.epilogue_functor == library.TensorOperation.Sub :
-            functor = binary_func_minmax_flag_op.render(
-                indent="  ",
-                epilogue_functor = library.TensorOperationTag[self.epilogue_functor],
-                DataType = library.DataTypeNames[self.A.element],
-                DataName = library.DataTypeTag[self.A.element],
-            )
+        extra_kind_code = generate_tensorOP(self.extra_kind, self.A.element)
+        functor = generate_tensorOP(self.epilogue_functor, self.A.element)
         program = code_snippet.render(
             conv2d = conv2d,
+            extra_kind = extra_kind_code,
             epilogue_functor = functor
         )
         return program
