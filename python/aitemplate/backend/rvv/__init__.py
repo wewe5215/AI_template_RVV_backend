@@ -17,11 +17,10 @@
 RVV backend codegen functions.
 """
 from aitemplate.backend.rvv import (
-    # builder_cmake,
     rvv_common,
     lib_template,
     target_def,
-    # utils,
+    utils,
 )
 # from aitemplate.backend.rvv.common import *
 from aitemplate.backend.rvv.conv2d import *

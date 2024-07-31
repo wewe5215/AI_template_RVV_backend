@@ -946,10 +946,7 @@ class ModelContainerGenerator:
         target_has_graph_mode = "true" if self.target.name() == "cuda" else "false"
 
         
-        if self.target.name() == "cuda" or self.target.name() == "rocm":
-            run_impl_mode = multistream_mode()
-        else:
-            run_impl_mode == 0
+        run_impl_mode = multistream_mode()
         if run_impl_mode == 0:
             # no multistream mode is used
             n_additional_streams = 0
