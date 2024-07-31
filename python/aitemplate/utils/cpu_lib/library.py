@@ -68,8 +68,8 @@ DataTypeTag = {
     DataType.s16: "int16_t",
     DataType.s32: "int32_t",
     DataType.s64: "int64_t",
-    DataType.f16: "ck::half_t",
-    DataType.bf16: "ck::bhalf_t",
+    DataType.f16: "__fp16",
+    DataType.bf16: "__bf16",
     DataType.f32: "float",
     DataType.f64: "double",
     DataType.qs8: "int8_t",
@@ -163,7 +163,9 @@ OperationKindNames = {
 
 class Conv2dKind(enum.Enum):
     Conv2d = auto()
+    Conv2dBias = auto()
     Conv2dBiasRelu = auto()
+    Conv2dBiasAddRelu = auto()
     Conv2dBiasReluAdd = auto()
     Conv2dBiasSigmoid = auto()
     GroupConv2dBiasRelu = auto()
@@ -173,7 +175,9 @@ class Conv2dKind(enum.Enum):
 
 Conv2dKindNames = {
     Conv2dKind.Conv2d: "conv2d",
+    Conv2dKind.Conv2dBias: "conv2d_bias",
     Conv2dKind.Conv2dBiasRelu: "conv2d_bias_relu",
+    Conv2dKind.Conv2dBiasAddRelu: "conv2d_bias_add_relu",
     Conv2dKind.Conv2dBiasReluAdd: "conv2d_bias_relu_add",
     Conv2dKind.Conv2dBiasSigmoid: "conv2d_bias_sigmoid",
     Conv2dKind.GroupConv2dBiasRelu: "group_conv2d_bias_relu",
