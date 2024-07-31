@@ -16,38 +16,32 @@
 common functions for conv2d bias act residual add
 """
 
-from aitemplate.backend.cuda.conv2d import common
+from aitemplate.backend.rvv.conv2d import common
 
 # pylint: disable=C0301,C0103
 
 EXTRA_HEADER = """
-#include <cutlass/conv/kernel/default_conv2d_fprop_with_broadcast.h>
-#include <cutlass/epilogue/thread/linear_combination_residual_block.h>
 """
 
 
 def extract_config(
     func_attrs,
-    dtype="float16",
+    dtype="float32",
     activation_op_name="Identity",
     binary_op_name="Plus",
     unary_op_name="Identity",
 ):
-    def set_ops(func_attrs, op):
-        import cutlass_lib
-
-        op.activation_op = cutlass_lib.library.EpilogueMathName[activation_op_name]
-        op.binary_op = cutlass_lib.library.EpilogueMathName[binary_op_name]
-        op.unary_op = cutlass_lib.library.EpilogueMathName[unary_op_name]
-
-        return op
-
+    import cpu_lib
+    op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasAddRelu
+    extra_kind = cpu_lib.library.TensorOperation.Add
+    # if dtype == "float32": --> TODO: uncomment later
+    conv2d_specialization = cpu_lib.conv2d_operation.Conv2DSpecialization.ConvNhwcF32
     return common.extract_config(
-        func_attrs=func_attrs,
-        dtype=dtype,
-        skip_simt_kernels=True,
-        f_apply_special_config=set_ops,
-    )
+        dtype = dtype,
+        op_kind = op_kind,
+        extra_kind = extra_kind,
+        conv2d_specialization = conv2d_specialization)
+
 
 
 def gen_profiler(

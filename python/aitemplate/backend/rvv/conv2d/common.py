@@ -22,21 +22,21 @@ from hashlib import sha1
 from typing import List
 
 import jinja2
-
+import logging
 from aitemplate.backend.backend_spec import RVVSpec
 from aitemplate.backend.rvv.gemm_universal.common import add_profiler, build_profiler
 from aitemplate.backend.target import Target
 
 from aitemplate.utils import alignment
 
-
+_LOGGER = logging.getLogger(__name__)
 
 INSTANCE_TEMPLATE = jinja2.Template(
     """
 {{config}}
 """
 )
-## todo : call xnnpack low-level api
+## todo : check relu or not
 EXEC_TEMPLATE = jinja2.Template(
     """
 {{indent}}//  TODO: cast to right dtype
@@ -58,7 +58,7 @@ EXEC_TEMPLATE = jinja2.Template(
 {{indent}}  PH, PW, PH, PW, i32_kernel_h, i32_kernel_w,
 {{indent}}  SH, SW, DH, DW, 1, CI,
 {{indent}}  CO, 1 * CI, 1 * CO, (float*)(weight_ptr), (float*)(bias_ptr),
-{{indent}}  0, std::numeric_limits<float>::infinity(),
+{{indent}}  -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(),
 {{indent}}  /*flags=*/0, nullptr, nullptr, &op_conv);
 {{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op_conv(op_conv, xnn_delete_operator);
 {{indent}}CHECK_EQ(status, xnn_status_success);
@@ -102,6 +102,10 @@ SRC_TEMPLATE = jinja2.Template(
     """
 #include <cstdio>
 #include <stdexcept>
+#include <cstdlib>
+#include <memory>
+#include <string>
+#include <vector>
 #include "xnnpack.h"
 
 {{extra_header}}
@@ -110,6 +114,34 @@ SRC_TEMPLATE = jinja2.Template(
 """
 )
 
+BENCHMARK_LOG_TEMPLATE = jinja2.Template(
+"""
+#define CHECK_BINARY_OP(name, op, x, y)                   \
+  if (auto __dmlc__log__err = dmlc::LogCheck##name(x, y)) \
+  dmlc::LogMessageFatal(__FILE__, __LINE__).stream()      \
+      << "Check failed: " << #x " " #op " " #y << *__dmlc__log__err << ": "
+
+// Always-on checking
+#define CHECK(x)                                     \
+  if (!(x))                                          \
+  dmlc::LogMessageFatal(__FILE__, __LINE__).stream() \
+      << "Check failed: " #x << ": "
+#define CHECK_LT(x, y) CHECK_BINARY_OP(_LT, <, x, y)
+#define CHECK_GT(x, y) CHECK_BINARY_OP(_GT, >, x, y)
+#define CHECK_LE(x, y) CHECK_BINARY_OP(_LE, <=, x, y)
+#define CHECK_GE(x, y) CHECK_BINARY_OP(_GE, >=, x, y)
+#define CHECK_EQ(x, y) CHECK_BINARY_OP(_EQ, ==, x, y)
+#define CHECK_NE(x, y) CHECK_BINARY_OP(_NE, !=, x, y)
+#define PH padh
+#define PW padw
+#define SH strideh
+#define SW stridew
+#define DH dilationh
+#define DW dilationw
+#define CI i32_in_ch
+#define CO i32_out_ch
+"""
+)
 FUNCTION_TEMPLATE = jinja2.Template(
     """
 void {{function_name}} (
@@ -278,7 +310,7 @@ int benchmark_{{function_name}} (
 PROFILER_BENCHMARK_TEMPLATE = jinja2.Template(
     """
 static size_t GLOBAL_WORKSPACE_SIZE_{{instance_name}} = 0;
-
+{{logs}}
 {{op_source}}
 
 {{benchmark}}
@@ -388,38 +420,30 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 """
 )
 
+def emit_instance(op):
+    """Emits instance."""
+    import cpu_lib  # noqa: F401
+
+    op_def = op.emit()
+    return op_def
 
 def extract_config(
-    func_attrs,
     dtype="float16",
-    f_apply_special_config=None,
     op_kind=None,
+    extra_kind=None,
+    conv2d_specialization=None
 ):
     """Extracts config for conv kernels."""
     import copy
+    import cpu_lib
 
     spec = RVVSpec()
     lib_dtype = spec.dtype_to_lib_type(dtype)
-
-    if lib_dtype == "float":
-        data_type = "float"
-    elif "float16" in lib_dtype:
-        data_type = "__Float16"
-        # check target use fp16 acc
-        if "use_fp16_acc" in Target.current()._kwargs:
-            if Target.current()._kwargs["use_fp16_acc"]:
-                acc_type = "__Float16"
-    # elif "bfloat16" in lib_dtype:
-    #     data_type = "uint16_t"
-    else:
-        raise RuntimeError(f"Unsupported dtype {lib_dtype}")
-
-    conv_ops = [ ]
-    if op_kind is None:
-        conv_ops.append({"operation": "Conv2D", "data_type": f"{data_type}"})
-    if f_apply_special_config is not None:
-        conv_ops = f_apply_special_config(func_attrs, conv_ops)
-    return conv_ops
+    conv2d_ops = OrderedDict()
+    extract_ops = list(Target.current()._operators[op_kind][extra_kind].items())
+    for key, value in extract_ops:
+        conv2d_ops[key] = value[0]
+    return conv2d_ops
 
 
 def gen_profiler(
@@ -461,13 +485,7 @@ def gen_profiler(
         instance_name = f"{instance_name_base}_{instance_idx}"
         function_name = f"{op_type}_{op_name}"
 
-        exec_program = EXEC_TEMPLATE.render(
-            indent="  ",
-            is_profiler=True,
-            is_bias=is_bias,
-            is_bias_add=is_bias_add,
-            dtype=dtype,
-        )
+        exec_program = emit_instance(op)
         function = FUNCTION_TEMPLATE.render(
             is_bias=is_bias,
             is_bias_add=is_bias_add,
@@ -508,6 +526,7 @@ def gen_profiler(
             dilationw="dilationw",
             padw="padw",
         )
+        logs = BENCHMARK_LOG_TEMPLATE.render()
         benchmark = BENCHMARK_TEMPLATE.render(
             is_bias=is_bias,
             is_bias_add=is_bias_add,
@@ -519,6 +538,7 @@ def gen_profiler(
 
         profiler_benchmarks[function_name] = PROFILER_BENCHMARK_TEMPLATE.render(
             op_source=op_source,
+            logs=logs,
             benchmark=benchmark,
             instance_name=instance_name,
         )
@@ -634,13 +654,8 @@ def gen_function(
         y_dim3="*out_ch",
     )
     shape_func = shape_eval_func + shape_save_func
-
-    program = EXEC_TEMPLATE.render(
-        is_bias=is_bias,
-        is_bias_add=is_bias_add,
-        indent=" " * 2,
-        dtype=dtype,
-    )
+    for op_name, op in op_instance.items():
+        program += emit_instance(op)
 
     function = FUNCTION_TEMPLATE.render(
         is_bias=is_bias,
@@ -772,24 +787,14 @@ def function_filter(
         The filename generated for profiler.
     func_attrs : Dict
         Stores the operation attributes.
-    x_shape:
-        Input shapes.
+    offset: Int
+        Offset of split(cfg,"_") to get conv2d specialization
 
     Returns
     -------
     bool
         If input cfg should be filtered.
     """
-    dtype = func_attrs["inputs"][0]._attrs["dtype"]
-    ab_alignment = _cal_align_ab(x_shape, dtype=dtype)
-
-    tmp = cfg.split("_")
-    align_c = int(tmp[-1])
-    align_ab = int(tmp[-2])
-
-    if align_c != func_attrs["epilogue_alignment"]:
-        return False
-    if align_ab != ab_alignment:
-        return False
-
+    from cpu_lib.conv2d_operation import Conv2DSpecialization
+    _LOGGER.info(f"x_shape =  {x_shape}")
     return True
