@@ -20,7 +20,7 @@ from collections import OrderedDict
 from aitemplate.backend import registry
 
 from aitemplate.backend.backend_spec import CUDASpec
-from aitemplate.backend.cuda.conv2d import common
+from aitemplate.backend.rvv.conv2d import common
 from aitemplate.backend.target import Target
 
 # pylint: disable=C0103,C0415,W0613,C0301
@@ -117,13 +117,13 @@ def extract_config(func_attrs, dtype="float16"):
     return conv2d_ops
 
 
-@registry.reg("cuda.conv2d_depthwise.config")
+@registry.reg("rvv.conv2d_depthwise.config")
 def conv2d_depthwise_config(func_attrs, dtype="float16"):
     """Populates conv2d_depthwise cutlass configs into 'op_instance' field."""
     func_attrs["op_instance"] = extract_config(func_attrs, dtype)
 
 
-@registry.reg("cuda.conv2d_depthwise.gen_profiler")
+@registry.reg("rvv.conv2d_depthwise.gen_profiler")
 def gen_profiler(
     func_attrs,
     workdir,
@@ -141,7 +141,7 @@ def gen_profiler(
     )
 
 
-@registry.reg("cuda.conv2d_depthwise.gen_function")
+@registry.reg("rvv.conv2d_depthwise.gen_function")
 def gen_function(
     func_attrs,
     exec_cond_template,
@@ -159,7 +159,7 @@ def gen_function(
     )
 
 
-@registry.reg("cuda.conv2d_depthwise.func_decl")
+@registry.reg("rvv.conv2d_depthwise.func_decl")
 def conv2d_depthwise_gen_function_decl(func_attrs):
     """Codegen for conv2d_depthwise function declaration."""
     return common.gen_function_decl(
@@ -167,7 +167,7 @@ def conv2d_depthwise_gen_function_decl(func_attrs):
     )
 
 
-@registry.reg("cuda.conv2d_depthwise.func_call")
+@registry.reg("rvv.conv2d_depthwise.func_call")
 def conv2d_depthwise_gen_function_call(func_attrs, indent="  "):
     """Codegen for conv2d_depthwise function call."""
     return common.gen_function_call(
@@ -176,7 +176,7 @@ def conv2d_depthwise_gen_function_call(func_attrs, indent="  "):
     )
 
 
-@registry.reg("cuda.conv2d_depthwise.filter")
+@registry.reg("rvv.conv2d_depthwise.filter")
 def conv2d_depthwise_function_filter(cfg, func_attrs, x_shape):
     """Generates function filter.
 

@@ -17,7 +17,7 @@ specialize conv2d op with few channels(< 8)
 """
 
 from aitemplate.backend import registry
-from aitemplate.backend.cuda.conv2d import (
+from aitemplate.backend.rvv.conv2d import (
     common,
     common_conv2d_bias_activation as cba,
     common_conv2d_few_channels as cfc,
@@ -26,7 +26,7 @@ from aitemplate.backend.cuda.conv2d import (
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
-@registry.reg("cuda.conv2d_bias_hardswish_few_channels.config")
+@registry.reg("rvv.conv2d_bias_hardswish_few_channels.config")
 def conv2d_bias_hardswish_few_channels_config(
     func_attrs,
     dtype="float16",
@@ -50,7 +50,7 @@ def conv2d_bias_hardswish_few_channels_config(
     )
 
 
-@registry.reg("cuda.conv2d_bias_hardswish_few_channels.gen_profiler")
+@registry.reg("rvv.conv2d_bias_hardswish_few_channels.gen_profiler")
 def conv2d_bias_hardswish_few_channels_gen_profiler(
     func_attrs,
     workdir,
@@ -66,7 +66,7 @@ def conv2d_bias_hardswish_few_channels_gen_profiler(
     )
 
 
-@registry.reg("cuda.conv2d_bias_hardswish_few_channels.gen_function")
+@registry.reg("rvv.conv2d_bias_hardswish_few_channels.gen_function")
 def conv2d_bias_hardswish_few_channels_gen_function(
     func_attrs,
     exec_cond_template,
@@ -99,7 +99,7 @@ def conv2d_bias_hardswish_few_channels_gen_function(
     )
 
 
-@registry.reg("cuda.conv2d_bias_hardswish_few_channels.func_decl")
+@registry.reg("rvv.conv2d_bias_hardswish_few_channels.func_decl")
 def conv2d_bias_hardswish_few_channels_func_decl(
     func_attrs,
 ):
@@ -108,7 +108,7 @@ def conv2d_bias_hardswish_few_channels_func_decl(
     )
 
 
-@registry.reg("cuda.conv2d_bias_hardswish_few_channels.func_call")
+@registry.reg("rvv.conv2d_bias_hardswish_few_channels.func_call")
 def conv2d_bias_hardswish_few_channels_func_call(
     func_attrs,
     indent="  ",
@@ -119,7 +119,7 @@ def conv2d_bias_hardswish_few_channels_func_call(
     )
 
 
-@registry.reg("cuda.conv2d_bias_hardswish_few_channels.filter")
+@registry.reg("rvv.conv2d_bias_hardswish_few_channels.filter")
 def conv2d_bias_hardswish_few_channels_filter(
     cfg,
     func_attrs,

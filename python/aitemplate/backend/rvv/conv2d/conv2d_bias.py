@@ -16,12 +16,12 @@
 conv2d bias codegen
 """
 from aitemplate.backend import registry
-from aitemplate.backend.cuda.conv2d import common, common_conv2d_bias_activation as cba
+from aitemplate.backend.rvv.conv2d import common, common_conv2d_bias_activation as cba
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
-@registry.reg("cuda.conv2d_bias.config")
+@registry.reg("rvv.conv2d_bias.config")
 def conv2d_bias_config(
     func_attrs,
     dtype="float16",
@@ -33,7 +33,7 @@ def conv2d_bias_config(
     )
 
 
-@registry.reg("cuda.conv2d_bias.gen_profiler")
+@registry.reg("rvv.conv2d_bias.gen_profiler")
 def conv2d_bias_gen_profiler(
     func_attrs,
     workdir,
@@ -49,7 +49,7 @@ def conv2d_bias_gen_profiler(
     )
 
 
-@registry.reg("cuda.conv2d_bias.gen_function")
+@registry.reg("rvv.conv2d_bias.gen_function")
 def conv2d_bias_gen_function(
     func_attrs,
     exec_cond_template,
@@ -65,7 +65,7 @@ def conv2d_bias_gen_function(
     )
 
 
-@registry.reg("cuda.conv2d_bias.func_decl")
+@registry.reg("rvv.conv2d_bias.func_decl")
 def conv2d_bias_func_decl(
     func_attrs,
 ):
@@ -75,7 +75,7 @@ def conv2d_bias_func_decl(
     )
 
 
-@registry.reg("cuda.conv2d_bias.func_call")
+@registry.reg("rvv.conv2d_bias.func_call")
 def conv2d_bias_func_call(
     func_attrs,
     indent="  ",
@@ -87,7 +87,7 @@ def conv2d_bias_func_call(
     )
 
 
-@registry.reg("cuda.conv2d_bias.filter")
+@registry.reg("rvv.conv2d_bias.filter")
 def conv2d_bias_filter(
     cfg,
     func_attrs,

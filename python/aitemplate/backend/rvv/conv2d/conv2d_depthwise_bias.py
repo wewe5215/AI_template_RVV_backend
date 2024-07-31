@@ -17,18 +17,18 @@ Codegen for conv2d_depthwise.
 """
 
 from aitemplate.backend import registry
-from aitemplate.backend.cuda.conv2d import common, conv2d_depthwise as cdw
+from aitemplate.backend.rvv.conv2d import common, conv2d_depthwise as cdw
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
-@registry.reg("cuda.conv2d_depthwise_bias.config")
+@registry.reg("rvv.conv2d_depthwise_bias.config")
 def conv2d_depthwise_config(func_attrs, dtype="float16"):
     """Populates conv2d_depthwise cutlass configs into 'op_instance' field."""
     func_attrs["op_instance"] = cdw.extract_config(func_attrs, dtype)
 
 
-@registry.reg("cuda.conv2d_depthwise_bias.gen_profiler")
+@registry.reg("rvv.conv2d_depthwise_bias.gen_profiler")
 def gen_profiler(func_attrs, workdir, profiler_filename, shape_template):
     """Codegen for conv2d_depthwise_bias profiler."""
     return common.gen_profiler(
@@ -43,7 +43,7 @@ def gen_profiler(func_attrs, workdir, profiler_filename, shape_template):
     )
 
 
-@registry.reg("cuda.conv2d_depthwise_bias.gen_function")
+@registry.reg("rvv.conv2d_depthwise_bias.gen_function")
 def gen_function(
     func_attrs,
     exec_cond_template,
@@ -62,7 +62,7 @@ def gen_function(
     )
 
 
-@registry.reg("cuda.conv2d_depthwise_bias.func_decl")
+@registry.reg("rvv.conv2d_depthwise_bias.func_decl")
 def conv2d_depthwise_gen_function_decl(func_attrs):
     """Codegen for conv2d_depthwise_bias function declaration."""
     return common.gen_function_decl(
@@ -71,7 +71,7 @@ def conv2d_depthwise_gen_function_decl(func_attrs):
     )
 
 
-@registry.reg("cuda.conv2d_depthwise_bias.func_call")
+@registry.reg("rvv.conv2d_depthwise_bias.func_call")
 def conv2d_depthwise_gen_function_call(func_attrs, indent="  "):
     """Codegen for conv2d_depthwise_bias function call."""
     return common.gen_function_call(
@@ -81,7 +81,7 @@ def conv2d_depthwise_gen_function_call(func_attrs, indent="  "):
     )
 
 
-@registry.reg("cuda.conv2d_depthwise_bias.filter")
+@registry.reg("rvv.conv2d_depthwise_bias.filter")
 def conv2d_depthwise_bias_function_filter(cfg, func_attrs, x_shape):
     """Generates function filter.
 

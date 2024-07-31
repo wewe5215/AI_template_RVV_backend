@@ -16,12 +16,12 @@
 transposed conv2d op codegen
 """
 from aitemplate.backend import registry
-from aitemplate.backend.cuda.conv2d import common, common_transposed_conv2d as ctc
+from aitemplate.backend.rvv.conv2d import common, common_transposed_conv2d as ctc
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
-@registry.reg("cuda.transposed_conv2d.config")
+@registry.reg("rvv.transposed_conv2d.config")
 def transposed_conv2d_config(
     func_attrs,
     dtype="float16",
@@ -32,7 +32,7 @@ def transposed_conv2d_config(
     )
 
 
-@registry.reg("cuda.transposed_conv2d.gen_profiler")
+@registry.reg("rvv.transposed_conv2d.gen_profiler")
 def transposed_conv2d_gen_profiler(
     func_attrs,
     workdir,
@@ -50,7 +50,7 @@ def transposed_conv2d_gen_profiler(
     )
 
 
-@registry.reg("cuda.transposed_conv2d.gen_function")
+@registry.reg("rvv.transposed_conv2d.gen_function")
 def transposed_conv2d_gen_function(
     func_attrs,
     exec_cond_template,
@@ -67,7 +67,7 @@ def transposed_conv2d_gen_function(
     )
 
 
-@registry.reg("cuda.transposed_conv2d.func_decl")
+@registry.reg("rvv.transposed_conv2d.func_decl")
 def transposed_conv2d_func_decl(
     func_attrs,
 ):
@@ -76,7 +76,7 @@ def transposed_conv2d_func_decl(
     )
 
 
-@registry.reg("cuda.transposed_conv2d.func_call")
+@registry.reg("rvv.transposed_conv2d.func_call")
 def transposed_conv2d_func_call(
     func_attrs,
     indent="  ",
@@ -88,7 +88,7 @@ def transposed_conv2d_func_call(
     )
 
 
-@registry.reg("cuda.transposed_conv2d.filter")
+@registry.reg("rvv.transposed_conv2d.filter")
 def transposed_conv2d_filter(
     cfg,
     func_attrs,

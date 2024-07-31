@@ -16,13 +16,12 @@
 common functions for conv_bias_activation subgraph
 """
 
-from aitemplate.backend.cuda.conv2d import common
+from aitemplate.backend.rvv.conv2d import common
 
 # pylint: disable=C0103,C0301
 
 EXTRA_HEADER = """
-#include <cutlass/epilogue/thread/linear_combination_bias_relu.h>
-#include <cutlass/epilogue/thread/linear_combination_hardswish.h>
+#include "xnnpack.h"
 """
 
 
