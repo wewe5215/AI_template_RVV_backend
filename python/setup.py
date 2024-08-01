@@ -119,6 +119,16 @@ def gen_flash_attention_list():
     f_cond = lambda x: True if x.endswith(".h") or x.endswith(".cuh") else False
     return gen_file_list(srcs, f_cond)
 
+def gen_xnnpack_list():
+    srcs = [
+        "aitemplate/3rdparty/XNNPACK/include"
+    ]
+    f_cond = lambda x: (
+        True
+        if x.endswith(".h")
+        else False
+    )
+    return gen_file_list(srcs, f_cond)
 
 def gen_static_list():
     srcs = [
@@ -179,6 +189,7 @@ setup(
         + gen_cutlass_lib_list()
         + gen_cub_list()
         + gen_ck_list()
+        + gen_xnnpack_list()
         + gen_flash_attention_list()
         + gen_static_list()
         + gen_backend_common_file_list()

@@ -39,7 +39,7 @@ AIT_STATIC_FILES_PATH = os.path.join(_3RDPARTY_PATH, "../static")
 CUTLASS_PATH = os.path.join(_3RDPARTY_PATH, "cutlass")
 COMPOSABLE_KERNEL_PATH = os.path.join(_3RDPARTY_PATH, "composable_kernel")
 CUB_PATH = os.path.join(_3RDPARTY_PATH, "cub")
-
+XNNPACK_PATH = os.path.join(_3RDPARTY_PATH, "XNNPACK")
 CURRENT_TARGET = None
 
 
@@ -525,7 +525,7 @@ def ROCM(template_path: str = COMPOSABLE_KERNEL_PATH, arch: str = "gfx908", **kw
     func = registry.get("rocm.create_target")
     return func(template_path, arch, **kwargs)
 
-def RVV(template_path: str = "", arch: str = "rv64gcv_zvfh", **kwargs):
+def RVV(template_path: str = XNNPACK_PATH, arch: str = "rv64gcv_zvfh", **kwargs):
     """Create a RVV target."""
     func = registry.get("rvv.create_target")
     return func(template_path, arch, **kwargs)

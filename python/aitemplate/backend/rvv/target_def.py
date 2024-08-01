@@ -35,6 +35,7 @@ from aitemplate.backend.target import (
     AIT_STATIC_FILES_PATH,
     Target,
     TargetType,
+    XNNPACK_PATH,
 )
 
 from aitemplate.utils import environ
@@ -51,7 +52,7 @@ class RVV(Target):
 
     def __init__(
         self,
-        template_path = "",
+        template_path = XNNPACK_PATH,
         arch="rv64gcv_zvfh",
         RVV_version=None,
         ait_static_files_path=AIT_STATIC_FILES_PATH,
@@ -78,7 +79,17 @@ class RVV(Target):
             RVV_version = "0.12"
         self._RVV_version = RVV_version
 
+    def _pkg_path(self):
+        """Initialize package target.
 
+        Returns
+        -------
+        str
+            path to xnnpack compiler library
+        """
+        # TODO : to be revised later
+        xnnpack_path = os.environ.get("XNNPACK_PATH", "/Users/wewe5215/Desktop/AI_template_RVV_backend/3rdparty/XNNPACK/build/local/")
+        return xnnpack_path
     def _build_gnu_host_compiler_options(self) -> List[str]:
         return [
             "-fPIC",
@@ -101,16 +112,38 @@ class RVV(Target):
             return CLANG_DEBUG_LEVEL_STRINGS[level]
         return [level]
 
+    def _build_include_directories(self) -> List[str]:
+        xnnpack_path = [
+            os.path.join(self._template_path, "include"),
+            os.path.join(self._pkg_path(), "pthreadpool-source/include"),
+        ]
+        return xnnpack_path
+
+    def get_include_directories(self) -> List[str]:
+        return self._build_include_directories()
+    
+    def _build_link_directories(self) -> List[str]:
+        xnnpack_path = [
+            os.path.join(self._pkg_path(), f" {self._pkg_path()}/*.a"),
+            os.path.join(self._pkg_path(), "cpuinfo"),
+            os.path.join(self._pkg_path(), "kleidiai"),
+            os.path.join(self._pkg_path(), "pthreadpool"),
+        ]
+        return xnnpack_path
+
+    def get_link_directories(self) -> List[str]:
+        return self._build_link_directories()
+
     def _build_clang_compiler_options(self) -> List[str]:
         options = [
-            "--target=riscv64-unknown-elf",
-            "--sysroot=$(RISCV)/riscv64-unknown-elf",
-            "--gcc-toolchain=$(RISCV)",
-            "-menable-experimental-extensions",
+            # "--target=riscv64-unknown-elf",
+            # "--sysroot=$(RISCV)/riscv64-unknown-elf",
+            # "--gcc-toolchain=$(RISCV)",
+            # "-menable-experimental-extensions",
             environ.get_compiler_opt_level(),
             "-std=c++17",
-            f"-march={self._arch}",
-            f"-mrvv-vector-bits={environ.get_mrvv_vector_bits()}",
+            # f"-march={self._arch}",
+            # f"-mrvv-vector-bits={environ.get_mrvv_vector_bits()}",
             "-v",
         ]
         options.extend(self._get_clang_debug_options())
@@ -121,6 +154,13 @@ class RVV(Target):
 
     def _build_compile_options(self):
         options = self._build_gnu_host_compiler_options() + self._build_clang_compiler_options()
+        include_path = self.get_include_directories()
+        link_path = self.get_link_directories()
+        for path in include_path:
+            options.append("-I" + path)
+        for path in link_path:
+            options.append("-L" + path)
+        options.append("-lxnnpack -lkleidiai -lpthreadpool -lcpuinfo -lpthread -g")
         return " ".join(options)
 
     def src_extension(self):
