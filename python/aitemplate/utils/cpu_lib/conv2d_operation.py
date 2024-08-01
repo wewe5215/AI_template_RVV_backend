@@ -93,6 +93,10 @@ code_snippet = jinja2.Template(
 {{indent}}const xnn_status status_init = xnn_initialize(nullptr);
 {{conv2d}}
 {{extra_kind}}
+
+{% if not is_bias %}
+{{indent}}free(bias_ptr)
+{% endif %}
 """
         )
 # add, sub, mul, div (f16, f32)
@@ -194,7 +198,8 @@ class Conv2DOperation:
         if self.operation_kind == library.Conv2dKind.Conv2dBias or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasRelu or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasReluAdd or \
-          self.operation_kind == library.Conv2dKind.Conv2dBiasSigmoid:
+          self.operation_kind == library.Conv2dKind.Conv2dBiasSigmoid or \
+          self.operation_kind == library.Conv2dKind.Conv2dBiasAddRelu :
           is_bias = True
         conv2d = template.render(
             indent="  ",
