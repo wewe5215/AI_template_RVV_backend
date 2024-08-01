@@ -594,11 +594,11 @@ class RVVSpec(CPUBackendSpec):
     dtype_to_rvv_type: Dict[str, str] = field(
         default_factory=lambda: {
             # for neon intrinsic : __fp16, for rvv intrinsic : __Float16
-            "float16": "__Float16",
+            "float16": "f16",
             # maybe use uint16_t to replace bfloat16
             # "bfloat16": "cutlass::bfloat16_t",
-            "float32": "float",
-            "float": "float",
+            "float32": "f32",
+            "float": "f32",
         }
     )
 
