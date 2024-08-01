@@ -193,6 +193,23 @@ int benchmark_{{function_name}} (
 
 BENCHMARK_TEMPLATE = jinja2.Template(
     """
+using Ptr = std::unique_ptr<void, std::function<void(void*)>>;
+inline Ptr RAII_DeviceMalloc(
+    size_t num_bytes) {
+  auto* output = malloc(num_bytes);
+  if (!output) {
+    throw std::bad_alloc();
+  }
+  auto deleter = [](void* ptr) { free(ptr); };
+  return Ptr(output, deleter);
+}
+std::mt19937 rnd_generator(1234);
+template<typename T>
+void fill_random(T* data, size_t size) {
+  for (size_t i = 0; i < size; ++i) {
+    data[i] = static_cast<T>(dist(rnd_generator));
+  }
+}
 int benchmark_{{function_name}} (
   float* runtime,
   size_t* workspace_size,
@@ -214,7 +231,46 @@ int benchmark_{{function_name}} (
   int padw,
   uint8_t* global_workspace_
 ) {
-
+  Ptr in_data = RAII_DeviceMalloc(NI*HI*WI*CI*2);
+  Ptr weight_data = RAII_DeviceMalloc(CO*KH*KW*CI*2);
+{% if is_bias %}
+  Ptr bias_data = RAII_DeviceMalloc(CO*2);
+{% elif is_bias_add %}
+  Ptr bias_data = RAII_DeviceMalloc(CO*2);
+  Ptr res_data = RAII_DeviceMalloc(NO*HO*WO*CO*2);
+{% endif %}
+  Ptr out_data = RAII_DeviceMalloc(NO*HO*WO*CO*2);
+  std::uniform_real_distribution<> dist(-10, 10);
+{% if is_f16 %}
+  auto* input = static_cast<__fp16*>(in_data.get());
+  auto* weight = static_cast<__fp16*>(weight_data.get());
+  auto* output = static_cast<__fp16*>(out_data.get());
+    {% if is_bias %}
+  auto* bias = static_cast<__fp16*>(bias_data.get());
+    {% elif is_bias_add %}
+  auto* bias = static_cast<__fp16*>(bias_data.get());
+  auto* res = static_cast<__fp16*>(res_data.get());
+    {% endif %}
+{% elif is_f32 %}
+  auto* input = static_cast<float*>(in_data.get());
+  auto* weight = static_cast<float*>(weight_data.get());
+  auto* output = static_cast<float*>(out_data.get());
+    {% if is_bias %}
+  auto* bias = static_cast<float*>(bias_data.get());
+    {% elif is_bias_add %}
+  auto* bias = static_cast<float*>(bias_data.get());
+  auto* res = static_cast<float*>(res_data.get());
+    {% endif %}
+{% endif %}
+  fill_random(input, NI * HI * WI * CI);
+  fill_random(weight, CO * KH * KW * CI);
+  std::memset(output, 0, NO*HO*WO*CO*2);
+    {% if is_bias %}
+  fill_random(bias, CO);
+    {% elif is_bias_add %}
+  fill_random(bias, CO);
+  fill_random(res, NO*HO*WO*CO);
+    {% endif %}
   // warmup
 {{func_call}}
   struct timespec start, end;
@@ -373,7 +429,10 @@ def extract_config(
     conv2d_ops = OrderedDict()
     extract_ops = list(Target.current()._operators[op_kind][extra_kind].items())
     for key, value in extract_ops:
-        conv2d_ops[key] = value[0]
+        for op in value:
+            if lib_dtype == cpu_lib.library.DataTypeNames[op.A.element]:
+                    conv2d_ops[key] = value[0]
+    _LOGGER.info(f"conv2d_ops = {conv2d_ops}, value =  {value}")
     return conv2d_ops
 
 
@@ -400,14 +459,13 @@ def gen_profiler(
     func_call_extra_args = {}
     if is_bias:
         func_call_extra_args = {
-            "bias_ptr": "b.device_data()",
+            "bias_ptr": "(void*)bias",
         }
     elif is_bias_add:
         func_call_extra_args = {
-            "bias_ptr": "b.device_data()",
-            "res_ptr": "r.device_data()",
+            "bias_ptr": "(void*)bias",
+            "res_ptr": "(void*)res",
         }
-
     benchmark_decls = []
     benchmark_instances = []
     profiler_benchmarks = {}
@@ -454,9 +512,9 @@ def gen_profiler(
             is_bias=is_bias,
             is_bias_add=is_bias_add,
             func_name=function_name,
-            in_ptr="x.device_data()",
-            weight_ptr="w.device_data()",
-            out_ptr="y.device_data()",
+            in_ptr="(void*)input",
+            weight_ptr="(void*)weight",
+            out_ptr="(void*)output",
             **func_call_extra_args,
             p_batch="&NI",
             p_out_ch="&CO",
@@ -479,6 +537,8 @@ def gen_profiler(
         benchmark = BENCHMARK_TEMPLATE.render(
             is_bias=is_bias,
             is_bias_add=is_bias_add,
+            is_f16=(dtype == "f16"),
+            is_f32=(dtype == "f32"),
             instance_name_base=instance_name_base,
             function_name=function_name,
             func_call=func_call,
@@ -745,5 +805,5 @@ def function_filter(
         If input cfg should be filtered.
     """
     from cpu_lib.conv2d_operation import Conv2DSpecialization
-    _LOGGER.info(f"x_shape =  {x_shape}")
+    # _LOGGER.info(f"func_attrs = {func_attrs}, x_shape =  {x_shape}")
     return True
