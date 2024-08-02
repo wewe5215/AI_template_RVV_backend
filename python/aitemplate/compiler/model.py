@@ -25,7 +25,7 @@ from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, TypeVar, U
 import numpy as np
 
 from aitemplate.compiler.dtype import dtype_str_to_enum
-from aitemplate.utils.misc import is_linux, is_windows
+from aitemplate.utils.misc import is_linux, is_windows, is_macos
 from aitemplate.utils.torch_utils import torch_dtype_to_string, write_tensor_binary
 
 # Controls how many runtimes will be used in ModelContainer by default.
@@ -89,6 +89,10 @@ def _dlclose(dll: ctypes.CDLL):
             # Apline Linux
             syms = ctypes.CDLL("libc.so")
 
+        if hasattr(syms, "dlclose"):
+            f_dlclose = syms.dlclose
+    elif is_macos():
+        syms = ctypes.CDLL("libSystem.B.dylib")
         if hasattr(syms, "dlclose"):
             f_dlclose = syms.dlclose
 

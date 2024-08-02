@@ -33,6 +33,8 @@ def is_linux() -> bool:
 def is_windows() -> bool:
     return os.name == "nt"
 
+def is_macos():
+    return platform.system() == "Darwin"
 
 def setup_logger(name):
     root_logger = logging.getLogger(name)
