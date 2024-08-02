@@ -152,6 +152,8 @@ class RVV(Target):
     def get_device_compiler_options(self) -> List[str]:
         return self._build_clang_compiler_options()
 
+    def compile_options(self):
+        return self._compile_options
     def _build_compile_options(self):
         options = self._build_gnu_host_compiler_options() + self._build_clang_compiler_options()
         include_path = self.get_include_directories()

@@ -46,7 +46,7 @@ SRC_TEMPLATE = jinja2.Template(
 #include <string>
 #include <vector>
 #include "xnnpack.h"
-
+#include "logging.h"
 {{extra_header}}
 
 {{functions}}
@@ -649,7 +649,8 @@ def gen_function(
         y_dim3="*out_ch",
     )
     shape_func = shape_eval_func + shape_save_func
-    for op_name, op in op_instance.items():
+    program = ""
+    for instance_idx, (op_name, op) in enumerate(op_instance.items()):
         program += emit_instance(op)
 
     function = FUNCTION_TEMPLATE.render(
