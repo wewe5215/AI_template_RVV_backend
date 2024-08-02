@@ -12,10 +12,10 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 //
-#include "../include/model_container.h"
+#include "model_container.h"
 
-#include "../include/device_functions-generated.h"
-#include "../include/raii_wrapper.h"
+#include "device_functions-generated.h"
+#include "raii_wrapper.h"
 #include <time.h>
 namespace {
 std::string GetEnumString(AITemplateDtype dtype) {

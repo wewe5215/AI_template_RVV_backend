@@ -12,11 +12,11 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 //
-#include "../include/model_interface.h"
+#include "model_interface.h"
 #include <iostream>
 #include <unordered_map>
-#include "../include/model-generated.h"
-#include "../include/model_container.h"
+#include "model-generated.h"
+#include "model_container.h"
 
 // Important: don't let exceptions escape the functions below.
 // They can cause problems when -fvisibility=hidden. But more

@@ -38,9 +38,9 @@
 #include <string>
 #include <vector>
 
-#include "../include/macros.h"
-#include "../include/model_interface.h"
-#include "../include/raii_wrapper.h"
+#include "macros.h"
+#include "model_interface.h"
+#include "raii_wrapper.h"
 
 using namespace ait;
 

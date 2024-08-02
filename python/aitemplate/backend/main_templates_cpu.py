@@ -17,7 +17,7 @@ This file contains class definitions used in the generated main.cu file.
 """
 import jinja2
 
-MODEL_TEMPLATE = jinja2.Template(
+MODEL_TEMPLATE_CPU = jinja2.Template(
     """
 #pragma once
 {% if debug_header %}
@@ -177,7 +177,7 @@ class {{model_name}} : public ModelBase<{{model_name}}> {
 """
 )
 
-MODEL_CONTAINER_TEMPLATE = jinja2.Template(
+MODEL_CONTAINER_TEMPLATE_CPU = jinja2.Template(
     """
 #include "model_container.h"
 #include "owned_constants.h"
