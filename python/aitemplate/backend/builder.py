@@ -418,6 +418,36 @@ clean_constants:
 """
         )
 
+        makefile_template_cpu = jinja2.Template(
+            """
+CC = {{cc}}
+CFLAGS = {{CFLAGS}}
+fPIC_flag = {{fPIC}}
+
+obj_files = {{obj_files}}
+
+%.obj : %.{{cpp}}
+    {{cfile_cmd}}
+%.obj : %.bin
+    {{bfile_cmd}}
+
+.PHONY: all clean clean_constants
+all: {{targets}}
+
+{{dll_target}}: $(obj_files)
+    {{build_so_cmd}}
+
+{{build_standalone_rules}}
+
+clean:
+    rm -f *.obj {{targets}}
+
+clean_constants:
+    rm -f constants.bin
+"""
+        )
+
+
         standalone_rules_template = jinja2.Template(
             """
 {{standalone_src}}: {{standalone_obj}}
@@ -489,19 +519,34 @@ clean_constants:
             )
             targets += f" {exe_name}"
 
-        makefile_str = makefile_template.render(
-            cc=cc,
-            cpp=cpp,
-            CFLAGS=compile_options,
-            fPIC=fpic,
-            obj_files=obj_files,
-            dll_target=dll_name,
-            targets=targets,
-            cfile_cmd=cfile_cmd,
-            bfile_cmd=bfile_cmd,
-            build_so_cmd=build_so_cmd,
-            build_standalone_rules=build_standalone_rules,
-        )
+        if Target.current().name() == "rvv":
+            makefile_str = makefile_template_cpu.render(
+                cc=cc,
+                cpp=cpp,
+                CFLAGS=compile_options,
+                fPIC=fpic,
+                obj_files=obj_files,
+                dll_target=dll_name,
+                targets=targets,
+                cfile_cmd=cfile_cmd,
+                bfile_cmd=bfile_cmd,
+                build_so_cmd=build_so_cmd,
+                build_standalone_rules=build_standalone_rules,
+            )
+        else:
+            makefile_str = makefile_template.render(
+                cc=cc,
+                cpp=cpp,
+                CFLAGS=compile_options,
+                fPIC=fpic,
+                obj_files=obj_files,
+                dll_target=dll_name,
+                targets=targets,
+                cfile_cmd=cfile_cmd,
+                bfile_cmd=bfile_cmd,
+                build_so_cmd=build_so_cmd,
+                build_standalone_rules=build_standalone_rules,
+            )
 
         dumpfile = os.path.join(workdir, test_name, "Makefile")
         with open(dumpfile, "w+") as f:
