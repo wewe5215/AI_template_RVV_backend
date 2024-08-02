@@ -35,6 +35,7 @@ import jinja2
 from aitemplate.backend import registry
 
 from aitemplate.backend.main_templates import MODEL_CONTAINER_TEMPLATE, MODEL_TEMPLATE
+from aitemplate.backend.main_templates_cpu import MODEL_CONTAINER_TEMPLATE_CPU, MODEL_TEMPLATE_CPU
 from aitemplate.backend.target import Target
 
 from aitemplate.compiler.base import IntImm, IntVar, IntVarTensor, Operator, Tensor
@@ -989,38 +990,72 @@ class ModelContainerGenerator:
             self._output_shape_seq,
             self.func_prop_seq,
         )
-        return MODEL_TEMPLATE.render(
-            model_name=self.model_name,
-            function_decl="\n".join(self.func_decl),
-            set_inputs="\n".join(self.set_inputs),
-            tensor_slice="\n".join(self.tensor_slice),
-            tensor_map_set="\n".join(self.tensor_map_set),
-            set_up_constants="\n".join(self.set_up_constants),
-            device_to_device_copies="\n".join(self.device_to_device_copies),
-            set_up_param_dynamic_shapes="\n".join(self.set_up_param_dynamic_shapes),
-            function_seq=self.func_seq,
-            per_op_profiler_seq=per_op_profiler_seq,
-            tensor_decl="\n".join(self.tensor_decl),
-            dim_decl="\n".join(self.dim_decl),
-            jagged_decl="\n".join(self.jagged_decl),
-            function_state="\n".join(self.function_state),
-            target_has_graph_mode=target_has_graph_mode,
-            unique_workspace_size=self.workspace.unique_size,
-            debug_header=self.debug_header,
-            blob_size=self.max_blob_size,
-            workspace_size=self.workspace.total_size(),
-            num_inputs=self.num_inputs,
-            num_outputs=self.num_outputs,
-            param_size=self.max_constant_blob_size + self.extra_owned_constant_size,
-            num_unbound_constants=self.unbound_constant_idx,
-            reset_constants="\n".join(self.reset_constants),
-            profiler_annotation=self.debug_settings.gen_profiler_annotation,
-            n_additional_streams=n_additional_streams,
-            n_additional_events=n_additional_events,
-            par_function_seq=par_function_seq,
-            par_check_function_seq=par_check_function_seq,
-            run_impl_mode=run_impl_mode,
-        )
+        if self.target.name() == "rvv":
+            return MODEL_TEMPLATE_CPU.render(
+                model_name=self.model_name,
+                function_decl="\n".join(self.func_decl),
+                set_inputs="\n".join(self.set_inputs),
+                tensor_slice="\n".join(self.tensor_slice),
+                tensor_map_set="\n".join(self.tensor_map_set),
+                set_up_constants="\n".join(self.set_up_constants),
+                device_to_device_copies="\n".join(self.device_to_device_copies),
+                set_up_param_dynamic_shapes="\n".join(self.set_up_param_dynamic_shapes),
+                function_seq=self.func_seq,
+                per_op_profiler_seq=per_op_profiler_seq,
+                tensor_decl="\n".join(self.tensor_decl),
+                dim_decl="\n".join(self.dim_decl),
+                jagged_decl="\n".join(self.jagged_decl),
+                function_state="\n".join(self.function_state),
+                target_has_graph_mode=target_has_graph_mode,
+                unique_workspace_size=self.workspace.unique_size,
+                debug_header=self.debug_header,
+                blob_size=self.max_blob_size,
+                workspace_size=self.workspace.total_size(),
+                num_inputs=self.num_inputs,
+                num_outputs=self.num_outputs,
+                param_size=self.max_constant_blob_size + self.extra_owned_constant_size,
+                num_unbound_constants=self.unbound_constant_idx,
+                reset_constants="\n".join(self.reset_constants),
+                profiler_annotation=self.debug_settings.gen_profiler_annotation,
+                n_additional_streams=n_additional_streams,
+                n_additional_events=n_additional_events,
+                par_function_seq=par_function_seq,
+                par_check_function_seq=par_check_function_seq,
+                run_impl_mode=run_impl_mode,
+            )
+        else:
+            return MODEL_TEMPLATE.render(
+                model_name=self.model_name,
+                function_decl="\n".join(self.func_decl),
+                set_inputs="\n".join(self.set_inputs),
+                tensor_slice="\n".join(self.tensor_slice),
+                tensor_map_set="\n".join(self.tensor_map_set),
+                set_up_constants="\n".join(self.set_up_constants),
+                device_to_device_copies="\n".join(self.device_to_device_copies),
+                set_up_param_dynamic_shapes="\n".join(self.set_up_param_dynamic_shapes),
+                function_seq=self.func_seq,
+                per_op_profiler_seq=per_op_profiler_seq,
+                tensor_decl="\n".join(self.tensor_decl),
+                dim_decl="\n".join(self.dim_decl),
+                jagged_decl="\n".join(self.jagged_decl),
+                function_state="\n".join(self.function_state),
+                target_has_graph_mode=target_has_graph_mode,
+                unique_workspace_size=self.workspace.unique_size,
+                debug_header=self.debug_header,
+                blob_size=self.max_blob_size,
+                workspace_size=self.workspace.total_size(),
+                num_inputs=self.num_inputs,
+                num_outputs=self.num_outputs,
+                param_size=self.max_constant_blob_size + self.extra_owned_constant_size,
+                num_unbound_constants=self.unbound_constant_idx,
+                reset_constants="\n".join(self.reset_constants),
+                profiler_annotation=self.debug_settings.gen_profiler_annotation,
+                n_additional_streams=n_additional_streams,
+                n_additional_events=n_additional_events,
+                par_function_seq=par_function_seq,
+                par_check_function_seq=par_check_function_seq,
+                run_impl_mode=run_impl_mode,
+            )
 
     def _create_set_up_constant_offsets(self) -> str:
         """
@@ -1074,31 +1109,56 @@ class ModelContainerGenerator:
         result["model-generated.h"] = self.generate_model()
 
         model_container_src_fname = f"model_container_base{self.target.src_extension()}"
-
-        model_container_base_src = MODEL_CONTAINER_TEMPLATE.render(
-            num_inputs=self.num_inputs,
-            num_outputs=self.num_outputs,
-            param_size=self.max_constant_blob_size + self.extra_owned_constant_size,
-            set_up_constant_names="\n".join(self.set_up_constant_names),
-            set_up_constant_original_names="\n".join(
-                self.set_up_constant_original_names
-            ),
-            set_up_param_dtypes="\n".join(self.set_up_param_dtypes),
-            set_up_bound_constant_dtypes="\n".join(self.set_up_bound_constant_dtypes),
-            set_up_bound_constant_size="\n".join(self.set_up_bound_constant_size),
-            set_up_output_shapes="\n".join(self.set_up_output_shapes),
-            set_up_param_names="\n".join(self.set_up_param_names),
-            num_constants=self.num_constants,
-            num_bound_constants=self.bound_constant_idx,
-            num_unbound_constants=self.unbound_constant_idx,
-            owned_constants_init=",".join(self.owned_constants_init),
-            set_up_constant_offsets=self._create_set_up_constant_offsets(),
-            set_up_constant_folding_inputs="\n".join(
-                self.set_up_constant_folding_inputs
-            ),
-            # # todo: enable once this feature is fully available
-            # is_windows=is_windows(),
-        )
+        if self.target.name() == "rvv":
+            model_container_base_src = MODEL_CONTAINER_TEMPLATE_CPU.render(
+                num_inputs=self.num_inputs,
+                num_outputs=self.num_outputs,
+                param_size=self.max_constant_blob_size + self.extra_owned_constant_size,
+                set_up_constant_names="\n".join(self.set_up_constant_names),
+                set_up_constant_original_names="\n".join(
+                    self.set_up_constant_original_names
+                ),
+                set_up_param_dtypes="\n".join(self.set_up_param_dtypes),
+                set_up_bound_constant_dtypes="\n".join(self.set_up_bound_constant_dtypes),
+                set_up_bound_constant_size="\n".join(self.set_up_bound_constant_size),
+                set_up_output_shapes="\n".join(self.set_up_output_shapes),
+                set_up_param_names="\n".join(self.set_up_param_names),
+                num_constants=self.num_constants,
+                num_bound_constants=self.bound_constant_idx,
+                num_unbound_constants=self.unbound_constant_idx,
+                owned_constants_init=",".join(self.owned_constants_init),
+                set_up_constant_offsets=self._create_set_up_constant_offsets(),
+                set_up_constant_folding_inputs="\n".join(
+                    self.set_up_constant_folding_inputs
+                ),
+                # # todo: enable once this feature is fully available
+                # is_windows=is_windows(),
+            )
+        else:
+            model_container_base_src = MODEL_CONTAINER_TEMPLATE.render(
+                num_inputs=self.num_inputs,
+                num_outputs=self.num_outputs,
+                param_size=self.max_constant_blob_size + self.extra_owned_constant_size,
+                set_up_constant_names="\n".join(self.set_up_constant_names),
+                set_up_constant_original_names="\n".join(
+                    self.set_up_constant_original_names
+                ),
+                set_up_param_dtypes="\n".join(self.set_up_param_dtypes),
+                set_up_bound_constant_dtypes="\n".join(self.set_up_bound_constant_dtypes),
+                set_up_bound_constant_size="\n".join(self.set_up_bound_constant_size),
+                set_up_output_shapes="\n".join(self.set_up_output_shapes),
+                set_up_param_names="\n".join(self.set_up_param_names),
+                num_constants=self.num_constants,
+                num_bound_constants=self.bound_constant_idx,
+                num_unbound_constants=self.unbound_constant_idx,
+                owned_constants_init=",".join(self.owned_constants_init),
+                set_up_constant_offsets=self._create_set_up_constant_offsets(),
+                set_up_constant_folding_inputs="\n".join(
+                    self.set_up_constant_folding_inputs
+                ),
+                # # todo: enable once this feature is fully available
+                # is_windows=is_windows(),
+            )
         result[model_container_src_fname] = model_container_base_src
         return result
 
@@ -1217,9 +1277,14 @@ def gen_library_src(  # noqa: C901
     )
     model_container_generator.append_all_tensors()
     constants_data_file.close()
+    file_size = os.path.getsize(constants_fname)
+    _LOGGER.info(f'file size of constants data file is {file_size}')
 
     files = model_container_generator.generate_source()
-    to_build = [(constants_fname, to_obj_name(constants_fname))]
+    if file_size > 0:
+        to_build = [(constants_fname, to_obj_name(constants_fname))]
+    else:
+        to_build = []
     for fname, contents in files.items():
         fname_full = os.path.join(prefix, fname)
         with open(fname_full, "w") as fo:
