@@ -16,7 +16,7 @@
 common template for conv2d
 """
 import re
-
+import os
 from collections import OrderedDict
 from hashlib import sha1
 from typing import List
@@ -53,26 +53,6 @@ SRC_TEMPLATE = jinja2.Template(
 """
 )
 
-BENCHMARK_LOG_TEMPLATE = jinja2.Template(
-"""
-#define CHECK_BINARY_OP(name, op, x, y)                   \
-  if (auto __dmlc__log__err = dmlc::LogCheck##name(x, y)) \
-  dmlc::LogMessageFatal(__FILE__, __LINE__).stream()      \
-      << "Check failed: " << #x " " #op " " #y << *__dmlc__log__err << ": "
-
-// Always-on checking
-#define CHECK(x)                                     \
-  if (!(x))                                          \
-  dmlc::LogMessageFatal(__FILE__, __LINE__).stream() \
-      << "Check failed: " #x << ": "
-#define CHECK_LT(x, y) CHECK_BINARY_OP(_LT, <, x, y)
-#define CHECK_GT(x, y) CHECK_BINARY_OP(_GT, >, x, y)
-#define CHECK_LE(x, y) CHECK_BINARY_OP(_LE, <=, x, y)
-#define CHECK_GE(x, y) CHECK_BINARY_OP(_GE, >=, x, y)
-#define CHECK_EQ(x, y) CHECK_BINARY_OP(_EQ, ==, x, y)
-#define CHECK_NE(x, y) CHECK_BINARY_OP(_NE, !=, x, y)
-"""
-)
 FUNCTION_TEMPLATE = jinja2.Template(
     """
 void {{function_name}} (
@@ -204,6 +184,7 @@ inline Ptr RAII_DeviceMalloc(
   return Ptr(output, deleter);
 }
 std::mt19937 rnd_generator(1234);
+std::uniform_real_distribution<> dist(-10, 10);
 template<typename T>
 void fill_random(T* data, size_t size) {
   for (size_t i = 0; i < size; ++i) {
@@ -240,7 +221,6 @@ int benchmark_{{function_name}} (
   Ptr res_data = RAII_DeviceMalloc(NO*HO*WO*CO*2);
 {% endif %}
   Ptr out_data = RAII_DeviceMalloc(NO*HO*WO*CO*2);
-  std::uniform_real_distribution<> dist(-10, 10);
 {% if is_f16 %}
   auto* input = static_cast<__fp16*>(in_data.get());
   auto* weight = static_cast<__fp16*>(weight_data.get());
@@ -295,10 +275,18 @@ int benchmark_{{function_name}} (
 )
 
 PROFILER_BENCHMARK_TEMPLATE = jinja2.Template(
-    """
+"""
+#include <cstdio>
+#include <stdexcept>
+#include <cstdlib>
+#include <memory>
+#include <string>
+#include <vector>
+#include "xnnpack.h"
+#include "logging.h"
+{{extra_header}}
 static size_t GLOBAL_WORKSPACE_SIZE_{{instance_name}} = 0;
-{{logs}}
-{{op_source}}
+{{functions}}
 
 {{benchmark}}
 """
@@ -502,10 +490,6 @@ def gen_profiler(
             shape_function=shape_func,
             exec_paths=exec_program,
         )
-        op_source = SRC_TEMPLATE.render(
-            extra_header=extra_header,
-            functions=function,
-        )
 
         func_call = FUNC_CALL_TEMPLATE.render(
             indent="  ",
@@ -533,7 +517,6 @@ def gen_profiler(
             dilationw="dilationw",
             padw="padw",
         )
-        logs = BENCHMARK_LOG_TEMPLATE.render()
         benchmark = BENCHMARK_TEMPLATE.render(
             is_bias=is_bias,
             is_bias_add=is_bias_add,
@@ -546,8 +529,8 @@ def gen_profiler(
         )
 
         profiler_benchmarks[function_name] = PROFILER_BENCHMARK_TEMPLATE.render(
-            op_source=op_source,
-            logs=logs,
+            extra_header=extra_header,
+            functions=function,
             benchmark=benchmark,
             instance_name=instance_name,
         )
@@ -611,6 +594,9 @@ def gen_profiler(
     # FIXME: remove file_pairs once we have make -j ready for building
     # an entire graph
     file_pairs = []
+    # add logging.h to file_pairs
+    prefix = os.path.join(workdir, "profiler", op_type)
+    file_pairs = Target.current().copy_headers_and_csrc_to_workdir(prefix)
     add_profiler(file_pairs, workdir, op_type, profiler_filename, code)
 
     # build

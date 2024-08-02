@@ -36,6 +36,7 @@ _WHEEL_3RDPARTY_PATH = os.path.normpath(os.path.join(_MYPATH, "..", "3rdparty"))
 if os.path.exists(_WHEEL_3RDPARTY_PATH):
     _3RDPARTY_PATH = _WHEEL_3RDPARTY_PATH
 AIT_STATIC_FILES_PATH = os.path.join(_3RDPARTY_PATH, "../static")
+AIT_STATIC_FILES_PATH_CPU = os.path.join(_3RDPARTY_PATH, "../static/cpu")
 CUTLASS_PATH = os.path.join(_3RDPARTY_PATH, "cutlass")
 COMPOSABLE_KERNEL_PATH = os.path.join(_3RDPARTY_PATH, "composable_kernel")
 CUB_PATH = os.path.join(_3RDPARTY_PATH, "cub")
@@ -435,30 +436,44 @@ class Target:
             The path to copy to
         """
         sources = []
-        csrc = os.path.join(self.static_files_path, "csrc")
-        for fname in os.listdir(csrc):
-            fname_dst, ext = os.path.splitext(fname)
-            if ext != ".cpp":
-                continue
-            # TODO: Remove this file when the linker error gets fixed in rocm backend.
-            # All files in csrc should be shared between the ROCM and CUDA backends.
-            if fname == "rocm_hack.cpp" and self.name() != "rocm":
-                continue
-            fname_src = os.path.join(csrc, fname)
-            fname_dst_cpp = os.path.join(workdir, f"{fname_dst}{self.src_extension()}")
-            shutil.copyfile(fname_src, fname_dst_cpp)
-            sources.append(fname_dst_cpp)
+        if "profiler" not in workdir:
+            csrc = os.path.join(self.static_files_path, "csrc")
+            for fname in os.listdir(csrc):
+                fname_dst, ext = os.path.splitext(fname)
+                if ext != ".cpp":
+                    continue
+                # TODO: Remove this file when the linker error gets fixed in rocm backend.
+                # All files in csrc should be shared between the ROCM and CUDA backends.
+                if fname == "rocm_hack.cpp" and self.name() != "rocm":
+                    continue
+                fname_src = os.path.join(csrc, fname)
+                fname_dst_cpp = os.path.join(workdir, f"{fname_dst}{self.src_extension()}")
+                shutil.copyfile(fname_src, fname_dst_cpp)
+                sources.append(fname_dst_cpp)
 
-        headers = []
-        include = os.path.join(self.static_files_path, "include")
-        for fname in os.listdir(include):
-            _, ext = os.path.splitext(fname)
-            if ext != ".h":
-                continue
-            fname_src = os.path.join(include, fname)
-            fname_dst = os.path.join(workdir, fname)
-            shutil.copyfile(fname_src, fname_dst)
-            headers.append(fname_dst)
+            headers = []
+            include = os.path.join(self.static_files_path, "include")
+            for fname in os.listdir(include):
+                _, ext = os.path.splitext(fname)
+                if ext != ".h":
+                    continue
+                fname_src = os.path.join(include, fname)
+                fname_dst = os.path.join(workdir, fname)
+                shutil.copyfile(fname_src, fname_dst)
+                headers.append(fname_dst)
+        else:
+            headers = []
+            include = os.path.join(self.static_files_path, "include")
+            for fname in os.listdir(include):
+                _, ext = os.path.splitext(fname)
+                if ext != ".h":
+                    continue
+                if "logging" not in fname:
+                    continue
+                fname_src = os.path.join(include, fname)
+                fname_dst = os.path.join(workdir, fname)
+                shutil.copyfile(fname_src, fname_dst)
+                headers.append(fname_dst)
         return sources
 
     @classmethod

@@ -562,7 +562,10 @@ clean_constants:
         # generate a new file name conditioned on the list of the source file names
         file_name = sha1((";".join(sorted(sources))).encode("utf-8")).hexdigest()
         file_dir = Path(next(iter(sources))).parents[0]  # fetch the directory
-        file_path = file_dir / Path(f"temp_{file_name}.cu")
+        if Target.current().name() == "rvv":
+            file_path = file_dir / Path(f"temp_{file_name}.cpp")
+        else:
+            file_path = file_dir / Path(f"temp_{file_name}.cu")
         with open(file_path, "w") as f:
             # file_lines end with "\n" already
             f.write("".join(file_lines))
@@ -768,6 +771,7 @@ clean:
         num_compiled_sources = 0
         target_names = set()
         for target, srcs in dependencies.items():
+            _LOGGER.info(f"srcs {srcs}, target = {target}")
             # for each "target: srcs" pair,
             # generate two lines for the Makefile
             src_list = " ".join(srcs)
@@ -786,7 +790,10 @@ clean:
             commands.append(command)
 
             # update compilation statistics
-            num_compiled_sources += sum(1 for s in srcs if s.endswith(".cu"))
+            if Target.current().name() == "rvv":
+                num_compiled_sources += sum(1 for s in srcs if s.endswith(".cpp"))
+            else:
+                num_compiled_sources += sum(1 for s in srcs if s.endswith(".cu"))
             if not target.endswith(".obj"):
                 target_names.add(os.path.split(target)[-1])
 
@@ -822,13 +829,21 @@ clean:
         write_binhash_file(build_dir)
 
         make_path = shlex.quote(Target.current().make())
-        make_flags = " ".join(
-            [
-                f"-f {makefile_name}",
-                "--output-sync",
-                f"-C {build_dir}",
-            ]
-        )
+        if Target.current().name() == "rvv":
+            make_flags = " ".join(
+                [
+                    f"-f {makefile_name}",
+                    f"-C {build_dir}",
+                ]
+            )
+        else:
+            make_flags = " ".join(
+                [
+                    f"-f {makefile_name}",
+                    "--output-sync",
+                    f"-C {build_dir}",
+                ]
+            )
         make_clean_cmd = f" {make_path} {make_flags} clean "
         make_all_cmd = f" {make_path} {make_flags} -j{self._n_jobs} all "
         cmds = [make_clean_cmd, make_all_cmd]
@@ -899,12 +914,20 @@ clean:
 
         make_path = shlex.quote(Target.current().make())
         build_dir = shlex.quote(os.path.join(workdir, test_name))
-        make_flags = " ".join(
-            [
-                "--output-sync",
-                f"-C {build_dir}",
-            ]
-        )
+        # TODO : add "--output-sync" to make_flags for rvv later
+        if Target.current().name() == "rvv":
+            make_flags = " ".join(
+                [
+                    f"-C {build_dir}",
+                ]
+            )
+        else:
+            make_flags = " ".join(
+                [
+                    "--output-sync",
+                    f"-C {build_dir}",
+                ]
+            )
         make_clean_cmd = f" {make_path} {make_flags} clean "
         make_all_cmd = f" {make_path} {make_flags} -j{self._n_jobs} all "
         make_clean_constants_cmd = f" {make_path} {make_flags} clean_constants "

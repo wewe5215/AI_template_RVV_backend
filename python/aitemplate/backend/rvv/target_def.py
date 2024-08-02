@@ -32,7 +32,7 @@ from aitemplate.backend import registry
 from aitemplate.backend.profiler_cache import ProfileCacheDB
 
 from aitemplate.backend.target import (
-    AIT_STATIC_FILES_PATH,
+    AIT_STATIC_FILES_PATH_CPU,
     Target,
     TargetType,
     XNNPACK_PATH,
@@ -55,7 +55,7 @@ class RVV(Target):
         template_path = XNNPACK_PATH,
         arch="rv64gcv_zvfh",
         RVV_version=None,
-        ait_static_files_path=AIT_STATIC_FILES_PATH,
+        ait_static_files_path=AIT_STATIC_FILES_PATH_CPU,
         **kwargs,
     ):
         """RVV target init.
