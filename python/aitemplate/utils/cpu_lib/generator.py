@@ -107,7 +107,7 @@ def GenerateTensorOp(manifest):
     # Conv2dBiasAdd
     CreateConv2dFwdOperator(
         manifest,
-        library.Conv2dKind.Conv2dBias,
+        library.Conv2dKind.Conv2dBiasAdd,
         library.TensorOperation.Add,
     )
     # Conv2dBiasReluAdd

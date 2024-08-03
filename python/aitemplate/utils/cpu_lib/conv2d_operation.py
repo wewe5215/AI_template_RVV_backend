@@ -197,6 +197,7 @@ class Conv2DOperation:
         is_bias = False
         if self.operation_kind == library.Conv2dKind.Conv2dBias or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasRelu or \
+          self.operation_kind == library.Conv2dKind.Conv2dBiasAdd or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasReluAdd or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasSigmoid or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasAddRelu :

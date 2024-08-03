@@ -415,6 +415,7 @@ def extract_config(
     spec = RVVSpec()
     lib_dtype = spec.dtype_to_lib_type(dtype)
     conv2d_ops = OrderedDict()
+    _LOGGER.info(f"_operators =  {Target.current()._operators}")
     extract_ops = list(Target.current()._operators[op_kind][extra_kind].items())
     for key, value in extract_ops:
         for op in value:

@@ -164,6 +164,7 @@ OperationKindNames = {
 class Conv2dKind(enum.Enum):
     Conv2d = auto()
     Conv2dBias = auto()
+    Conv2dBiasAdd = auto()
     Conv2dBiasRelu = auto()
     Conv2dBiasAddRelu = auto()
     Conv2dBiasReluAdd = auto()
@@ -176,6 +177,7 @@ class Conv2dKind(enum.Enum):
 Conv2dKindNames = {
     Conv2dKind.Conv2d: "conv2d",
     Conv2dKind.Conv2dBias: "conv2d_bias",
+    Conv2dKind.Conv2dBiasAdd: "conv2d_bias_add",
     Conv2dKind.Conv2dBiasRelu: "conv2d_bias_relu",
     Conv2dKind.Conv2dBiasAddRelu: "conv2d_bias_add_relu",
     Conv2dKind.Conv2dBiasReluAdd: "conv2d_bias_relu_add",

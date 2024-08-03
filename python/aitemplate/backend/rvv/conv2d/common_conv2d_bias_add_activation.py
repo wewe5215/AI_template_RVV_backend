@@ -36,7 +36,10 @@ def extract_config(
     unary_op_name="Identity",
 ):
     import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasAddRelu
+    if unary_op_name == "ReLu":
+        op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasAddRelu
+    elif unary_op_name == "Identity":
+        op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasAdd
     extra_kind = cpu_lib.library.TensorOperation.Add
     # if dtype == "float32": --> TODO: uncomment later
     conv2d_specialization = cpu_lib.conv2d_operation.Conv2DSpecialization.ConvNhwcF32
