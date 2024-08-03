@@ -98,7 +98,7 @@ void {{function_name}} (
   int i32_out_w = *out_w;
 
   {{exec_paths}}
-
+  return;
   throw std::runtime_error(
     "Unsupported workload for this conv2d specialization."
   );
