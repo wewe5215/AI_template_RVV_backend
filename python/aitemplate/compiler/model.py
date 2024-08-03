@@ -441,19 +441,18 @@ class Model:
             stream_ptr,
         )
         # TODO : if cpu --> no c_stream
-        if not outputs_on_host:
-            if self.is_cpu:
-                self.DLL.AITemplateModelContainerRun(
-                    self.handle,
-                    c_inputs,
-                    ctypes.c_size_t(len(inputs)),
-                    c_outputs,
-                    ctypes.c_size_t(len(outputs)),
-                    ctypes.c_bool(sync),
-                    ctypes.c_bool(graph_mode),
-                    c_output_shapes_out,
-                )
-            else:
+        if self.is_cpu:
+            self.DLL.AITemplateModelContainerRunWithOutputsOnHost(
+                self.handle,
+                c_inputs,
+                ctypes.c_size_t(len(inputs)),
+                c_outputs,
+                ctypes.c_size_t(len(outputs)),
+                ctypes.c_bool(graph_mode),
+                c_output_shapes_out,
+            )
+        else:
+            if not outputs_on_host:
                 self.DLL.AITemplateModelContainerRun(
                     self.handle,
                     c_inputs,
@@ -462,17 +461,6 @@ class Model:
                     ctypes.c_size_t(len(outputs)),
                     c_stream,
                     ctypes.c_bool(sync),
-                    ctypes.c_bool(graph_mode),
-                    c_output_shapes_out,
-                )
-        else:
-            if self.is_cpu:
-                self.DLL.AITemplateModelContainerRunWithOutputsOnHost(
-                    self.handle,
-                    c_inputs,
-                    ctypes.c_size_t(len(inputs)),
-                    c_outputs,
-                    ctypes.c_size_t(len(outputs)),
                     ctypes.c_bool(graph_mode),
                     c_output_shapes_out,
                 )
