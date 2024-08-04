@@ -983,7 +983,8 @@ def add_profiler(file_pairs, workdir, op_type, output_name, code):
     obj_path = os.path.join(prefix, output_name)
     if os.path.exists(obj_path):
         return
-
+    # add logging.h to file_pairs
+    file_pairs.extend(Target.current().copy_headers_and_csrc_to_workdir(prefix))
     if isinstance(code, dict):
         # multi-source profiler
         src_paths = []

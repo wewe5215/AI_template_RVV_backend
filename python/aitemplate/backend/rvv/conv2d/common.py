@@ -595,11 +595,7 @@ def gen_profiler(
     # FIXME: remove file_pairs once we have make -j ready for building
     # an entire graph
     file_pairs = []
-    # add logging.h to file_pairs
-    prefix = os.path.join(workdir, "profiler", op_type)
-    file_pairs = Target.current().copy_headers_and_csrc_to_workdir(prefix)
     add_profiler(file_pairs, workdir, op_type, profiler_filename, code)
-
     # build
     return build_profiler(file_pairs)
 
