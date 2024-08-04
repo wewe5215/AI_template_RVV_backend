@@ -21,7 +21,10 @@ from aitemplate.backend.rvv.conv2d import common
 # pylint: disable=C0103,C0301
 
 EXTRA_HEADER = """
-#include "xnnpack.h"
+#include <functional>
+#include <random>
+#include <cstddef> // For size_t
+#include <cstring> // For memcpy
 """
 
 

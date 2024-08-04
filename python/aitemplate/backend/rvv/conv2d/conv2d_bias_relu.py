@@ -26,10 +26,16 @@ def conv2d_bias_relu_config(
     func_attrs,
     dtype="float16",
 ):
+    import cpu_lib
+    op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasRelu
+    extra_kind = cpu_lib.library.TensorOperation.PassThrough
+    # if dtype == "float32": --> TODO: uncomment later
+    conv2d_specialization = cpu_lib.conv2d_operation.Conv2DSpecialization.ConvNhwcF32
     func_attrs["op_instance"] = common.extract_config(
-        func_attrs=func_attrs,
-        dtype=dtype,
-    )
+        dtype = dtype,
+        op_kind = op_kind,
+        extra_kind = extra_kind,
+        conv2d_specialization = conv2d_specialization)
 
 
 @registry.reg("rvv.conv2d_bias_relu.gen_profiler")
