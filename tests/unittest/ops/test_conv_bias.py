@@ -94,6 +94,7 @@ class ConvBiasTestCase(unittest.TestCase):
                 TestEnv.CUDA_LESS_THAN_SM80: [("float16")],
                 TestEnv.CUDA_SM80: [("float32"), ("bfloat16")],
                 TestEnv.ROCM: [("float16")],
+                TestEnv.RVV: [(("float"))],
             }
         )
     )
