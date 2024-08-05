@@ -13,7 +13,7 @@
 #  limitations under the License.
 #
 """
-ROCM max_pool2d funcs
+RVV max_pool2d funcs
 """
 from aitemplate.backend import registry
 from aitemplate.backend.rvv.pool2d import pool2d

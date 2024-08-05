@@ -13,14 +13,14 @@
 #  limitations under the License.
 #
 """
-ROCM avg_pool2d funcs
+RVV avg_pool2d funcs
 """
 from aitemplate.backend import registry
 from aitemplate.backend.rvv.pool2d import pool2d
 
 
 @registry.reg("rvv.avg_pool2d.gen_function")
-def max_pool2d_gen_function(
+def avg_pool2d_gen_function(
     func_attrs,
     exec_cond_template,
     shape_eval_template,

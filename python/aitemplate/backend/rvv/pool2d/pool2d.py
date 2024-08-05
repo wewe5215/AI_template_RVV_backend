@@ -13,61 +13,83 @@
 #  limitations under the License.
 #
 """
-ROCM codegen functions for pool2d.
+RVV codegen functions for pool2d.
 """
 from hashlib import sha1
 
 import jinja2
-
+import re
+import logging
+from aitemplate.backend.backend_spec import RVVSpec
 # pylint: disable=C0103,C0301,W0613,W0612
-
-INSTANCE_TEMPLATE = jinja2.Template(
+_LOGGER = logging.getLogger(__name__)
+# TODO : add f16 implementation later
+EXEC_TEMPLATE_AVG = jinja2.Template(
     """
-using {{name}} = ck::tensor_operation::device::DevicePool2dFwd_Input_N_Hi_Wi_C_Output_N_Ho_Wo_C<
-ck::half_t, ck::half_t, float, {{reduce_func}}, false, 64, 64, 1, 4, 1, 4>;
+{{indent}}xnn_operator_t op_avg = nullptr;
+{{indent}}const xnn_status status = xnn_create_average_pooling2d_nhwc_f32(
+{{indent}}  PH, PW, PH, PW, KH, KW, SH, SW, 
+{{indent}}  -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), 
+{{indent}}  /*flags=*/0, &op_avg);
+
+{{indent}}CHECK_EQ(xnn_status_success, status);
+{{indent}}CHECK_NE(nullptr, op_avg);
+{{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op(op_avg, xnn_delete_operator);
+
+{{indent}}size_t workspace_size = 0;
+{{indent}}size_t workspace_alignment = 0;
+{{indent}}CHECK_EQ(
+{{indent}}  xnn_status_success,
+{{indent}}  xnn_reshape_average_pooling2d_nhwc_f32(
+{{indent}}    op_avg, NI, HI, WI,
+{{indent}}    CI, /*input_pixel_stride=*/CI, /*output_pixel_stride=*/CO,
+{{indent}}    &workspace_size, &workspace_alignment,
+{{indent}}    /*output_height_out=*/nullptr, /*output_width_out=*/nullptr,
+{{indent}}    /*threadpool=*/nullptr));
+{{indent}}CHECK_LE(workspace_alignment, 16);
+{{indent}}std::vector<char> workspace_vector(workspace_size + workspace_alignment + 16);
+{{indent}}void* maybe_aligned_workspace = workspace_vector.data();
+{{indent}}void* aligned_workspace = \
+    (void*)((intptr_t)maybe_aligned_workspace + workspace_alignment - (intptr_t)maybe_aligned_workspace % workspace_alignment);
+{{indent}}CHECK_EQ(xnn_status_success, xnn_setup_average_pooling2d_nhwc_f32(op_avg, aligned_workspace, (float*)(in_ptr), (float*)(out_ptr)));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(op_avg, /*threadpool=*/nullptr));
 """
 )
 
-EXEC_TEMPLATE = jinja2.Template(
+EXEC_TEMPLATE_MAX = jinja2.Template(
     """
-{{indent}}auto op =  {{instance}}{};
-{{indent}}auto invoker_ptr  = op.MakeInvokerPointer();
-{{indent}}auto argument_ptr = op.MakeArgumentPointer(static_cast<ck::half_t *>(in_ptr),
-{{indent}}                                           static_cast<ck::half_t *>(out_ptr),
-{{indent}}                                           nullptr,
-{{indent}}                                           *batch,
-{{indent}}                                           *in_ch,
-{{indent}}                                           input_shape,
-{{indent}}                                           kernel_shape,
-{{indent}}                                           output_shape,
-{{indent}}                                           conv_filter_strides,
-{{indent}}                                           input_left_pads,
-{{indent}}                                           input_right_pads);
-{{indent}}if(!op.IsSupportedArgument(argument_ptr.get())) {
-{{indent}}  LOG(FATAL) << "wrong! " << op.GetTypeString() << " with the specified compilation parameters does not support this Pool problem.";
-{{indent}}}
-{{indent}}invoker_ptr->Run(argument_ptr.get(), StreamConfig{stream, false});
-{{indent}}return;
+{{indent}}xnn_operator_t op_max = nullptr;
+{{indent}}const xnn_status status = xnn_create_max_pooling2d_nhwc_f32(
+{{indent}}  PH, PW, PH, PW, KH, KW, SH, SW,
+{{indent}}  1, 1, -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), /*flags=*/0, &op_max);
+{{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op(op_max, xnn_delete_operator);
+{{indent}}CHECK_EQ(xnn_status_success, status);
+{{indent}}CHECK_NE(nullptr, op_max);
+{{indent}}CHECK_EQ(
+{{indent}}  xnn_status_success, xnn_reshape_max_pooling2d_nhwc_f32(
+{{indent}}                        op_max, NI, HI, WI, CI, /*input_pixel_stride=*/CI,
+{{indent}}                        /*output_pixel_stride=*/CO, /*output_height_out=*/nullptr, /*output_width_out=*/nullptr,
+{{indent}}                        /*threadpool=*/nullptr));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_setup_max_pooling2d_nhwc_f32(op_max, (float*)(in_ptr), (float*)(out_ptr)));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(op_max, /*threadpool=*/nullptr));
 """
 )
 
 SRC_TEMPLATE = jinja2.Template(
     """
-#include <iostream>
-#include <numeric>
-#include <initializer_list>
+#include <cstdio>
+#include <stdexcept>
 #include <cstdlib>
-#include <stdlib.h>
+#include <memory>
+#include <string>
+#include <vector>
+#include "xnnpack.h"
 #include "logging.h"
-#include "include/ck/utility/print.hpp"
-#include "library/include/ck/library/utility/device_memory.hpp"
-#include "library/include/ck/library/utility/host_tensor.hpp"
-#include "library/include/ck/library/utility/host_tensor_generator.hpp"
-#include "include/ck/tensor_operation/gpu/device/tensor_layout.hpp"
-#include "include/ck/utility/reduction_operator.hpp"
-#include "include/ck/tensor_operation/gpu/device/impl/device_pool2d_fwd_nhwc_nhwc.hpp"
-
-{{instances}}
+#include <functional>
+#include <random>
+#include <stdint.h>
+#include <cstddef> // For size_t
+#include <cstring> // For memcpy
 
 
 void {{function_name}}(
@@ -83,26 +105,14 @@ void {{function_name}}(
     int64_t kernel_h,
     int64_t kernel_w,
     int64_t stride,
-    int64_t pad,
-    hipStream_t stream
+    int64_t pad
     ) {
   {{shape_function}}
-
-  const std::array<ck::index_t, 2> conv_filter_strides{static_cast<ck::index_t>(stride),
-    static_cast<ck::index_t>(stride)};
-  const std::array<ck::index_t, 2> input_left_pads{static_cast<ck::index_t>(pad),
-    static_cast<ck::index_t>(pad)};
-  const std::array<ck::index_t, 2> input_right_pads{static_cast<ck::index_t>(pad),
-    static_cast<ck::index_t>(pad)};
-  const std::array<ck::index_t, 2> input_shape{static_cast<ck::index_t>(*in_h),
-    static_cast<ck::index_t>(*in_w)};
-  const std::array<ck::index_t, 2> kernel_shape{static_cast<ck::index_t>(kernel_h),
-    static_cast<ck::index_t>(kernel_w)};
-  const std::array<ck::index_t, 2> output_shape{static_cast<ck::index_t>(*out_h),
-    static_cast<ck::index_t>(*out_w)};
-
+  {% if is_first_op %}
+    const xnn_status status_init = xnn_initialize(nullptr);
+  {% endif %}
   {{exec_paths}}
-
+  return;
   throw std::runtime_error(
       "Unsupported workload for this conv2d specialization."
   );
@@ -126,8 +136,7 @@ void {{func_name}}(
   int64_t,
   int64_t,
   int64_t,
-  int64_t,
-  hipStream_t
+  int64_t
 );
 """
 )
@@ -147,8 +156,7 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}    {{kernel_h}},
 {{indent}}    {{kernel_w}},
 {{indent}}    {{stride}},
-{{indent}}    {{pad}},
-{{indent}}    stream
+{{indent}}    {{pad}}
 {{indent}});
 """
 )
@@ -184,23 +192,20 @@ def gen_function(
     NotImplementedError
         An error is raised if op_type is not max or average pooling.
     """
+    import cpu_lib
+
+    spec = RVVSpec()
+    dtype = spec.dtype_to_backend_type(func_attrs["inputs"][0]._attrs["dtype"])
     op_type = func_attrs["op"]
     func_name = func_attrs["name"]
     exec_path = func_attrs["exec_path"]
-    reduce_op = ""
+    exec_paths = ""
     if "max" in op_type:
-        reduce_op = "ck::ReduceTensorOp::MAX"
+        exec_paths = EXEC_TEMPLATE_MAX.render(indent="    ", DataName=dtype)
     elif "avg" in op_type:
-        reduce_op = "ck::ReduceTensorOp::AVG"
+        exec_paths = EXEC_TEMPLATE_AVG.render(indent="    ", DataName=dtype)
     else:
         raise NotImplementedError
-    instances = {}
-    instance_decl = ""
-    for key, _ in exec_path.items():
-        fname = "f" + sha1(key.encode()).hexdigest()
-        inst = INSTANCE_TEMPLATE.render(name=fname, reduce_func=reduce_op)
-        instances[key] = inst
-        instance_decl += inst
     shape_eval_func = shape_eval_template.render(
         indent="  ",
         dtype="int64_t ",
@@ -222,16 +227,12 @@ def gen_function(
         y_dim3="*in_ch",
     )
     shape_func = shape_eval_func + shape_save_func
-    exec_paths = ""
-    for key in instances:
-        fname = "f" + sha1(key.encode()).hexdigest()
-        program = EXEC_TEMPLATE.render(indent="    ", instance=fname)
-        exec_inst = exec_cond_template.render(indent="  ", cond=key, program=program)
-        exec_paths += exec_inst
+    match = re.search(r'(\d+)$', func_name)
+    _LOGGER.info(f"match.group(1) = {match.group(1)}")
     return SRC_TEMPLATE.render(
-        instances=instance_decl,
         function_name=func_name,
         shape_function=shape_func,
+        is_first_op = (match.group(1) == '0'),
         exec_paths=exec_paths,
     )
 
