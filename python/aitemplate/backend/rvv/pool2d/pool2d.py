@@ -36,21 +36,21 @@ EXEC_TEMPLATE_AVG = jinja2.Template(
 {{indent}}CHECK_NE(nullptr, op_avg);
 {{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op(op_avg, xnn_delete_operator);
 
-{{indent}}size_t workspace_size = 0;
-{{indent}}size_t workspace_alignment = 0;
+{{indent}}size_t w_size = 0;
+{{indent}}size_t w_align = 0;
 {{indent}}CHECK_EQ(
 {{indent}}  xnn_status_success,
 {{indent}}  xnn_reshape_average_pooling2d_nhwc_f32(
 {{indent}}    op_avg, NI, HI, WI,
 {{indent}}    CI, /*input_pixel_stride=*/CI, /*output_pixel_stride=*/CO,
-{{indent}}    &workspace_size, &workspace_alignment,
+{{indent}}    &w_size, &w_align,
 {{indent}}    /*output_height_out=*/nullptr, /*output_width_out=*/nullptr,
 {{indent}}    /*threadpool=*/nullptr));
-{{indent}}CHECK_LE(workspace_alignment, 16);
-{{indent}}std::vector<char> workspace_vector(workspace_size + workspace_alignment + 16);
+{{indent}}CHECK_LE(w_align, 16);
+{{indent}}std::vector<char> workspace_vector(w_size + w_align + 16);
 {{indent}}void* maybe_aligned_workspace = workspace_vector.data();
 {{indent}}void* aligned_workspace = \
-    (void*)((intptr_t)maybe_aligned_workspace + workspace_alignment - (intptr_t)maybe_aligned_workspace % workspace_alignment);
+    (void*)((intptr_t)maybe_aligned_workspace + w_align - (intptr_t)maybe_aligned_workspace % w_align);
 {{indent}}CHECK_EQ(xnn_status_success, xnn_setup_average_pooling2d_nhwc_f32(op_avg, aligned_workspace, (float*)(in_ptr), (float*)(out_ptr)));
 {{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(op_avg, /*threadpool=*/nullptr));
 """

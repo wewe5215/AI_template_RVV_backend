@@ -33,7 +33,7 @@ from aitemplate.backend.rvv.conv2d import *
 # from aitemplate.backend.rvv.jagged import *
 # from aitemplate.backend.rvv.layernorm_sigmoid_mul import *
 # from aitemplate.backend.rvv.padding import *
-# from aitemplate.backend.rvv.pool2d import *
+from aitemplate.backend.rvv.pool2d import *
 # from aitemplate.backend.rvv.reduce import *
 # from aitemplate.backend.rvv.softmax import *
 # from aitemplate.backend.rvv.tensor import *
