@@ -16,6 +16,11 @@
 
 #include <stdexcept>
 #include <string>
+#include <mutex>
+#include <condition_variable>
+#include <unordered_map>
+#include <vector>
+#include <atomic>
 
 namespace ait {
 
@@ -53,7 +58,8 @@ class ModelBase {
         unique_workspace_size_{unique_workspace_size},
         num_inputs_(num_inputs),
         num_outputs_(num_outputs),
-        constants_(constants) {
+        constants_(constants),
+        run_finished_(true) {
     global_workspace_ =
         static_cast<uint8_t*>(workspace_.get()) + unique_workspace_size;
     unique_workspace_ = static_cast<uint8_t*>(workspace_.get());
@@ -71,11 +77,16 @@ class ModelBase {
   void Run(StreamType stream, bool graph_mode) {
     auto* model = static_cast<ModelType*>(this);
     model->SetUpInputsOutputs();
-    run_finished_ = false;
+    {
+      std::lock_guard<std::mutex> lk(cv_m);
+      run_finished_.store(false);
+    }
     model->RunImpl(stream);
-    // fixme:the following code need to be removed
-    model->DeviceToDeviceCopies(stream);
-    run_finished_ = true;
+    {
+      std::lock_guard<std::mutex> lk(cv_m);
+      run_finished_.store(true);
+    }
+    cv.notify_one();
   }
 
   void Profile(StreamType stream, size_t iters, const std::string& filename) {
@@ -85,7 +96,8 @@ class ModelBase {
   }
 
   bool IsPending() {
-    auto query = run_finished_;
+    std::unique_lock<std::mutex> lk(cv_m);
+    auto query = run_finished_.load();
     if (query == false) {
       return true;
     }
@@ -95,8 +107,10 @@ class ModelBase {
     return false;
   }
 
-  bool WaitForCompletion() {
-    return run_finished_;
+  void WaitForCompletion() {
+    std::unique_lock<std::mutex> lk(cv_m);
+    cv.wait(lk, [this] { return run_finished_.load(); });
+    std::cout << "CPU synchronization code executed.\n";
   }
 
   size_t NumInputs() const {
@@ -169,13 +183,10 @@ class ModelBase {
     }
   }
 
-
  protected:
-  // This event tracks when the inference is finished
-  // so that this Model may be reclaimed by its owning
-  // ModelContainer.
-  bool run_finished_;
-  // A blob of memory used for storing intermediate tensors.
+  std::condition_variable cv;
+  std::mutex cv_m;
+  std::atomic<bool> run_finished_;
   Ptr blob_;
   // Memory for constants that were folded into the *.so. Unowned by Model,
   // owned by ModelContainer.

@@ -468,10 +468,7 @@ void ModelContainer::WaitForAllModels(bool include_constant_folder) {
   // Wait for all on-going inferences to finish.
   for (auto* model : pending_models_) {
     try {
-      if (!model->WaitForCompletion()) {
-          LOG(WARNING)
-              << "Model inferencing.";
-      }
+      model->WaitForCompletion();
       // Something has gone horribly wrong if we hit these catch cases, but
       // there's not much we can do about it. Just put the model back into the
       // pool and carry on with folding.
