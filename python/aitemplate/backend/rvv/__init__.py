@@ -28,11 +28,11 @@ from aitemplate.backend.rvv.conv2d import *
 # from aitemplate.backend.rvv.elementwise import *
 # from aitemplate.backend.rvv.embedding import *
 # from aitemplate.backend.rvv.gemm_special import *
-# from aitemplate.backend.rvv.gemm_universal import *
+from aitemplate.backend.rvv.gemm_universal import *
 # from aitemplate.backend.rvv.gemm_epilogue_vistor import *
 # from aitemplate.backend.rvv.jagged import *
 # from aitemplate.backend.rvv.layernorm_sigmoid_mul import *
-# from aitemplate.backend.rvv.padding import *
+from aitemplate.backend.rvv.padding import *
 from aitemplate.backend.rvv.pool2d import *
 # from aitemplate.backend.rvv.reduce import *
 # from aitemplate.backend.rvv.softmax import *
