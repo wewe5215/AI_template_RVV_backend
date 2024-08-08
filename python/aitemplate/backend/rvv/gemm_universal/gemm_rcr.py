@@ -46,7 +46,10 @@ ARGS_PARSER_TEMPLATE = jinja2.Template(
 
 @registry.reg("rvv.gemm_rcr.config")
 def gemm_rcr_config(func_attrs, dtype="float16"):
-    common.make_fproc(func_attrs, RCR, include_cutlass_3x_ops=False)
+    func_attrs["op_instance"] = common.extract_config(
+        dtype=func_attrs["inputs"][0].dtype(),
+        layout=RCR
+    )
 
 
 
@@ -56,8 +59,6 @@ def common_gen_profiler(
     profiler_filename,
     dim_info_dict,
     src_template,
-    problem_args_template,
-    problem_args_template_cutlass_3x=None,
     bias_ptr_arg=None,
     extra_code="",
 ):
@@ -70,10 +71,8 @@ def common_gen_profiler(
         profiler_filename=profiler_filename,
         dim_info_dict=dim_info_dict,
         src_template=src_template,
-        problem_args_template=problem_args_template,
-        problem_args_template_cutlass_3x=problem_args_template_cutlass_3x,
         args_parser_template=ARGS_PARSER_TEMPLATE,
-        support_split_k=True,
+        support_split_k=False,
         output_addr_calculator=output_addr_calculator,
         bias_ptr_arg=bias_ptr_arg,
         extra_code=extra_code,

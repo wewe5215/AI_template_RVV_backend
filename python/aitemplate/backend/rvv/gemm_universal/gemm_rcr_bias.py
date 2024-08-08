@@ -37,7 +37,10 @@ using elem_output_type = {{elem_output_type}};
 
 @registry.reg("rvv.gemm_rcr_bias.config")
 def gemm_rcr_config(func_attrs, dtype="float16"):
-    common.make_fproc(func_attrs, RCR, include_cutlass_3x_ops=False)
+    func_attrs["op_instance"] = common.extract_config(
+        dtype=func_attrs["inputs"][0].dtype(),
+        layout=RCR
+    )
 
 
 
@@ -60,8 +63,6 @@ def gen_profiler(func_attrs, workdir, profiler_filename, dim_info_dict):
         profiler_filename=profiler_filename,
         dim_info_dict=dim_info_dict,
         src_template=common_bias.SRC_TEMPLATE,
-        problem_args_template="",
-        problem_args_template_cutlass_3x="",
         bias_ptr_arg="memory_pool->RequestTensorByIdx(3)",
         extra_code=extra_code,
     )
@@ -93,7 +94,6 @@ def gen_function(
         src_template=common_bias.SRC_TEMPLATE,
         exec_cond_template=exec_cond_template,
         problem_args="",
-        problem_args_cutlass_3x="",
         input_ndims=input_ndims,
         weight_ndims=weight_ndims,
         output_ndims=output_ndims,

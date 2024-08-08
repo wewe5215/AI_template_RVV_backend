@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Tuple
 import jinja2
 
 from aitemplate.backend.backend_spec import RVVSpec
-
+from aitemplate.backend.rvv.gemm_universal.layout import RCR
 from aitemplate.backend.common import gemm_common, tensor_accessor_codegen
 from aitemplate.backend.target import Target
 
@@ -204,9 +204,6 @@ void {{func_name}}(
   void*,
   void*,
   uint8_t*,
-{% if support_split_k %}
-  int,
-{% endif %}
 {% for idx in range(input_ndims) %}
   int64_t*,
 {% endfor %}
@@ -214,7 +211,7 @@ void {{func_name}}(
   int64_t*,
 {% endfor %}
 {% for idx in range(input_ndims) %}
-  int64_t*,
+  int64_t*{% if not loop.last %},{% endif %}
 {% endfor %}
 );
 """
@@ -232,8 +229,6 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}    {{bias_ptr}},
 {% endif %}
 {{indent}}    {{c_ptr}},
-{{indent}}    global_workspace_,
-{{indent}}    {{split_k}},
 {% for dim in adims %}
 {{indent}}    {{dim}},
 {% endfor %}
@@ -241,9 +236,8 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}    {{dim}},
 {% endfor %}
 {% for dim in cdims %}
-{{indent}}    {{dim}},
+{{indent}}    {{dim}}{% if not loop.last %},{% endif %}
 {% endfor %}
-{{indent}}    stream
 {{indent}});
 {{indent}}}
 """
@@ -254,18 +248,10 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
     """
 {{indent}}{
 {{indent}}
-{{indent}}{{instance_name}} {{gemm_op}};
-{{indent}}const char *gemm_op_name = "{{gemm_op_name}}";
 {{indent}}int ret = 0;
 {{indent}}try {
 {{indent}}ret = {{func_name}}(
-{{indent}}    {{gemm_op}},
-{{indent}}    gemm_op_name,
 {{indent}}    memory_pool.get(),
-{{indent}}    global_workspace_,
-{% if support_split_k %}
-{{indent}}    {{split_k}},
-{% endif %}
 {% for dim in adims %}
 {{indent}}    {{dim}},
 {% endfor %}
@@ -273,9 +259,8 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
 {{indent}}    {{dim}},
 {% endfor %}
 {% for dim in cdims %}
-{{indent}}    {{dim}},
+{{indent}}    {{dim}}{% if not loop.last %},{% endif %}
 {% endfor %}
-{{indent}}    stream
 {{indent}});
 {{indent}}} catch (...) {}
 {{indent}}if (ret != 0)
@@ -292,21 +277,12 @@ TENSOR_DECL_TEMPLATE = jinja2.Template(
   int64_t b_ptr_sz = b_dim0 * b_dim1;
   int64_t c_ptr_sz = c_dim0 * c_dim1;
 
-  // The value 1 is used to force ptr_max_sz to be non-zero
-  int64_t ptr_max_sz = std::max<int64_t>({1, a_ptr_sz, b_ptr_sz, c_ptr_sz});
-
-  size_t one_copy_sz = a_ptr_sz + b_ptr_sz + c_ptr_sz;
-{% if has_bias %}
-  one_copy_sz += c_dim1;
-{%endif%}
-  int64_t mem_pool_sz = memory_pool->ComputeMemPoolSize(one_copy_sz, ptr_max_sz, device_properties.l2CacheSize);
-
-  memory_pool->AllocateTensor(a_ptr_sz, mem_pool_sz);  // a_ptr: index 0
-  memory_pool->AllocateTensor(b_ptr_sz, mem_pool_sz);  // b_ptr: index 1
-  memory_pool->AllocateTensor(c_ptr_sz, mem_pool_sz, /*is_output*/true);  // c_ptr: index 2
+  memory_pool->AllocateTensor(a_ptr_sz);  // a_ptr: index 0
+  memory_pool->AllocateTensor(b_ptr_sz);  // b_ptr: index 1
+  memory_pool->AllocateTensor(c_ptr_sz, /*is_output*/true);  // c_ptr: index 2
 
 {% if has_bias %}
-  memory_pool->AllocateTensor(c_dim1, mem_pool_sz);  // bias_ptr: index 3
+  memory_pool->AllocateTensor(c_dim1);  // bias_ptr: index 3
 {% endif %}
 """
 )
@@ -324,35 +300,23 @@ size_t GLOBAL_WORKSPACE_SIZE = 0;
 template <typename DType>
 struct ProfilerMemoryPool;
 
-template <typename GemmInstance>
 int benchmark_{{function_name}} (
 {% if is_group_gemm %}
-    int sharedMemPerMultiprocessor,
-    int multiProcessorCount,
-    uint8_t* global_workspace_,
-    int problem_count,
-    cutlass::gemm::GemmCoord* problem_sizes_device,
     void **ptr_A,
     void **ptr_B,
     void **ptr_C,
-{% if has_bias %}
+    {% if has_bias %}
     void **ptr_bias,
-{% endif %}
+    {% endif %}
     int64_t* lda,
     int64_t* ldb,
     int64_t* ldc,
-{% if has_bias %}
+    {% if has_bias %}
     int64_t* ldd,
-{% endif %}
-    int occupancy,
-    cudaStream_t stream
-
+    {% endif %}
+    int occupancy
 {% else %}
     ProfilerMemoryPool<{{elem_type}}>* memory_pool,
-    uint8_t* global_workspace_,
-{% if support_split_k %}
-    int split_k,
-{% endif %}
 {% for idx in range(input_ndims) %}
     int64_t* a_dim{{idx}},
 {% endfor %}
@@ -360,34 +324,25 @@ int benchmark_{{function_name}} (
     int64_t* b_dim{{idx}},
 {% endfor %}
 {% for idx in range(output_ndims) %}
-    int64_t* c_dim{{idx}},
+    int64_t* c_dim{{idx}}{% if not loop.last %},{% endif %}
 {% endfor %}
-    cudaStream_t stream
 {% endif %}
   ) {
   // warmup
   for (int i = 0; i < 5; ++i) {
     {{func_call}}
   }
-  cudaEvent_t events[2];
-  for (auto & event : events) {
-    cudaEventCreate(&event);
-  }
-  cudaEventRecord(events[0], stream);
+  struct timespec start, end;
+  clock_gettime(CLOCK_MONOTONIC, &start);
   for (int i = 0; i < 10; ++i) {
     {{func_call}}
   }
-  cudaEventRecord(events[1], stream);
-  cudaEventSynchronize(events[1]);
-  float runtime_ms = 0;
-  cudaEventElapsedTime(&runtime_ms, events[0], events[1]);
-  for (auto event : events) {
-    (void)cudaEventDestroy(event);
-  }
+  clock_gettime(CLOCK_MONOTONIC, &end);
+  float runtime_ms = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e6;
   // TODO: output workspace
   if (runtime_ms < 0.00001) {
       throw std::runtime_error(
-      "OOB in cutlass."
+      "OOB in xnnpack."
     );
   }
   std::cout << "TIME:" << runtime_ms << ",";
@@ -397,122 +352,55 @@ int benchmark_{{function_name}} (
 
 template <typename DType>
 struct ProfilerMemoryPool {
-  ProfilerMemoryPool() : shared_input_tensor(false) {
+  ProfilerMemoryPool() {
     std::random_device rd;
     gen = std::mt19937(rd());
     uniform_dist = std::uniform_int_distribution<int64_t>(1, 48964896);
-    offsets.reserve(512);
-    strides.reserve(512);
-    copies.reserve(512);
     ptrs.reserve(512);
-    blobs.reserve(512);
   }
-  ~ProfilerMemoryPool() {}
-
-  int64_t ComputeMemPoolSize(size_t one_copy_sz, size_t ptr_max_sz, size_t l2_cache_bytes) {
-    int times_covers_l2_cache = (int)std::ceil(l2_cache_bytes / sizeof(DType) / ptr_max_sz);
-    int64_t mem_pool_sz = std::max(2, std::min(512, times_covers_l2_cache));
-    size_t free_global_mem = 0;
-    size_t total_global_mem = 0;
-    cudaError_t cuda_error = cudaMemGetInfo(&free_global_mem, &total_global_mem);
-    if (cuda_error != cudaSuccess) {
-      auto error_msg = std::string("Failed to invoke cudaMemGetInfo: ") +
-          cudaGetErrorName(cuda_error) + ", at " + __FILE__;
-      throw std::runtime_error(error_msg);
+  ~ProfilerMemoryPool() {
+    for (void* ptr : ptrs) {
+      free(ptr);
     }
-    size_t single_copy_nbytes = one_copy_sz * sizeof(DType);
-    while (mem_pool_sz > 0) {
-      size_t nbytes = single_copy_nbytes * mem_pool_sz;
-      if (nbytes < free_global_mem) {
-        break;
+  }
+
+  int AllocateTensor(int64_t size, bool is_output = false) {
+    if (size <= 0) {
+      throw std::invalid_argument("Size must be positive");
+    }
+    DType* ptr = (DType*)malloc(size * sizeof(DType));
+    if (!ptr) {
+      throw std::bad_alloc();
+    }
+
+    if(is_output){
+      memset(ptr, 0, size * sizeof(DType));
+    }
+    else{
+      for (int64_t i = 0; i < size; ++i) {
+        ptr[i] = static_cast<DType>(uniform_dist(gen));
       }
-      mem_pool_sz--;
-    }
-
-    if (mem_pool_sz <= 1) {
-      size_t minimal_required_nbytes = ptr_max_sz * sizeof(DType);
-      if (minimal_required_nbytes > free_global_mem) {
-        // We absolutely run out of memory
-        auto error_msg = std::string("no enough GPU memory: requested ") +
-            std::to_string(minimal_required_nbytes) + ", available: " +
-            std::to_string(free_global_mem) + ", ptr_max_sz: " +
-            std::to_string(ptr_max_sz) + ", at " + __FILE__;
-        throw std::runtime_error(error_msg);
-      } else {
-        // Let's try to allocate a single blob that is large enough to hold
-        // all input tensors. Note that this is still an approximation, because
-        // we may still hit cudaErrorMemoryAllocation error while allocating
-        // memory for the output. We will rely on cudaMalloc to throw out
-        // an exception in such a case.
-        shared_input_tensor = true;
-        AllocateGaussianTensor(ptr_max_sz);
-      }
-      return 1;
-    }
-    return mem_pool_sz;
-  }
-
-  DType* AllocateGaussianTensor(int64_t size) {
-    size_t length = size * sizeof(DType);
-    blobs.emplace_back(length);
-    DType* ptr = reinterpret_cast<DType*>(blobs.back().get());
-
-    uint64_t seed = uniform_dist(gen);
-    double mean = 0.f;
-    double std = 1.f;
-
-    cutlass::reference::device::BlockFillRandomGaussian(ptr, size, seed, mean,
-                                                        std);
-
-    return ptr;
-  }
-
-  int AllocateTensor(int64_t size, int64_t copy, bool is_output = false) {
-    offsets.push_back(0);
-    strides.push_back(size);
-    copies.push_back(copy);
-    DType *ptr;
-    if (!is_output && shared_input_tensor) {
-      ptr = reinterpret_cast<DType*>(blobs.back().get());
-    } else {
-      ptr = AllocateGaussianTensor(size * copy);
     }
     ptrs.push_back(reinterpret_cast<void*>(ptr));
     return ptrs.size() - 1;
   }
 
   DType* RequestTensorByIdx(int idx) {
-    auto copy = copies.at(idx);
-    auto offset = offsets.at(idx);
-    auto stride = strides.at(idx);
-    DType* ptr = reinterpret_cast<DType*>(ptrs.at(idx));
-    ptr += offset;
-    offset += stride;
-    if (offset == copy * stride) {
-        offset = 0;
+    if (idx < 0 || idx >= ptrs.size()) {
+      throw std::out_of_range("Index out of range");
     }
-    offsets[idx] = offset;
-    return ptr;
+    return reinterpret_cast<DType*>(ptrs.at(idx));
   }
 
-  std::vector<int64_t> offsets;
-  std::vector<int64_t> strides;
-  std::vector<int64_t> copies;
   std::vector<void*> ptrs;
-  std::vector<cutlass::DeviceAllocation<uint8_t> > blobs;
   std::mt19937 gen;
   std::uniform_int_distribution<int64_t> uniform_dist;
-  // make a shared blob to hold all inputs in cases we do not have
-  // enough GPU memory
-  bool shared_input_tensor;
 };
 
 
 int main(int argc, char** argv) {
   auto memory_pool = std::make_unique<ProfilerMemoryPool<{{elem_type}}>>();
   {{args_parse}}
-
-  uint8_t* global_workspace_ = nullptr;
 
   {{tensor_decl}}
 
@@ -533,103 +421,6 @@ def has_d(func_attrs):
 def has_d1(func_attrs):
     return func_attrs.get("num_sources", 0) >= 2
 
-
-def get_gemm_instance_template_params(
-    op_def: str,
-    kernel_config: Tuple[str, int, int] = ("cutlass::gemm::device::Gemm", 21, 3),
-) -> List[str]:
-    """
-    For a given op_def string generated by cutlass's gemm emiter, parse and
-    return the gemm instance's template parameters.
-    kernel_config is a tuple used for finding kernel params. The first element
-    of kernel_config is the kernel kind, the second is the expected number
-    of params, and the third is the index offset of alignment values in the
-    full op_def string.
-    """
-    kernel_kind, expected_num_params, _ = kernel_config
-    params = re.findall(rf"{kernel_kind}<([\s\S]+)>;", op_def)
-    assert len(params) == 1
-    param = params[0]
-    gemm_universal_params = param.strip().split("\n")
-    gemm_universal_params = [param.strip(",") for param in gemm_universal_params]
-    assert len(gemm_universal_params) == expected_num_params, (
-        f"expected len(gemm_universal_params) to be {expected_num_params}, but got "
-        f"{len(gemm_universal_params)}, {gemm_universal_params=}"
-    )
-    return gemm_universal_params
-
-
-def get_tensor_accessor_alignments(func_attrs):
-    """Infer the A, B, and epilogue alignments from the respective TAs."""
-    input_accessors = func_attrs["input_accessors"]
-    a_alignment = tensor_accessor_codegen.find_max_alignment_for_accessor(
-        input_accessors[0]
-    )
-    b_alignment = tensor_accessor_codegen.find_max_alignment_for_accessor(
-        input_accessors[1]
-    )
-    output_accessor = func_attrs["output_accessors"][0]
-    epilogue_alignment = tensor_accessor_codegen.find_max_alignment_for_accessor(
-        output_accessor
-    )
-
-    # if the last dim is dynamic, force align=1
-    if not isinstance(output_accessor.original_shapes[-1], IntImm):
-        epilogue_alignment = 1
-
-    return a_alignment, b_alignment, epilogue_alignment
-
-
-def update_alignments_in_gemm_instance(
-    op_def: str,
-    func_attrs: Dict[str, Any],
-    for_profiler: bool,
-    kernel_config: Tuple[str, int, int] = ("cutlass::gemm::device::Gemm", 21, 3),
-) -> str:
-    """
-    update kAlignmentA, kAlignmentB, and epilogue_alignment in op_def,
-    which is a gemm instance emitted by the gemm instance emitter of cutlass.
-    kernel_config is a tuple used for finding kernel params. The first element
-    of kernel_config is the kernel kind, the second is the expected number
-    of params, and the third is the index offset of alignment values in the
-    full op_def string.
-    """
-    if for_profiler:
-        return op_def
-
-    a_alignment, b_alignment, epilogue_alignment = get_tensor_accessor_alignments(
-        func_attrs
-    )
-
-    gemm_params = get_gemm_instance_template_params(op_def, kernel_config)
-    epilogue_align_idx = 11
-    a_align_idx = 17
-    b_align_idx = 18
-    a_curr_align = gemm_params[a_align_idx].strip()
-    b_curr_align = gemm_params[b_align_idx].strip()
-    epilogue_curr_align = gemm_params[epilogue_align_idx].strip()
-    a_alignment = min(a_alignment, int(a_curr_align))
-    b_alignment = min(b_alignment, int(b_curr_align))
-    epilogue_alignment = min(epilogue_alignment, int(epilogue_curr_align))
-    instance_lines = op_def.split("\n")
-    # a_align_idx + idx_offset in the full instance string
-    idx_offset = kernel_config[2]
-
-    def _replace_align(align_idx, curr_align, alignment):
-        curr_align_line = instance_lines[align_idx + idx_offset]
-        assert curr_align == curr_align_line.strip(
-            " ,"
-        ), f"expected {curr_align=} equal to {curr_align_line=}"
-        instance_lines[align_idx + idx_offset] = curr_align_line.replace(
-            curr_align, str(alignment)
-        )
-
-    _replace_align(a_align_idx, a_curr_align, a_alignment)
-    _replace_align(b_align_idx, b_curr_align, b_alignment)
-    _replace_align(epilogue_align_idx, epilogue_curr_align, epilogue_alignment)
-    return "\n".join(instance_lines)
-
-
 def universal_gemm_instance(
     op_def: str,
     func_attrs: Dict[str, Any],
@@ -649,28 +440,12 @@ def emit_instance(
 
 
 def extract_config(
-    f_proc_op,
-    f_kernel_name="",
-    include_cutlass_3x_ops=False,
+    dtype,
+    layout=RCR
 ):
-    import cutlass_lib
+    import cpu_lib
 
-    op_kind = cutlass_lib.library.OperationKind.Gemm
-    gemm_kinds = {cutlass_lib.library.GemmKind.Universal}
-    if include_cutlass_3x_ops:
-        gemm_kinds.add(cutlass_lib.library.GemmKind.Universal3x)
-    gemm_ops = OrderedDict()
-    extract_ops = list(Target.current()._operators[op_kind].items())
-
-    for _, value in extract_ops:
-        op = value[0]
-        if op.gemm_kind in gemm_kinds:
-            ret = f_proc_op(op)
-            if len(ret) > 0:
-                for op_inst in ret:
-                    key = f_kernel_name(op_inst)
-                    gemm_ops[key] = op_inst
-    return gemm_ops
+    return ""
 
 def gen_function(
     func_attrs,
@@ -687,7 +462,6 @@ def gen_function(
     input_addr_calculator="",
     output_addr_calculator="",
     extra_code="",
-    problem_args_cutlass_3x="",
 ):
     backend_spec = RVVSpec()
     elem_input_type = backend_spec.dtype_to_lib_type(
@@ -731,7 +505,6 @@ def gen_function(
         program = EXEC_TEMPLATE.render(
             indent="    ",
             instance=fname,
-            support_split_k=support_split_k,
         )
         exec_inst = exec_cond_template.render(
             indent="  ",
@@ -811,15 +584,13 @@ def gen_profiler(
     profiler_filename,
     dim_info_dict,
     src_template,
-    problem_args_template,
     args_parser_template,
     support_split_k=False,
     output_addr_calculator="",
     bias_ptr_arg=None,
     extra_code="",
-    problem_args_template_cutlass_3x=None,
 ):
-    import cutlass_lib
+    import cpu_lib
 
     op_type = func_attrs["op"]
     op_instance = func_attrs["op_instance"]
@@ -848,7 +619,6 @@ def gen_profiler(
         indent="  ",
         instance=instance_name_base,
         is_profiler=True,
-        support_split_k=support_split_k,
     )
     input_output_checks = INPUT_OUTPUT_CHECKS_TEMPLATE.render(
         input_ndims=ndims,

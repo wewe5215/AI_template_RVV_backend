@@ -23,7 +23,6 @@ import jinja2
 INSTANCE_TEMPLATE = jinja2.Template(
     """
 {{config}}
-using {{name}} = {{config_name}};
 """
 )
 
@@ -34,56 +33,24 @@ SRC_TEMPLATE = jinja2.Template(
 #include <memory>
 #include <random>
 #include <vector>
-#include <iostream>
-#include <cuda_bf16.h>
-
-#include "cutlass/cutlass.h"
-#include "cutlass/gemm/device/gemm_universal.h"
-#include "cutlass/util/host_tensor.h"
-#include "cutlass/util/reference/host/tensor_fill.h"
-#include "cutlass/epilogue/thread/linear_combination_silu.h"
-#include "cutlass/util/reference/device/tensor_fill.h"
-#include "cutlass/util/device_memory.h"
-
-#include "cutlass/gemm/gemm.h"
-#include "cutlass/numeric_types.h"
-#include "cutlass/gemm/kernel/gemm_universal.hpp"
-#include "cutlass/gemm/collective/collective_builder.hpp"
-#include "cutlass/gemm/device/gemm_universal_adapter.h"
-#include "cutlass/epilogue/collective/collective_builder.hpp"
-
-using bfloat16 = nv_bfloat16;
+#include <sstream>
+#include <memory>
+#include <ctime>
+#include <cstdlib>
+#include <stdexcept>
+#include <cstring> // For memset
 
 {{extra_code}}
 
-#define CUTLASS_CHECK(status)                                                         \\
-  {                                                                                   \\
-    cutlass::Status error = status;                                                   \\
-    if (error != cutlass::Status::kSuccess) {                                         \\
-      auto msg = std::string("[") + __FILE__ + "] Got cutlass error: " +              \\
-          cutlassGetStatusString(error) + " at: " + std::to_string(__LINE__);         \\
-      std::cerr << msg << std::endl;                                                  \\
-      throw std::runtime_error(msg);                                                  \\
-    }                                                                                 \\
-  }
 
 {{instances}}
 
-{% if is_profiler %}
-template <typename GemmInstance>
+
 void {{function_name}} (
-    GemmInstance& gemm_op,
-{% else %}
-void {{function_name}} (
-{% endif %}
     void* a_ptr,
     void* b_ptr,
     void* bias_ptr,
     void* c_ptr,
-    uint8_t* workspace,
-{% if support_split_k %}
-    int split_k,
-{% endif %}
 {% for idx in range(input_ndims) %}
     int64_t* a_dim{{idx}},
 {% endfor %}
@@ -91,9 +58,12 @@ void {{function_name}} (
     int64_t* b_dim{{idx}},
 {% endfor %}
 {% for idx in range(input_ndims) %}
+  {% if idx == input_ndims - 1 %}
+    int64_t* c_dim{{idx}}
+  {% else %}
     int64_t* c_dim{{idx}},
+  {% endif %}
 {% endfor %}
-  cudaStream_t stream
   ) {
   {{shape_eval}}
   {{input_addr_calculator}}
@@ -133,9 +103,6 @@ void {{func_name}}(
   void*,
   void*,
   uint8_t*,
-{% if support_split_k %}
-    int,
-{% endif %}
 {% for idx in range(input_ndims) %}
   int64_t*,
 {% endfor %}
@@ -143,9 +110,8 @@ void {{func_name}}(
   int64_t*,
 {% endfor %}
 {% for idx in range(input_ndims) %}
-  int64_t*,
+    int64_t*{% if not loop.last %},{% endif %}
 {% endfor %}
-  cudaStream_t
 );
 """
 )
