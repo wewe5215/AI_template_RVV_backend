@@ -46,8 +46,12 @@ class Nhcw3To4TestCase(unittest.TestCase):
             Y_np[:, :, :, 0] = X_np[:, :, :, 0]
             Y_np[:, :, :, 1] = X_np[:, :, :, 1]
             Y_np[:, :, :, 2] = X_np[:, :, :, 2]
-            Y_pt = torch.from_numpy(Y_np).cuda()
-            X_pt = torch.from_numpy(X_np).cuda()
+            if target.name() == "cuda":
+                Y_pt = torch.from_numpy(Y_np).cuda()
+                X_pt = torch.from_numpy(X_np).cuda()
+            else:
+                Y_pt = torch.from_numpy(Y_np)
+                X_pt = torch.from_numpy(X_np)
             y = torch.empty_like(Y_pt)
             module.run_with_tensors([X_pt], [y])
             self.assertTrue(torch.allclose(Y_pt, y, atol=1e-2, rtol=1e-2))

@@ -13,7 +13,7 @@
 #  limitations under the License.
 #
 """
-ROCM pool2d init
+RVV pool2d init
 """
 from aitemplate.backend.rvv.pool2d import avg_pool2d, max_pool2d
 

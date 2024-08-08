@@ -13,7 +13,7 @@
 #  limitations under the License.
 #
 """
-CUDA padding init
+RVV padding init
 """
 from . import nhwc3to4, nhwc3to8, pad_last_dim
 

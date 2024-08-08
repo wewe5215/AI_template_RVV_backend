@@ -13,12 +13,12 @@
 #  limitations under the License.
 #
 """
-CUDA codegen for nhwc3to4 op
+RVV codegen for nhwc3to4 op
 """
 import jinja2
 
 from ... import registry
-from ...backend_spec import ROCMSpec
+from ...backend_spec import RVVSpec
 
 # pylint: disable=C0301,W0613,W0612
 
@@ -32,8 +32,7 @@ void {{func_name}}(
   int64_t*,
   int64_t*,
   int64_t*,
-  int64_t*,
-  hipStream_t
+  int64_t*
 );
 """
 )
@@ -48,8 +47,7 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}    {{p_in_w}},
 {{indent}}    {{p_out_batch}},
 {{indent}}    {{p_out_h}},
-{{indent}}    {{p_out_w}},
-{{indent}}    stream
+{{indent}}    {{p_out_w}}
 {{indent}});
 """
 )
@@ -57,81 +55,32 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 
 EXEC_TEMPLATE = jinja2.Template(
     """
-{{indent}}nhwc3to4_launcher<{{elem_input_type}}>(
-{{indent}}    static_cast<const {{elem_input_type}}*>(in_ptr),
-{{indent}}    static_cast<{{elem_input_type}}*>(out_ptr),
-{{indent}}    NI,
-{{indent}}    HI,
-{{indent}}    WI,
-{{indent}}    stream
-{{indent}});
+{{indent}}memset(out_ptr, 0, NO * HO * WO * 4 * sizeof(float));
+{{indent}}float* X = static_cast<float*>(in_ptr);
+{{indent}}float* Y = static_cast<float*>(out_ptr);
+{{indent}}for (int b = 0; b < NI; ++b) {
+{{indent}}    for (int i = 0; i < HI; ++i) {
+{{indent}}        #pragma unroll
+{{indent}}        for (int j = 0; j < WI; ++j) {
+{{indent}}            int idx_in = ((b * HI + i) * WI + j) * 3;
+{{indent}}            int idx_out = ((b * HI + i) * WI + j) * 4;
+{{indent}}            float32x4_t x_vals = vld1q_f32(&X[idx_in]);
+{{indent}}            vst1q_lane_f32(&Y[idx_out], x_vals, 0);
+{{indent}}            vst1q_lane_f32(&Y[idx_out + 1], x_vals, 1);
+{{indent}}            vst1q_lane_f32(&Y[idx_out + 2], x_vals, 2);
+{{indent}}        }
+{{indent}}    }
+{{indent}}}
 {{indent}}return;
 """
 )
 
 SRC_TEMPLATE = jinja2.Template(
     """
-#include <hip/hip_fp16.h>
-#include <hip/hip_runtime.h>
 
-// fast kernel for c_in = 3 & c_out = 4
-template <typename Tio, typename Telement, int element_in_Tio>
-__global__ void nhwc_padding_channel_3To4_kernel(const int32_t n,
-                                                 const int32_t h,
-                                                 const int32_t w,
-                                                 const Tio *input,
-                                                 Tio *output,
-                                                 const int32_t max_output_element,
-                                                 const int32_t max_input_element,
-                                                 const Tio zero_io,
-                                                 const Telement zero_element){
-  __shared__ Tio shm[192];
-  const int tidx = blockIdx.x * 192 + threadIdx.x;
-  const int threadidx = threadIdx.x;
-
-  shm[threadIdx.x] = tidx >= max_input_element ? zero_io : input[tidx];
-  __syncthreads();
-
-  const int ouput_offset = blockIdx.x * 256;
-  const int lower_bound = max_output_element < ouput_offset + 256 ? max_output_element : ouput_offset + 256;
-  for (int i = ouput_offset + threadidx, j = threadidx ; i < lower_bound ; i+=192, j+=192)
-  {
-    const Telement* shm_element = (const Telement*)shm + j*3*element_in_Tio/4;
-    Telement array[element_in_Tio];
-    #pragma unroll
-    for (int k = 0 ; k < element_in_Tio ; k++)
-      array[k] = ((k+1)%4 == 0) ? zero_element : shm_element[(k > 3) ? (k - 1) : k];
-    output[i] = *((const Tio *)array);
-  }
-}
-
-template <typename ElemT>
-void nhwc3to4_launcher(const ElemT* in_ptr,
-                       ElemT* out_ptr,
-                       int NI,
-                       int HI,
-                       int WI,
-                       hipStream_t stream) {
-  dim3 block(192);
-  const int nhw = NI * HI * WI;
-  const int nhwc = nhw * 3;
-  CHECK_EQ(nhw % 8, 0);
-  const int element_in_Tio = sizeof(int4) / sizeof(ElemT);
-  const int max_input_element = nhwc / element_in_Tio;
-  const int max_output_element = nhw * 4 / element_in_Tio;
-  const int4 zero_io = {0, 0, 0, 0};
-  const ElemT zero_element = static_cast<ElemT>(0.0f);
-  dim3 grid((nhwc + 192 * element_in_Tio - 1)/(192 * element_in_Tio));
-  nhwc_padding_channel_3To4_kernel<int4, ElemT, element_in_Tio><<<grid, block, 0, stream>>>
-          (NI, HI, WI,
-          (const int4 *)in_ptr,
-          (int4 *)out_ptr,
-          max_output_element,
-          max_input_element,
-          zero_io,
-          zero_element);
-}
-
+#include <arm_neon.h>
+#include <cstring> // for memset
+#include <iostream>
 void {{function_name}} (
     void* in_ptr,
     void* out_ptr,
@@ -140,8 +89,7 @@ void {{function_name}} (
     int64_t* in_w,
     int64_t* out_batch,
     int64_t* out_h,
-    int64_t* out_w,
-    hipStream_t stream
+    int64_t* out_w
 ) {
   {{shape_function}}
   {{exec_paths}}
@@ -172,7 +120,7 @@ def gen_function(func_attrs, template_path, shape_eval_template, shape_save_temp
         [description]
     """
     func_name = func_attrs["name"]
-    backend_spec = ROCMSpec()
+    backend_spec = RVVSpec()
     elem_input_type = backend_spec.dtype_to_backend_type(
         func_attrs["inputs"][0]._attrs["dtype"]
     )
