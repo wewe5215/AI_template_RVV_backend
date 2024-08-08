@@ -119,16 +119,9 @@ INPUT_OUTPUT_CHECKS_TEMPLATE = jinja2.Template(
 INSTANCE_TEMPLATE = jinja2.Template(
     """
 {{config}}
-using {{name}} = {{config_name}};
 """
 )
 
-INSTANCE_TEMPLATE_CUTLASS_3X = jinja2.Template(
-    """
-{{config}}
-using {{name}} = cutlass::gemm::device::GemmUniversalAdapter<{{config_name}}>;
-"""
-)
 
 SRC_TEMPLATE = jinja2.Template(
     """
@@ -136,58 +129,25 @@ SRC_TEMPLATE = jinja2.Template(
 #include <memory>
 #include <random>
 #include <vector>
-
-#include "cutlass/cutlass.h"
-#include "cutlass/gemm/device/gemm_universal.h"
-#include "cutlass/gemm/kernel/gemm_grouped.h"
-#include "cutlass/gemm/kernel/default_gemm_grouped.h"
-#include "cutlass/gemm/device/gemm_grouped.h"
-#include "cutlass/util/host_tensor.h"
-#include "cutlass/util/reference/host/tensor_fill.h"
-#include "cutlass/util/reference/device/tensor_fill.h"
-#include "cutlass/util/device_memory.h"
-
-#include "cutlass/gemm/gemm.h"
-#include "cutlass/numeric_types.h"
-#include "cutlass/gemm/kernel/gemm_universal.hpp"
-#include "cutlass/gemm/collective/collective_builder.hpp"
-#include "cutlass/gemm/device/gemm_universal_adapter.h"
-#include "cutlass/epilogue/collective/collective_builder.hpp"
-
-using bfloat16 = nv_bfloat16;
-
+#include <cstdio>
+#include <stdexcept>
+#include <cstdlib>
+#include <string>
+#include "xnnpack.h"
+#include "logging.h"
 {{extra_code}}
 
-#define CUTLASS_CHECK(status)                                                         \\
-  {                                                                                   \\
-    cutlass::Status error = status;                                                   \\
-    if (error != cutlass::Status::kSuccess) {                                         \\
-      auto msg = std::string("[") + __FILE__ + "] Got cutlass error: " +              \\
-          cutlassGetStatusString(error) + " at: " + std::to_string(__LINE__);         \\
-      std::cerr << msg << std::endl;                                                  \\
-      throw std::runtime_error(msg);                                                  \\
-    }                                                                                 \\
-  }
 
 {{instances}}
 
-{% if is_profiler %}
-template <typename GemmInstance>
+
 void {{function_name}} (
-    GemmInstance& gemm_op,
-{% else %}
-void {{function_name}} (
-{% endif %}
     void* a_ptr,
     void* b_ptr,
 {% if has_d %}
     void* d_ptr,
 {% endif %}
     void* c_ptr,
-    uint8_t* workspace,
-{% if support_split_k %}
-    int split_k,
-{% endif %}
 {% for idx in range(input_ndims) %}
     int64_t* a_dim{{idx}},
 {% endfor %}
@@ -195,9 +155,12 @@ void {{function_name}} (
     int64_t* b_dim{{idx}},
 {% endfor %}
 {% for idx in range(output_ndims) %}
+    {% if idx == output_ndims - 1 %}
+    int64_t* c_dim{{idx}}
+    {% else %}
     int64_t* c_dim{{idx}},
+    {% endif %}
 {% endfor %}
-    cudaStream_t stream
   ) {
   {{shape_eval}}
   {{input_addr_calculator}}
@@ -227,36 +190,8 @@ void {{function_name}} (
 
 EXEC_TEMPLATE = jinja2.Template(
     """
-//  TODO: cast to right dtype
-{{indent}}using ElementComputeEpilogue = typename {{instance}}::ElementAccumulator;
 
-{{indent}}using coord_t = cutlass::gemm::GemmCoord::Index;
-{{indent}}typename {{instance}}::Arguments arguments;
-
-{{indent}}if constexpr (cutlass::gemm::detail::IsCutlass3GemmKernel<typename {{instance}}::GemmKernel>::value) {
-{{indent}}arguments = {
-{{problem_args_cutlass_3x}}
-{{indent}}};
-{{indent}}} else {
-{{indent}}arguments = {
-{{problem_args}}
-{{indent}}};
-{{indent}}}
-
-{% if is_profiler %}
-{{indent}}size_t workspace_size = gemm_op.get_workspace_size(arguments);
-{{indent}}cutlass::device_memory::allocation<uint8_t> local_workspace(workspace_size);
-{{indent}}workspace = local_workspace.get();
-{{indent}}GLOBAL_WORKSPACE_SIZE = workspace_size;
-{% else %}
-{{indent}}{{instance}} gemm_op;
-{% endif %}
-{{indent}}auto status = gemm_op.can_implement(arguments);
-{{indent}}CUTLASS_CHECK(status);
-{{indent}}status = gemm_op.initialize(arguments, workspace, stream);
-{{indent}}CUTLASS_CHECK(status);
-{{indent}}status = gemm_op(stream);
-{{indent}}CUTLASS_CHECK(status);
+{{indent}}{{instance}}
 {{indent}}return;
 """
 )
@@ -281,7 +216,6 @@ void {{func_name}}(
 {% for idx in range(input_ndims) %}
   int64_t*,
 {% endfor %}
-  cudaStream_t
 );
 """
 )
@@ -292,9 +226,6 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}{
 {{indent}}{{local_dim_defs}}
 {{indent}}{{func_name}}(
-{% if is_profiler %}
-{{indent}}    gemm_op,
-{% endif %}
 {{indent}}    {{a_ptr}},
 {{indent}}    {{b_ptr}},
 {% if has_bias %}
@@ -396,8 +327,6 @@ struct ProfilerMemoryPool;
 template <typename GemmInstance>
 int benchmark_{{function_name}} (
 {% if is_group_gemm %}
-    GemmInstance &gemm_op,
-    const char *gemm_op_name,
     int sharedMemPerMultiprocessor,
     int multiProcessorCount,
     uint8_t* global_workspace_,
@@ -419,9 +348,6 @@ int benchmark_{{function_name}} (
     cudaStream_t stream
 
 {% else %}
-
-    GemmInstance &gemm_op,
-    const char *gemm_op_name,
     ProfilerMemoryPool<{{elem_type}}>* memory_pool,
     uint8_t* global_workspace_,
 {% if support_split_k %}
@@ -464,7 +390,6 @@ int benchmark_{{function_name}} (
       "OOB in cutlass."
     );
   }
-  std::cout << "OP:" << gemm_op_name << ",";
   std::cout << "TIME:" << runtime_ms << ",";
   std::cout << "WS:" << GLOBAL_WORKSPACE_SIZE << std::endl;
   return 0;
@@ -584,45 +509,16 @@ struct ProfilerMemoryPool {
 
 
 int main(int argc, char** argv) {
-  int device_idx;
-  cudaDeviceProp device_properties;
-  cudaError_t result = cudaGetDevice(&device_idx);
   auto memory_pool = std::make_unique<ProfilerMemoryPool<{{elem_type}}>>();
-  if (result != cudaSuccess) {
-    std::ostringstream errorStream;
-    errorStream << "cudaGetDevice() call failed! "
-                << "Error code: " << cudaGetErrorName(result)
-                << " Error message: " << cudaGetErrorString(result);
-    throw std::runtime_error(errorStream.str());
-  }
-
-  result = cudaGetDeviceProperties(&device_properties, device_idx);
-
-  if (result != cudaSuccess) {
-    std::ostringstream errorStream;
-    errorStream << "cudaGetDeviceProperties() call failed! "
-                << "Error code: " << cudaGetErrorName(result)
-                << " Error message: " << cudaGetErrorString(result);
-    throw std::runtime_error(errorStream.str());
-  }
-
   {{args_parse}}
 
   uint8_t* global_workspace_ = nullptr;
-  cudaStream_t stream = nullptr;
 
   {{tensor_decl}}
 
   {{benchmark_instances}}
   return 0;
 }
-"""
-)
-
-
-KERNEL_KEY_TEMPLATE = jinja2.Template(
-    """
-cutlass{{prefix}}_{{opcode_class_name}}_{{extended_name}}_{{threadblock}}_{{layout}}_align_{{align_ab}}_{{align_c}}
 """
 )
 
@@ -737,85 +633,24 @@ def update_alignments_in_gemm_instance(
 def universal_gemm_instance(
     op_def: str,
     func_attrs: Dict[str, Any],
-    for_profiler: bool,
-    cutlass_3x: bool = False,
+    for_profiler: bool
 ) -> str:
-    if cutlass_3x:
-        # We don't need to make any adjustments to the emitted
-        # CUTLASS 3.x op definitions. In particular, the alignments
-        # should not be updated, as the op instances incompatible
-        # with the TA-specified alignments have been removed from
-        # consideration by the filter_cutlass_3x_ops function.
-        return op_def
-
-    op_def = update_alignments_in_gemm_instance(op_def, func_attrs, for_profiler)
-    tmp = op_def.replace(
-        "cutlass::gemm::device::Gemm", "cutlass::gemm::device::GemmUniversal"
-    )
-    tmp = tmp.replace("false,", "")
-    return tmp
-
-
-def kernel_name(op):
-    """Returns kernel_name of a given cutlass op_instance."""
-    from cutlass_lib import library
-
-    threadblock = op.tile_description.procedural_name()
-    extended_name = op.extended_name()
-    opcode_class_name = library.OpcodeClassNames[
-        op.tile_description.math_instruction.opcode_class
-    ]
-    layout = op.layout_name()
-    align_ab = op.A.alignment
-    align_c = op.C.alignment
-    prefix = ""
-    if op.prefix != "":
-        kernel_schedule = library.KernelScheduleSuffixes[op.kernel_schedule]
-        epilogue_schedule = library.EpilogueScheduleSuffixes[op.epilogue_schedule]
-        prefix = f"{op.prefix}{kernel_schedule}{epilogue_schedule}"
-    name = KERNEL_KEY_TEMPLATE.render(
-        prefix=prefix,
-        threadblock=threadblock,
-        extended_name=extended_name,
-        opcode_class_name=opcode_class_name,
-        layout=layout,
-        align_ab=align_ab,
-        align_c=align_c,
-    )
-    return name.replace("\n", "")
-
-
+    return ""
+# TODO : take reference on conv2d/common.py emit_instance and fetch the desired instance
 def emit_instance(
     op,
     for_profiler,
-    f_instance_convertor=universal_gemm_instance,
     emit_kernel=False,
     func_attrs=None,
 ):
-    import cutlass_lib
+    import cpu_lib
 
-    cutlass_3x = op.gemm_kind == cutlass_lib.library.GemmKind.Universal3x
-    if cutlass_3x:
-        emitter = cutlass_lib.gemm_operation.EmitGemmUniversal3xInstance()
-    else:
-        emitter = cutlass_lib.gemm_operation.EmitGemmInstance()
-        if emit_kernel:
-            emitter = cutlass_lib.gemm_operation.EmitGemmUniversalInstance()
-
-    op_def = emitter.emit(op)
-    op_def = f_instance_convertor(
-        op_def=op_def,
-        func_attrs=func_attrs,
-        for_profiler=for_profiler,
-        cutlass_3x=cutlass_3x,
-    )
-
-    return op_def
+    return ""
 
 
 def extract_config(
     f_proc_op,
-    f_kernel_name=kernel_name,
+    f_kernel_name="",
     include_cutlass_3x_ops=False,
 ):
     import cutlass_lib
@@ -836,23 +671,6 @@ def extract_config(
                     key = f_kernel_name(op_inst)
                     gemm_ops[key] = op_inst
     return gemm_ops
-
-
-def extract_config_name(
-    config,
-    cutlass_3x=False,
-):
-    if cutlass_3x:
-        pattern = re.compile(r"\s*struct\s(.*?)\s:")
-        decl = [line for line in config.split("\n") if "struct " in line][-1]
-    else:
-        pattern = re.compile(r"\s*using\s(.*?)\s=")
-        decl = config.split("\n")[2]
-    match = pattern.match(decl)
-    if match is None:
-        raise RuntimeError("Invalid config: \n" + config)
-    return match.groups()[0]
-
 
 def gen_function(
     func_attrs,
@@ -884,35 +702,24 @@ def gen_function(
     inst_def_flag = set()
     instances = {}
     instance_decl = ""
-    exec_cond_to_cutlass_3x = {}
     for exec_item in exec_path.values():
         fname = "f" + sha1(exec_item.exec_cond.encode()).hexdigest()
         algo = exec_item.algo
-        cutlass_3x = algo.startswith("cutlass3x")
         if algo not in inst_def_flag:
             config = emit_instance(
                 op_instance[algo],
                 for_profiler=False,
-                f_instance_convertor=f_instance_convertor,
                 emit_kernel=emit_kernel,
                 func_attrs=func_attrs,
             )
             inst_def_flag.add(algo)
         else:
             config = ""
-        instance_template = (
-            INSTANCE_TEMPLATE_CUTLASS_3X if cutlass_3x else INSTANCE_TEMPLATE
-        )
-        inst = instance_template.render(
+        inst = INSTANCE_TEMPLATE.render(
             config=config,
-            name=fname,
-            config_name=extract_config_name(
-                config,
-                cutlass_3x=cutlass_3x,
-            ),
+            name=fname
         )
         instances[exec_item.exec_cond] = inst
-        exec_cond_to_cutlass_3x[exec_item.exec_cond] = cutlass_3x
         instance_decl += inst
     shape_eval_func = gemm_common.gen_shape_eval_code(
         indent=1, dtype="int64_t", dim_info_dict=dim_info_dict, is_ptr=True
@@ -921,15 +728,9 @@ def gen_function(
     exec_paths = ""
     for exec_cond in instances:
         fname = "f" + sha1(exec_cond.encode()).hexdigest()
-        cutlass_3x = exec_cond_to_cutlass_3x[exec_cond]
         program = EXEC_TEMPLATE.render(
             indent="    ",
             instance=fname,
-            # need to omit irrelevant problem_args here as in
-            # non-templated function both CUTLASS 2.x and 3.x
-            # code branches are syntactically checked
-            problem_args=(problem_args if not cutlass_3x else ""),
-            problem_args_cutlass_3x=(problem_args_cutlass_3x if cutlass_3x else ""),
             support_split_k=support_split_k,
         )
         exec_inst = exec_cond_template.render(
@@ -946,7 +747,7 @@ def gen_function(
     return src_template.render(
         instances=instance_decl,
         function_name=func_name,
-        dtype="cutlass::half_t",
+        dtype="float",
         shape_eval=shape_eval_func,
         input_addr_calculator=input_addr_calculator,
         output_addr_calculator=output_addr_calculator,
@@ -1004,79 +805,6 @@ def add_profiler(file_pairs, workdir, op_type, output_name, code):
         # add single src path to file_pairs
         file_pairs.append((src_path, obj_path))
 
-
-def has_tma_epilogue(op):
-    """Check whether the op is CUTLASS 3.x and has a TMA epilogue schedule."""
-    import cutlass_lib
-
-    result = False
-    if op.gemm_kind == cutlass_lib.library.GemmKind.Universal3x:
-        epilogue_schedule_str = str(op.epilogue_schedule).split(".")[-1]
-        result = epilogue_schedule_str.lower().startswith("tma")
-
-    return result
-
-
-def filter_cutlass_3x_ops(op_instance, func_attrs):
-    """Filter out CUTLASS 3.x ops with incompatible alignment requirements.
-
-    The CUTLASS 3.x ops have stricter alignment requirements compared to
-    the CUTLASS 2.x ops (due to TMA). These alignment requirements are used
-    to initially filter them out in the `function_filter` below. However, the
-    required alignments of the GEMM op inputs and outputs may change due to
-    TensorAccessor-related optimizations, which are introduced to the model
-    graph *after* the initial filtering.
-
-    In this function, the (possible) TA-related alignment updates are checked
-    once again and the CUTLASS 3.x ops not satisfying these requirements are
-    filtered out. Importantly, due to input/output alignment flexibilit of the
-    CUTLASS 2.x ops, their alignment requirements are corrected using the
-    TA-imposed alignments in the `update_alignments_in_gemm_instance` function
-    above. But this correction is not possible for the CUTLASS 3.x ops, as they
-    won't work with the lower alignment values. That's why the CUTLASS 3.x ops
-    are filtered out by this function in such cases.
-    """
-    import cutlass_lib
-
-    a_alignment, b_alignment, epilogue_alignment = get_tensor_accessor_alignments(
-        func_attrs
-    )
-
-    result_2x, result_3x = {}, {}
-    for op_name, op in op_instance.items():
-        if op.gemm_kind == cutlass_lib.library.GemmKind.Universal3x:
-            if (
-                op.A.alignment <= a_alignment
-                and op.B.alignment <= b_alignment
-                and op.C.alignment <= epilogue_alignment
-            ):
-                result_3x[op_name] = op
-        else:
-            result_2x[op_name] = op
-
-    has_ops_with_tma_epilogue = False
-    if result_3x:
-        for op in result_3x.values():
-            if has_tma_epilogue(op):
-                has_ops_with_tma_epilogue = True
-                break
-
-        if has_ops_with_tma_epilogue:
-            # when there are ops with TMA epilogue, keep only those
-            # for better performance / shorter profiler compilation time
-            result_3x = {
-                op_name: op for op_name, op in result_3x.items() if has_tma_epilogue(op)
-            }
-
-    return {
-        # CUTLASS 3.x kernels can cause power throttling:
-        # we want to generate the 2.x kernels first to avoid
-        # performance side effects caused by the 3.x kernels
-        **result_2x,
-        **result_3x,
-    }, has_ops_with_tma_epilogue
-
-
 def gen_profiler(
     func_attrs,
     workdir,
@@ -1095,7 +823,6 @@ def gen_profiler(
 
     op_type = func_attrs["op"]
     op_instance = func_attrs["op_instance"]
-    op_instance, op_has_tma_epilogue = filter_cutlass_3x_ops(op_instance, func_attrs)
 
     backend_spec = RVVSpec()
     elem_input_type = backend_spec.dtype_to_lib_type(
@@ -1122,19 +849,6 @@ def gen_profiler(
         instance=instance_name_base,
         is_profiler=True,
         support_split_k=support_split_k,
-        problem_args=problem_args_template.render(
-            elem_input_type=elem_input_type,
-            elem_output_type=elem_output_type,
-        ),
-        problem_args_cutlass_3x=(
-            problem_args_template_cutlass_3x.render(
-                elem_input_type=elem_input_type,
-                elem_output_type=elem_output_type,
-                has_tma_epilogue=op_has_tma_epilogue,
-            )
-            if problem_args_template_cutlass_3x is not None
-            else ""
-        ),
     )
     input_output_checks = INPUT_OUTPUT_CHECKS_TEMPLATE.render(
         input_ndims=ndims,
@@ -1149,18 +863,6 @@ def gen_profiler(
         config = emit_instance(op, for_profiler=True)
         instance_name = f"{instance_name_base}_{instance_idx}"
         gemm_op = f"gemm_op_{instance_idx}"
-        cutlass_3x = op.gemm_kind == cutlass_lib.library.GemmKind.Universal3x
-        instance_template = (
-            INSTANCE_TEMPLATE_CUTLASS_3X if cutlass_3x else INSTANCE_TEMPLATE
-        )
-        instance = instance_template.render(
-            config_name=extract_config_name(
-                config,
-                cutlass_3x=cutlass_3x,
-            ),
-            name=instance_name,
-            config=config,
-        )
         benchmark_instance = BENCHMARK_INSTANCE_TEMPLATE.render(
             indent="  ",
             instance_name=instance_name,
@@ -1173,7 +875,7 @@ def gen_profiler(
             bdims=bdims,
             cdims=cdims,
         )
-        instances.append(instance)
+        instances.append(config)
         benchmark_instances.append(benchmark_instance)
     # TODO: Render args_parse by caller.
     args_parse = (
@@ -1293,144 +995,6 @@ def gen_function_call(func_attrs, indent="  ", bias_ptr_arg=None):
         indent=indent,
     )
 
-
-def default_fproc(
-    *, op, a_layout, b_layout, c_layout, dtype, epilogue_name, permute_layout=None
-):
-    import copy
-
-    import cutlass_lib
-
-    backend_spec = RVVSpec()
-
-    ret = []
-    # skip simt kernels
-    if (
-        op.tile_description.math_instruction.opcode_class
-        == cutlass_lib.library.OpcodeClass.Simt
-    ):
-        return ret
-    data_type = backend_spec.dtype_to_lib_type(dtype)
-    if data_type == "float":
-        if (
-            op.tile_description.math_instruction.element_a
-            != cutlass_lib.library.DataType.f32
-            and op.tile_description.math_instruction.element_a
-            != cutlass_lib.library.DataType.tf32
-        ):
-            return ret
-    acc_type = cutlass_lib.library.DataType.f32
-
-    if (
-        "no_tf32" in Target.current()._kwargs
-        and data_type == "float"
-        and Target.current()._kwargs["no_tf32"]
-    ):
-        if (
-            op.tile_description.math_instruction.element_a
-            == cutlass_lib.library.DataType.tf32
-        ):
-            return ret
-
-    # check target use fp16 acc
-    if "use_fp16_acc" in Target.current()._kwargs and data_type == "cutlass::half_t":
-        if Target.current()._kwargs["use_fp16_acc"]:
-            acc_type = cutlass_lib.library.DataType.f16
-
-    # For column-major C layouts, filter out GEMM tiling configs introducted by
-    # extra_cutlass_generator.py - those will cause a build error.
-    threadblock_mxn = op.tile_description.threadblock_shape[:2]
-    is_nonstandard_theadblock_shape = threadblock_mxn == [128, 32]
-    filter_extra_tile_configs = (
-        is_nonstandard_theadblock_shape
-        and c_layout == cutlass_lib.library.LayoutType.ColumnMajor
-    )
-
-    if (
-        cutlass_lib.library.DataTypeTag[op.A.element] == data_type
-        and cutlass_lib.library.DataTypeTag[op.B.element] == data_type
-        and cutlass_lib.library.DataTypeTag[op.C.element] == data_type
-        and cutlass_lib.library.DataTypeTag[op.D.element] == data_type
-        and op.accumulator_type() == acc_type
-        and op.A.layout == a_layout
-        and op.B.layout == b_layout
-        and not filter_extra_tile_configs
-    ):
-        op = copy.deepcopy(op)
-
-        # set output major
-        op.C.layout = c_layout
-        op.D.layout = c_layout
-
-        # set epilogue
-        op.epilogue_functor = cutlass_lib.library.EpilogueFunctorName[epilogue_name]
-        op.element_epilogue = acc_type
-        if (
-            op.gemm_kind == cutlass_lib.library.GemmKind.Universal3x
-            and op.epilogue_functor
-            != cutlass_lib.library.EpilogueFunctor.LinearCombination
-        ):
-            # need to substitute the epilogue schedule with
-            # the one parameterized by the epilogue functor
-            if op.epilogue_schedule in (
-                cutlass_lib.library.EpilogueScheduleType.TmaWarpSpecialized,
-                cutlass_lib.library.EpilogueScheduleType.TmaWarpSpecializedCooperative,
-            ):
-                op.epilogue_schedule = cutlass_lib.library.EpilogueScheduleMapping[
-                    op.epilogue_schedule
-                ][op.epilogue_functor]
-            else:
-                # epilogue functor parameterization unavailable
-                # for the rest of epilogue schedule types
-                return ret
-
-        # set permute layout
-        if permute_layout is not None:
-            op.permute_layout = cutlass_lib.library.EpiloguePermuteLayoutName[
-                permute_layout
-            ]
-
-        # set C and D alignment
-        alignments = alignment.get_alignments(dtype)
-        for i in alignments:
-            if has_tma_epilogue(op) and i != max(alignments):
-                # TMA epilogues only support max. output alignment
-                continue
-            op = copy.deepcopy(op)
-            op.C.alignment = i
-            op.D.alignment = i
-            ret.append(op)
-
-    return ret
-
-
-def make_fproc(
-    func_attrs,
-    layout,
-    include_cutlass_3x_ops=False,
-):
-    """
-    This function sets a callback for processing the epilogue of the kernel
-    associated with func_attrs.
-    """
-
-    def fproc(op):
-        a_layout, b_layout, c_layout = layout.cutlass_lib_layouts()
-        return default_fproc(
-            op=op,
-            a_layout=a_layout,
-            b_layout=b_layout,
-            c_layout=c_layout,
-            dtype=func_attrs["inputs"][0].dtype(),
-            epilogue_name=func_attrs["epilogue"],
-        )
-
-    func_attrs["op_instance"] = extract_config(
-        f_proc_op=fproc,
-        include_cutlass_3x_ops=include_cutlass_3x_ops,
-    )
-
-
 def function_filter(cfg, func_attrs, ab_alignment):
     """Generates function filter.
 
@@ -1448,13 +1012,4 @@ def function_filter(cfg, func_attrs, ab_alignment):
     bool
         If input cfg should be filtered.
     """
-    # example:
-    # cfg="cutlass_tensorop_f16_s16816gemm_f16_128x32_64x4_nn_align_8_8"
-    tmp = cfg.split("_")
-    align_c = int(tmp[-1])
-    align_ab = int(tmp[-2])
-    if align_c != func_attrs["epilogue_alignment"]:
-        return False
-    if align_ab != ab_alignment:
-        return False
     return True
