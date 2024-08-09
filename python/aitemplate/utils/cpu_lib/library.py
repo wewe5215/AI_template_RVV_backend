@@ -136,6 +136,8 @@ class LayoutType(enum.Enum):
 LayoutTag = {
     LayoutType.NHWC: "nhwc",
     LayoutType.NCHW: "nchw",
+    LayoutType.ColumnMajor: "column",
+    LayoutType.RowMajor: "row"
 }
 
 
@@ -190,28 +192,16 @@ Conv2dKindNames = {
 
 class GemmKind(enum.Enum):
     Gemm = auto()
-    GemmPermute = auto()
+    GemmBias = auto()
+    DynamicGemm = auto()
     BatchGemm = auto()
-    BatchGemmPermute = auto()
-    SplitKGemm = auto()
-    Grouped = auto()
-    BatchGemmSoftmaxGemm = auto()
-    BatchGemmSoftmaxGemmPermute = auto()
-    GemmPermuteM2N3 = auto()
-    GemmPermuteM3N2 = auto()
 
 
 GemmKindNames = {
     GemmKind.Gemm: "gemm",
-    GemmKind.GemmPermute: "gemm_permute",
+    GemmKind.GemmBias: "gemm_bias",
     GemmKind.BatchGemm: "batch_gemm",
-    GemmKind.BatchGemmPermute: "batch_gemm_permute",
-    GemmKind.SplitKGemm: "split_k_gemm",
-    GemmKind.Grouped: "grouped_gemm",
-    GemmKind.BatchGemmSoftmaxGemm: "batched_gemm_softmax_gemm",
-    GemmKind.BatchGemmSoftmaxGemmPermute: "batched_gemm_softmax_gemm_permute",
-    GemmKind.GemmPermuteM2N3: "gemm_permute_m2n3",
-    GemmKind.GemmPermuteM3N2: "gemm_permute_m3n2",
+    GemmKind.DynamicGemm: "dynamic_gemm",
 }
 
 

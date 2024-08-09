@@ -17,7 +17,7 @@ import copy
 
 from aitemplate.utils.cpu_lib import (
     conv2d_operation as conv,
-    # gemm_operation as gemm,
+    gemm_operation as gemm,
     # groupnorm_operation as groupnorm,
     # layernorm_operation as layernorm,
     library,
@@ -36,38 +36,17 @@ def CreateConv2dFwdOperator(manifest, operation_kind, out_element_op, out_data_o
 
     operations = []
     for conv2d_spec in conv2d_specialization:
-            if conv2d_spec == conv.Conv2DSpecialization.ConvNhwcF32:
-                a_element_desc = library.TensorDesc(
-                    library.DataType.f32, library.LayoutType.NHWC
-                )
-                b_element_desc = library.TensorDesc(
-                    library.DataType.f32, library.LayoutType.NHWC
-                )
-                c_element_desc = library.TensorDesc(
-                    library.DataType.f32, library.LayoutType.NHWC
-                )
-                new_operation = conv.Conv2DOperation(
-                    operation_kind=operation_kind,
-                    extra_kind=out_element_op,
-                    A=a_element_desc,
-                    B=b_element_desc,
-                    C=c_element_desc,
-                    a_elem_op=in_element_op,
-                    b_elem_op=in_element_op,
-                    epilogue_functor=out_element_op,
-                    conv2d_specialization=conv2d_spec,
-                )
-            else:
-                a_element_desc = library.TensorDesc(
-                    library.DataType.f16, library.LayoutType.NHWC
-                )
-                b_element_desc = library.TensorDesc(
-                    library.DataType.f16, library.LayoutType.NHWC
-                )
-                c_element_desc = library.TensorDesc(
-                    library.DataType.f16, library.LayoutType.NHWC
-                )
-                new_operation = conv.Conv2DOperation(
+        if conv2d_spec == conv.Conv2DSpecialization.ConvNhwcF32:
+            a_element_desc = library.TensorDesc(
+                library.DataType.f32, library.LayoutType.NHWC
+            )
+            b_element_desc = library.TensorDesc(
+                library.DataType.f32, library.LayoutType.NHWC
+            )
+            c_element_desc = library.TensorDesc(
+                library.DataType.f32, library.LayoutType.NHWC
+            )
+            new_operation = conv.Conv2DOperation(
                 operation_kind=operation_kind,
                 extra_kind=out_element_op,
                 A=a_element_desc,
@@ -78,13 +57,89 @@ def CreateConv2dFwdOperator(manifest, operation_kind, out_element_op, out_data_o
                 epilogue_functor=out_element_op,
                 conv2d_specialization=conv2d_spec,
             )
-            manifest.append(new_operation)
-            operations.append(new_operation)
+        else:
+            a_element_desc = library.TensorDesc(
+                library.DataType.f16, library.LayoutType.NHWC
+            )
+            b_element_desc = library.TensorDesc(
+                library.DataType.f16, library.LayoutType.NHWC
+            )
+            c_element_desc = library.TensorDesc(
+                library.DataType.f16, library.LayoutType.NHWC
+            )
+            new_operation = conv.Conv2DOperation(
+            operation_kind=operation_kind,
+            extra_kind=out_element_op,
+            A=a_element_desc,
+            B=b_element_desc,
+            C=c_element_desc,
+            a_elem_op=in_element_op,
+            b_elem_op=in_element_op,
+            epilogue_functor=out_element_op,
+            conv2d_specialization=conv2d_spec,
+        )
+        manifest.append(new_operation)
+        operations.append(new_operation)
 
     return operations
 
 
+# Gemm Fwd operations (Layout : RCR)
+def CreateGemmFwdOperator(manifest, operation_kind, out_element_op, out_data_op=""):
+    in_element_op = library.TensorOperation.PassThrough
+    gemm_specialization = [
+        gemm.GemmSpecialization.GemmRCR_f16,
+        gemm.GemmSpecialization.GemmRCR_f32,
+    ]
 
+    operations = []
+    for gemm_spec in gemm_specialization:
+        if gemm_spec == gemm.GemmSpecialization.GemmRCR_f32:
+            a_element_desc = library.TensorDesc(
+                library.DataType.f32, library.LayoutType.RowMajor
+            )
+            b_element_desc = library.TensorDesc(
+                library.DataType.f32, library.LayoutType.ColumnMajor
+            )
+            c_element_desc = library.TensorDesc(
+                library.DataType.f32, library.LayoutType.RowMajor
+            )
+            new_operation = gemm.GemmOperation(
+                operation_kind=operation_kind,
+                extra_kind=out_element_op,
+                A=a_element_desc,
+                B=b_element_desc,
+                C=c_element_desc,
+                a_elem_op=in_element_op,
+                b_elem_op=in_element_op,
+                epilogue_functor=out_element_op,
+                gemm_specialization=gemm_spec,
+            )
+        else:
+            a_element_desc = library.TensorDesc(
+                library.DataType.f16, library.LayoutType.RowMajor
+            )
+            b_element_desc = library.TensorDesc(
+                library.DataType.f16, library.LayoutType.ColumnMajor
+            )
+            c_element_desc = library.TensorDesc(
+                library.DataType.f16, library.LayoutType.RowMajor
+            )
+            new_operation = gemm.GemmOperation(
+                operation_kind=operation_kind,
+                extra_kind=out_element_op,
+                A=a_element_desc,
+                B=b_element_desc,
+                C=c_element_desc,
+                a_elem_op=in_element_op,
+                b_elem_op=in_element_op,
+                epilogue_functor=out_element_op,
+                gemm_specialization=gemm_spec,
+            )
+        manifest.append(new_operation)
+        operations.append(new_operation)
+
+    return operations
 def GenerateTensorOp(manifest):
     # Conv2d
     CreateConv2dFwdOperator(
@@ -142,6 +197,12 @@ def GenerateTensorOp(manifest):
     #     library.TensorOperation.AddRelu,
     #     library.MemoryDataOperation.MemorySet,
     # )
+    # Gemm_RCR_Bias
+    CreateGemmFwdOperator(
+         manifest,
+         library.GemmKind.GemmBias,
+         library.TensorOperation.PassThrough,
+    )
 
 
 def GenerateRV64GCV_ZVFH(manifest, rvv_version):
