@@ -918,8 +918,9 @@ class Model:
     def set_many_constants_with_tensors(self, tensors: Dict[str, TorchTensor]):
         ait_tensors = {}
         for name, tensor in tensors.items():
-            if not tensor.is_contiguous() or not tensor.is_cuda:
-                raise ValueError(f"Constant {name} must be contiguous and on the GPU.")
+            if not tensor.device.type == 'cpu':
+                if not tensor.is_contiguous() or not tensor.is_cuda:
+                    raise ValueError(f"Constant {name} must be contiguous and on the GPU.")
             self.torch_constant_tensors[name] = tensor
             ait_tensors[name] = torch_to_ait_data(tensor)
         self.set_many_constants(ait_tensors)
@@ -932,8 +933,9 @@ class Model:
         Model will store a reference to the given tensor in
         torch_constant_tensors until it is explicitly deleted or replaced.
         """
-        if not tensor.is_contiguous() or not tensor.is_cuda:
-            raise ValueError(f"Constant {name} must be contiguous and on the GPU.")
+        if not tensor.device.type == 'cpu':
+            if not tensor.is_contiguous() or not tensor.is_cuda:
+                raise ValueError(f"Constant {name} must be contiguous and on the GPU.")
         self.torch_constant_tensors[name] = tensor
         self.set_double_buffer_constant(name, torch_to_ait_data(tensor), stream_ptr)
 
@@ -942,8 +944,9 @@ class Model:
     ):
         ait_tensors = {}
         for name, tensor in tensors.items():
-            if not tensor.is_contiguous() or not tensor.is_cuda:
-                raise ValueError(f"Constant {name} must be contiguous and on the GPU.")
+            if not tensor.device.type == 'cpu':
+                if not tensor.is_contiguous() or not tensor.is_cuda:
+                    raise ValueError(f"Constant {name} must be contiguous and on the GPU.")
             self.torch_constant_tensors[name] = tensor
             ait_tensors[name] = torch_to_ait_data(tensor)
         self.set_many_double_buffer_constants(ait_tensors, stream_ptr)
@@ -954,8 +957,9 @@ class Model:
         Model will store a reference to the given tensor in
         torch_constant_tensors until it is explicitly deleted or replaced.
         """
-        if not tensor.is_contiguous() or not tensor.is_cuda:
-            raise ValueError(f"Constant {name} must be contiguous and on the GPU.")
+        if not tensor.device.type == 'cpu':
+            if not tensor.is_contiguous() or not tensor.is_cuda:
+                raise ValueError(f"Constant {name} must be contiguous and on the GPU.")
         self.torch_constant_tensors[name] = tensor
         self.set_constant(name, torch_to_ait_data(tensor))
 

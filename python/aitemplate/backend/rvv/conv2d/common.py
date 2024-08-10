@@ -282,6 +282,7 @@ PROFILER_BENCHMARK_TEMPLATE = jinja2.Template(
 #include <memory>
 #include <string>
 #include <vector>
+#include <random>
 #include "xnnpack.h"
 #include "logging.h"
 {{extra_header}}

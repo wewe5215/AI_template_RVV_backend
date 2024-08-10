@@ -27,10 +27,16 @@ def conv2d_config(
     dtype="float16",
 ):
     """Populates conv2d cutlass configs into 'op_instance' field."""
+    import cpu_lib
+    op_kind = cpu_lib.library.Conv2dKind.Conv2d
+    extra_kind = cpu_lib.library.TensorOperation.PassThrough
+    # if dtype == "float32": --> TODO: uncomment later
+    conv2d_specialization = cpu_lib.conv2d_operation.Conv2DSpecialization.ConvNhwcF32
     func_attrs["op_instance"] = common.extract_config(
-        func_attrs=func_attrs,
-        dtype=dtype,
-    )
+        dtype = dtype,
+        op_kind = op_kind,
+        extra_kind = extra_kind,
+        conv2d_specialization = conv2d_specialization)
 
 
 @registry.reg("rvv.conv2d.gen_profiler")

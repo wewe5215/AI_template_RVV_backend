@@ -95,7 +95,7 @@ class {{model_name}} : public ModelBase<{{model_name}}> {
     }
 
     void DeviceToDeviceCopies(StreamType stream) {
-  {{ device_to_device_copies }}
+  return;
     }
 
 {% if run_impl_mode == 0 %}

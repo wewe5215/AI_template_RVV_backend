@@ -38,7 +38,7 @@ from aitemplate.backend.rvv.pool2d import *
 # from aitemplate.backend.rvv.softmax import *
 # from aitemplate.backend.rvv.tensor import *
 # from aitemplate.backend.rvv.upsample import *
-# from aitemplate.backend.rvv.view_ops import *
+from aitemplate.backend.rvv.view_ops import *
 # from aitemplate.backend.rvv.vision_ops import *
 # from aitemplate.backend.rvv.attention import *
 # from aitemplate.backend.rvv.groupnorm import *

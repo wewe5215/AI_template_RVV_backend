@@ -95,7 +95,7 @@ code_snippet = jinja2.Template(
 {{extra_kind}}
 
 {% if not is_bias %}
-{{indent}}free(bias_ptr)
+{{indent}}free(bias_ptr);
 {% endif %}
 """
         )

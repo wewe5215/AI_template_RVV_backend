@@ -21,6 +21,11 @@ from aitemplate.backend import registry
 
 SRC_TEMPLATE = jinja2.Template(
     """
+#include <cstdio>
+#include <stdexcept>
+#include <cstdlib>
+#include <memory>
+#include <string>
 void {{function_name}} (
     {{input_args}}
     {{output_args}}
