@@ -24,7 +24,7 @@ from hashlib import sha1
 from typing import Any, Dict, List, Tuple
 
 import jinja2
-
+import logging
 from aitemplate.backend.backend_spec import RVVSpec
 from aitemplate.backend.rvv.gemm_universal.layout import RCR
 from aitemplate.backend.common import gemm_common, tensor_accessor_codegen
@@ -34,7 +34,7 @@ from aitemplate.compiler.base import IntImm
 from aitemplate.utils import alignment
 
 # pylint: disable=C0301,C0415,R1705
-
+_LOGGER = logging.getLogger(__name__)
 
 INPUT_ADDR_CALCULATOR = jinja2.Template(
     """
@@ -191,7 +191,7 @@ void {{function_name}} (
 EXEC_TEMPLATE = jinja2.Template(
     """
 
-{{indent}}{{instance}}
+//{{instance}}
 {{indent}}return;
 """
 )
@@ -291,65 +291,17 @@ TENSOR_DECL_TEMPLATE = jinja2.Template(
 # TODO Merge all alignment into single profiler
 PROFILER_TEMPLATE = jinja2.Template(
     """
-size_t GLOBAL_WORKSPACE_SIZE = 0;
-
 #include <sstream>
-
-{{op_func}}
-
-template <typename DType>
-struct ProfilerMemoryPool;
-
-int benchmark_{{function_name}} (
-{% if is_group_gemm %}
-    void **ptr_A,
-    void **ptr_B,
-    void **ptr_C,
-    {% if has_bias %}
-    void **ptr_bias,
-    {% endif %}
-    int64_t* lda,
-    int64_t* ldb,
-    int64_t* ldc,
-    {% if has_bias %}
-    int64_t* ldd,
-    {% endif %}
-    int occupancy
-{% else %}
-    ProfilerMemoryPool<{{elem_type}}>* memory_pool,
-{% for idx in range(input_ndims) %}
-    int64_t* a_dim{{idx}},
-{% endfor %}
-{% for idx in range(weight_ndims) %}
-    int64_t* b_dim{{idx}},
-{% endfor %}
-{% for idx in range(output_ndims) %}
-    int64_t* c_dim{{idx}}{% if not loop.last %},{% endif %}
-{% endfor %}
-{% endif %}
-  ) {
-  // warmup
-  for (int i = 0; i < 5; ++i) {
-    {{func_call}}
-  }
-  struct timespec start, end;
-  clock_gettime(CLOCK_MONOTONIC, &start);
-  for (int i = 0; i < 10; ++i) {
-    {{func_call}}
-  }
-  clock_gettime(CLOCK_MONOTONIC, &end);
-  float runtime_ms = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e6;
-  // TODO: output workspace
-  if (runtime_ms < 0.00001) {
-      throw std::runtime_error(
-      "OOB in xnnpack."
-    );
-  }
-  std::cout << "TIME:" << runtime_ms << ",";
-  std::cout << "WS:" << GLOBAL_WORKSPACE_SIZE << std::endl;
-  return 0;
-}
-
+#include <iostream>
+#include <memory>
+#include <random>
+#include <vector>
+#include <sstream>
+#include <memory>
+#include <ctime>
+#include <cstdlib>
+#include <stdexcept>
+size_t GLOBAL_WORKSPACE_SIZE = 0;
 template <typename DType>
 struct ProfilerMemoryPool {
   ProfilerMemoryPool() {
@@ -396,6 +348,60 @@ struct ProfilerMemoryPool {
   std::mt19937 gen;
   std::uniform_int_distribution<int64_t> uniform_dist;
 };
+{{op_func}}
+
+
+
+int benchmark_{{function_name}} (
+{% if is_group_gemm %}
+    void **ptr_A,
+    void **ptr_B,
+    void **ptr_C,
+    {% if has_bias %}
+    void **ptr_bias,
+    {% endif %}
+    int64_t* lda,
+    int64_t* ldb,
+    int64_t* ldc,
+    {% if has_bias %}
+    int64_t* ldd,
+    {% endif %}
+    int occupancy
+{% else %}
+    ProfilerMemoryPool<{{elem_type}}>* memory_pool,
+{% for idx in range(input_ndims) %}
+    int64_t* a_dim{{idx}},
+{% endfor %}
+{% for idx in range(weight_ndims) %}
+    int64_t* b_dim{{idx}},
+{% endfor %}
+{% for idx in range(output_ndims) %}
+    int64_t* c_dim{{idx}}{% if not loop.last %},{% endif %}
+{% endfor %}
+{% endif %}
+  ) {
+  // warmup
+  for (int i = 0; i < 5; ++i) {
+    {{func_call}}
+  }
+  struct timespec start, end;
+  clock_gettime(CLOCK_MONOTONIC, &start);
+  for (int i = 0; i < 10; ++i) {
+    {{func_call}}
+  }
+  clock_gettime(CLOCK_MONOTONIC, &end);
+  float runtime_ms = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e6;
+  // TODO: output workspace
+  if (runtime_ms < 0.00001) {
+      throw std::runtime_error(
+      "OOB in xnnpack."
+    );
+  }
+  std::cout << "OP:" << "gemm_rcr" << ",";
+  std::cout << "TIME:" << runtime_ms << ",";
+  std::cout << "WS:" << GLOBAL_WORKSPACE_SIZE << std::endl;
+  return 0;
+}
 
 
 int main(int argc, char** argv) {
@@ -430,22 +436,34 @@ def universal_gemm_instance(
 # TODO : take reference on conv2d/common.py emit_instance and fetch the desired instance
 def emit_instance(
     op,
-    for_profiler,
-    emit_kernel=False,
     func_attrs=None,
 ):
     import cpu_lib
-
-    return ""
+    op_def = op.emit()
+    return op_def
 
 
 def extract_config(
     dtype,
-    layout=RCR
+    layout=RCR,
+    op_kind=None,
+    extra_kind=None,
 ):
     import cpu_lib
-
-    return ""
+    spec = RVVSpec()
+    lib_dtype = spec.dtype_to_lib_type(dtype)
+    gemm_ops = OrderedDict()
+    extract_ops = list(Target.current()._operators[op_kind][extra_kind].items())
+    for key, value in extract_ops:
+        for op in value:
+            if layout == RCR:
+                if cpu_lib.library.LayoutTag[op.A.layout] == "row" and \
+                    cpu_lib.library.LayoutTag[op.B.layout] == "column" and \
+                    cpu_lib.library.LayoutTag[op.C.layout] == "row" and \
+                    lib_dtype == cpu_lib.library.DataTypeNames[op.A.element]:
+                    gemm_ops[key] = value[0]
+    _LOGGER.info(f"gemm_ops = {gemm_ops}, value =  {value}")
+    return gemm_ops
 
 def gen_function(
     func_attrs,
@@ -473,52 +491,32 @@ def gen_function(
     func_name = func_attrs["name"]
     exec_path = func_attrs["exec_path"]
     op_instance = func_attrs["op_instance"]
-    inst_def_flag = set()
-    instances = {}
-    instance_decl = ""
+    _LOGGER.info(f"exec_path = {exec_path}, op_instance = {op_instance}")
     for exec_item in exec_path.values():
         fname = "f" + sha1(exec_item.exec_cond.encode()).hexdigest()
         algo = exec_item.algo
-        if algo not in inst_def_flag:
-            config = emit_instance(
-                op_instance[algo],
-                for_profiler=False,
-                emit_kernel=emit_kernel,
-                func_attrs=func_attrs,
-            )
-            inst_def_flag.add(algo)
-        else:
-            config = ""
-        inst = INSTANCE_TEMPLATE.render(
-            config=config,
-            name=fname
+        op_key = next(iter(op_instance.keys()))
+        config = emit_instance(
+            op_instance[op_key],
+            func_attrs=func_attrs,
         )
-        instances[exec_item.exec_cond] = inst
-        instance_decl += inst
+        exec_paths = ""
+        exec_inst = exec_cond_template.render(
+            indent="  ",
+            cond=exec_item.exec_cond,
+            program=config,
+        )
+        exec_paths += exec_inst
     shape_eval_func = gemm_common.gen_shape_eval_code(
         indent=1, dtype="int64_t", dim_info_dict=dim_info_dict, is_ptr=True
     )
-
-    exec_paths = ""
-    for exec_cond in instances:
-        fname = "f" + sha1(exec_cond.encode()).hexdigest()
-        program = EXEC_TEMPLATE.render(
-            indent="    ",
-            instance=fname,
-        )
-        exec_inst = exec_cond_template.render(
-            indent="  ",
-            cond=exec_cond,
-            program=program,
-        )
-        exec_paths += exec_inst
     input_output_checks = INPUT_OUTPUT_CHECKS_TEMPLATE.render(
         input_ndims=input_ndims,
         weight_ndims=weight_ndims,
         output_ndims=output_ndims,
     )
     return src_template.render(
-        instances=instance_decl,
+        instances="",
         function_name=func_name,
         dtype="float",
         shape_eval=shape_eval_func,
@@ -529,7 +527,6 @@ def gen_function(
         input_ndims=input_ndims,
         weight_ndims=weight_ndims,
         output_ndims=output_ndims,
-        support_split_k=support_split_k,
         has_d=has_d(func_attrs),
         has_d1=has_d1(func_attrs),
         extra_code=extra_code,
@@ -615,11 +612,7 @@ def gen_profiler(
 
     has_bias = bias_ptr_arg is not None
     instance_name_base = "GemmInstance"
-    exec_program = EXEC_TEMPLATE.render(
-        indent="  ",
-        instance=instance_name_base,
-        is_profiler=True,
-    )
+    exec_program = ""
     input_output_checks = INPUT_OUTPUT_CHECKS_TEMPLATE.render(
         input_ndims=ndims,
         weight_ndims=ndims,
@@ -630,17 +623,13 @@ def gen_profiler(
     instances = []
     benchmark_instances = []
     for instance_idx, (op_name, op) in enumerate(op_instance.items()):
-        config = emit_instance(op, for_profiler=True)
-        instance_name = f"{instance_name_base}_{instance_idx}"
+        config = emit_instance(op)
         gemm_op = f"gemm_op_{instance_idx}"
         benchmark_instance = BENCHMARK_INSTANCE_TEMPLATE.render(
             indent="  ",
-            instance_name=instance_name,
             gemm_op=gemm_op,
             gemm_op_name=op_name,
             func_name=f"benchmark_{function_name}",
-            support_split_k=support_split_k,
-            split_k="split_k",
             adims=adims,
             bdims=bdims,
             cdims=cdims,
@@ -655,16 +644,14 @@ def gen_profiler(
     )
     op_func = src_template.render(
         is_profiler=True,
-        instances="\n".join(instances),
         function_name=function_name,
         input_ndims=ndims,
         weight_ndims=ndims,
         output_ndims=ndims,
         shape_eval=shape_func,
         input_output_checks=input_output_checks,
-        exec_paths=exec_program,
+        exec_paths="\n".join(instances),
         output_addr_calculator=output_addr_calculator,
-        support_split_k=support_split_k,
         extra_code=extra_code,
     )
     benchmark_adims = ["a_dim" + str(i) for i in range(ndims)]
@@ -678,7 +665,6 @@ def gen_profiler(
         has_bias=has_bias,
         bias_ptr=bias_ptr_arg,
         c_ptr="memory_pool->RequestTensorByIdx(2)",
-        split_k="split_k",
         adims=benchmark_adims,
         bdims=benchmark_bdims,
         cdims=benchmark_cdims,
@@ -692,7 +678,6 @@ def gen_profiler(
         op_func=op_func,
         has_bias=has_bias,
         has_d=has_d(func_attrs),
-        support_split_k=support_split_k,
         args_parse=args_parse,
         function_name=function_name,
         input_ndims=ndims,
@@ -758,7 +743,6 @@ def gen_function_call(func_attrs, indent="  ", bias_ptr_arg=None):
         has_bias=has_bias,
         bias_ptr=bias_ptr_arg,
         c_ptr=c._attrs["name"],
-        split_k=func_attrs["split_k"],
         adims=adims,
         bdims=bdims,
         cdims=cdims,

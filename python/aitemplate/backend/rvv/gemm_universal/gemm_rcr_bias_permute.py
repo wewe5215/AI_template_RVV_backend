@@ -28,8 +28,6 @@ from aitemplate.backend.rvv.gemm_universal import (
 
 # pylint: disable=C0103,C0415,W0613,C0301,R1705,R1703
 
-PROBLEM_ARGS_TEMPLATE = gemm_rcr_bias.PROFILER_PROBLEM_ARGS_TEMPLATE
-
 
 @registry.reg("rvv.gemm_rcr_bias_permute.config")
 def gemm_rcr_bias_permute_config(func_attrs, dtype="float16"):
@@ -44,7 +42,7 @@ def gen_profiler(func_attrs, workdir, profiler_filename, dim_info_dict):
         profiler_filename,
         dim_info_dict,
         common_bias.SRC_TEMPLATE,
-        PROBLEM_ARGS_TEMPLATE,
+        None,
         bias_ptr_arg="memory_pool->RequestTensorByIdx(3)",
         extra_code=common_permute.EXTRA_CODE.render(),
     )
@@ -58,22 +56,6 @@ def gen_function(
     problem_args_template=None,
 ):
     backend_spec = CUDASpec()
-    elem_input_type = backend_spec.dtype_to_lib_type(
-        func_attrs["inputs"][0]._attrs["dtype"]
-    )
-    elem_output_type = backend_spec.dtype_to_lib_type(
-        func_attrs["outputs"][0]._attrs["dtype"]
-    )
-    if problem_args_template is None:
-        problem_args = PROBLEM_ARGS_TEMPLATE.render(
-            elem_input_type=elem_input_type,
-            elem_output_type=elem_output_type,
-        )
-    else:
-        problem_args = problem_args_template.render(
-            elem_input_type=elem_input_type,
-            elem_output_type=elem_output_type,
-        )
     input_ndims = len(func_attrs["input_accessors"][0].original_shapes)
     weight_ndims = len(func_attrs["input_accessors"][1].original_shapes)
     output_ndims = len(func_attrs["output_accessors"][0].original_shapes)
@@ -81,7 +63,7 @@ def gen_function(
         func_attrs,
         common_bias.SRC_TEMPLATE,
         exec_cond_template,
-        problem_args,
+        "",
         input_ndims,
         weight_ndims,
         output_ndims,

@@ -27,9 +27,10 @@ from aitemplate.utils.cpu_lib import library
 template = jinja2.Template(
 """
 {{indent}}//{{name}}
+{{indent}}const xnn_status status_init = xnn_initialize(nullptr);
 {{indent}}xnn_operator_t gemm_op = nullptr;
 {{indent}}const xnn_status status = xnn_create_{{GemmSpecialization}}(
-{{indent}}    K, N, input_a_stride, output_stride, 
+{{indent}}    K, N, K, N, 
 {{indent}}    ({{DataName}}*)(b_ptr), ({{DataName}}*)(bias_ptr), 
 {{indent}}    -std::numeric_limits<{{DataName}}>::infinity(), std::numeric_limits<{{DataName}}>::infinity(),
 {{indent}}    /*flags=*/0, nullptr, nullptr, &gemm_op);
@@ -116,10 +117,7 @@ class GemmOperation:
             c_layout=library.LayoutTag[self.C.layout],
         )
 
-        return "{io_name}_{epilogue_functor}".format(
-            io_name=io_name,
-            epilogue_functor=library.TensorOperationTag[self.epilogue_functor],
-        )
+        return io_name
 
     def accumulator_type(self):
         return library.DataType.f32

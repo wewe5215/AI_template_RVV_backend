@@ -29,17 +29,18 @@ from aitemplate.backend.rvv.gemm_universal.layout import RCR
 
 
 EXTRA_CODE = jinja2.Template(
-    """
-using elem_input_type = {{elem_input_type}};
-using elem_output_type = {{elem_output_type}};
-"""
+    """"""
 )
 
 @registry.reg("rvv.gemm_rcr_bias.config")
 def gemm_rcr_config(func_attrs, dtype="float16"):
+    import cpu_lib
+    op_kind = cpu_lib.library.GemmKind.GemmBias
+    extra_kind = cpu_lib.library.TensorOperation.PassThrough
     func_attrs["op_instance"] = common.extract_config(
         dtype=func_attrs["inputs"][0].dtype(),
-        layout=RCR
+        op_kind=op_kind,
+        extra_kind=extra_kind,
     )
 
 

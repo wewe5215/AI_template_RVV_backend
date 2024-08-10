@@ -39,12 +39,9 @@ SRC_TEMPLATE = jinja2.Template(
 #include <cstdlib>
 #include <stdexcept>
 #include <cstring> // For memset
-
+#include "xnnpack.h"
+#include "logging.h"
 {{extra_code}}
-
-
-{{instances}}
-
 
 void {{function_name}} (
     void* a_ptr,
@@ -85,6 +82,7 @@ void {{function_name}} (
   {% for idx in range(input_ndims) %}
       std::cout << "output_ndims{{idx}}: " << *c_dim{{idx}} << std::endl;
   {% endfor %}
+  return;
   throw std::runtime_error(
       "Unsupported workload for this {{function_name}} specialization."
   );
@@ -102,7 +100,6 @@ void {{func_name}}(
   void*,
   void*,
   void*,
-  uint8_t*,
 {% for idx in range(input_ndims) %}
   int64_t*,
 {% endfor %}
