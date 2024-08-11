@@ -20,34 +20,17 @@ from aitemplate.backend.rvv.conv2d import common
 from aitemplate.utils import alignment
 
 
-def extract_config(func_attrs, dtype="float16"):
-    def apply_special_config(func_attrs, op):
-        import cutlass_lib
-
-        x = func_attrs["inputs"][0]
-        in_ch = x._attrs["shape"][-1]._attrs["values"][0]
-
-        # Make sure to use NoneGroup here. Otherwise, we'll generate Conv2dGroupFprop,
-        # which doesn't have template specializations for either of the iterator
-        # algorithms below, resulting in "incomplete type is not allowed" errors.
-        op.group_mode = cutlass_lib.library.GroupMode.NoneGroup
-        if in_ch == 3:
-            # By default we don't use it since the perf is worse than pad4+fixchannel
-            op.iterator_algorithm = cutlass_lib.library.IteratorAlgorithm.FewChannels
-            op.A.alignment = 1
-            op.B.alignment = 1
-            op.tile_description.stages = 2
-        elif in_ch in alignment.get_alignments(dtype):
-            op.iterator_algorithm = cutlass_lib.library.IteratorAlgorithm.FixedChannels
-            op.A.alignment = in_ch
-            op.B.alignment = in_ch
-            op.tile_description.stages = 3
-
-        return op
-
+def extract_config(func_attrs, dtype="float16", unary_op_name="Identity"):
+    import cpu_lib
+    if unary_op_name == "ReLu":
+        op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasRelu
+    elif unary_op_name == "Identity":
+        op_kind = cpu_lib.library.Conv2dKind.Conv2dBias
+    extra_kind = cpu_lib.library.TensorOperation.PassThrough
+    # if dtype == "float32": --> TODO: uncomment later
+    conv2d_specialization = cpu_lib.conv2d_operation.Conv2DSpecialization.ConvNhwcF32
     return common.extract_config(
-        func_attrs=func_attrs,
-        dtype=dtype,
-        skip_simt_kernels=True,
-        f_apply_special_config=apply_special_config,
-    )
+        dtype = dtype,
+        op_kind = op_kind,
+        extra_kind = extra_kind,
+        conv2d_specialization = conv2d_specialization)

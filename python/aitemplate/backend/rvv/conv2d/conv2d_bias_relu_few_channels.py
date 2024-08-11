@@ -47,6 +47,7 @@ def conv2d_bias_relu_few_channels_config(
     func_attrs["op_instance"] = cfc.extract_config(
         func_attrs=func_attrs,
         dtype=dtype,
+        unary_op_name="ReLu",
     )
 
 
