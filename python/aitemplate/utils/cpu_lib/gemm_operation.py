@@ -52,7 +52,7 @@ code_snippet = jinja2.Template(
 {% endif %}
 {{gemm}}
 {% if not is_bias %}
-{{indent}}free(bias_ptr)
+{{indent}}free(bias_ptr);
 {% endif %}
 """
         )
