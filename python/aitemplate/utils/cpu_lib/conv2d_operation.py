@@ -90,7 +90,6 @@ code_snippet = jinja2.Template(
 {{indent}}void* bias_ptr = ({{DataName}}*)malloc(i32_out_ch * sizeof({{DataName}}));
 {{indent}}std::memset(bias_ptr, 0, i32_out_ch * sizeof({{DataName}}));
 {% endif %}
-{{indent}}const xnn_status status_init = xnn_initialize(nullptr);
 {{conv2d}}
 {{extra_kind}}
 

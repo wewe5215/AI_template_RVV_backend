@@ -27,7 +27,6 @@ from aitemplate.utils.cpu_lib import library
 template = jinja2.Template(
 """
 {{indent}}//{{name}}
-{{indent}}const xnn_status status_init = xnn_initialize(nullptr);
 {{indent}}xnn_operator_t gemm_op = nullptr;
 {{indent}}const xnn_status status = xnn_create_{{GemmSpecialization}}(
 {{indent}}    K, N, K, N, 
