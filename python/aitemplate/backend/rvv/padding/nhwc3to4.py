@@ -16,7 +16,7 @@
 RVV codegen for nhwc3to4 op
 """
 import jinja2
-
+import re
 from ... import registry
 from ...backend_spec import RVVSpec
 
@@ -91,6 +91,9 @@ void {{function_name}} (
     int64_t* out_h,
     int64_t* out_w
 ) {
+  {% if is_first_op %}
+    const xnn_status status_init = xnn_initialize(nullptr);
+  {% endif %}
   {{shape_function}}
   {{exec_paths}}
 }
@@ -139,10 +142,12 @@ def gen_function(func_attrs, template_path, shape_eval_template, shape_save_temp
     )
     shape_func = shape_eval_func + shape_save_func
     exec_paths = EXEC_TEMPLATE.render(elem_input_type=elem_input_type)
+    match = re.search(r'(\d+)$', func_name)
     return SRC_TEMPLATE.render(
         function_name=func_name,
         elem_input_type=elem_input_type,
         shape_function=shape_func,
+        is_first_op = (match.group(1) == '0'),
         exec_paths=exec_paths,
     )
 

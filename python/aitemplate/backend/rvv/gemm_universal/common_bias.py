@@ -71,17 +71,10 @@ void {{function_name}} (
   if (!bias_ptr) {
     throw std::runtime_error("bias_ptr is null!");
   }
-
+  {% if is_first_op %}
+    const xnn_status status_init = xnn_initialize(nullptr);
+  {% endif %}
   {{exec_paths}}
-  {% for idx in range(input_ndims) %}
-      std::cout << "input_ndims{{idx}}: " << *a_dim{{idx}} << std::endl;
-  {% endfor %}
-  {% for idx in range(weight_ndims) %}
-      std::cout << "weight_ndims{{idx}}: " << *b_dim{{idx}} << std::endl;
-  {% endfor %}
-  {% for idx in range(input_ndims) %}
-      std::cout << "output_ndims{{idx}}: " << *c_dim{{idx}} << std::endl;
-  {% endfor %}
   return;
   throw std::runtime_error(
       "Unsupported workload for this {{function_name}} specialization."

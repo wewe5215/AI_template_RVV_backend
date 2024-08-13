@@ -96,7 +96,9 @@ void {{function_name}} (
   int i32_out_batch = *out_batch;
   int i32_out_h = *out_h;
   int i32_out_w = *out_w;
-
+  {% if is_first_op %}
+    const xnn_status status_init = xnn_initialize(nullptr);
+  {% endif %}
   {{exec_paths}}
   return;
   throw std::runtime_error(
@@ -490,6 +492,7 @@ def gen_profiler(
             is_depthwise=is_depthwise,
             function_name=function_name,
             shape_function=shape_func,
+            is_first_op = True,
             exec_paths=exec_program,
         )
 
@@ -650,13 +653,14 @@ def gen_function(
     program = ""
     for instance_idx, (op_name, op) in enumerate(op_instance.items()):
         program += emit_instance(op)
-
+    match = re.search(r'(\d+)$', func_name)
     function = FUNCTION_TEMPLATE.render(
         is_bias=is_bias,
         is_bias_add=is_bias_add,
         is_transpose=is_transpose,
         is_depthwise=is_depthwise,
         function_name=func_name,
+        is_first_op = (match.group(1) == '0'),
         shape_function=shape_func,
         exec_paths=program,
     )

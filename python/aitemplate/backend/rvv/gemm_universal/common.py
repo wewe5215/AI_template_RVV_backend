@@ -167,7 +167,9 @@ void {{function_name}} (
   {{output_addr_calculator}}
   {{extra_shape}}
   {{input_output_checks}}
-
+  {% if is_first_op %}
+    const xnn_status status_init = xnn_initialize(nullptr);
+  {% endif %}
   {{exec_paths}}
   {% for idx in range(input_ndims) %}
       std::cout << "input_ndims{{idx}}: " << *a_dim{{idx}} << std::endl;
@@ -515,10 +517,12 @@ def gen_function(
         weight_ndims=weight_ndims,
         output_ndims=output_ndims,
     )
+    match = re.search(r'(\d+)$', func_name)
     return src_template.render(
         instances="",
         function_name=func_name,
         dtype="float",
+        is_first_op = (match.group(1) == '0'),
         shape_eval=shape_eval_func,
         input_addr_calculator=input_addr_calculator,
         output_addr_calculator=output_addr_calculator,
@@ -650,6 +654,7 @@ def gen_profiler(
         output_ndims=ndims,
         shape_eval=shape_func,
         input_output_checks=input_output_checks,
+        is_first_op = True,
         exec_paths="\n".join(instances),
         output_addr_calculator=output_addr_calculator,
         extra_code=extra_code,
