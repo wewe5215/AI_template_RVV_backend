@@ -213,8 +213,9 @@ void {{func_name}}(
   int64_t*,
 {% endfor %}
 {% for idx in range(input_ndims) %}
-  int64_t*{% if not loop.last %},{% endif %}
+  int64_t*,
 {% endfor %}
+  pthreadpool*
 );
 """
 )
@@ -238,9 +239,9 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}    {{dim}},
 {% endfor %}
 {% for dim in cdims %}
-{{indent}}    {{dim}}{% if not loop.last %},{% endif %}
+{{indent}}    {{dim}},
 {% endfor %}
-{{indent}});
+{{indent}}    threadpool_.get());
 {{indent}}}
 """
 )

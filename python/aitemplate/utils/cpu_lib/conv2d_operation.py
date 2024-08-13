@@ -73,7 +73,7 @@ template = jinja2.Template(
 {{indent}}    op_conv, i32_batch, i32_in_h, i32_in_w,
 {{indent}}    &workspace_size, &workspace_alignment,
 {{indent}}    /*output_height_out=*/nullptr, /*output_width_out=*/nullptr,
-{{indent}}    /*threadpool=*/nullptr), xnn_status_success);
+{{indent}}    /*threadpool=*/pthreadpool_), xnn_status_success);
 {{indent}}CHECK_EQ(workspace_size, 0);
 {{indent}}CHECK_EQ(workspace_alignment, 1);
 {{indent}}CHECK_EQ(xnn_setup_{{Conv2DSpecialization}}(
@@ -81,7 +81,7 @@ template = jinja2.Template(
 {{indent}}    /*workspace=*/nullptr, 
 {{indent}}    ({{DataName}}*)(in_ptr), 
 {{indent}}    ({{DataName}}*)(out_ptr)), xnn_status_success);
-{{indent}}CHECK_EQ(xnn_run_operator(op_conv, /*threadpool=*/nullptr), xnn_status_success);
+{{indent}}CHECK_EQ(xnn_run_operator(op_conv, /*threadpool=*/pthreadpool_), xnn_status_success);
             """
         )
 code_snippet = jinja2.Template(
@@ -113,10 +113,10 @@ binary_func_minmax_flag_op = jinja2.Template(
 {{indent}}CHECK_EQ(
 {{indent}}xnn_status_success, xnn_reshape_{{operation}}_{{DataType}}(
 {{indent}}                        binary_func_minmax_flag_op, 4, a_shape, 4, b_shape,
-{{indent}}                        /*threadpool=*/nullptr));
+{{indent}}                        /*threadpool=*/pthreadpool_));
 {{indent}}CHECK_EQ(
 {{indent}}  xnn_status_success, xnn_setup_{{operation}}_{{DataType}}(binary_func_minmax_flag_op, ({{DataName}}*)(res_ptr), ({{DataName}}*)(out_ptr), ({{DataName}}*)(out_ptr)));
-{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(binary_func_minmax_flag_op, /*threadpool=*/nullptr));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(binary_func_minmax_flag_op, /*threadpool=*/pthreadpool_));
 """
 )
 # copysign(f32), maximum(f16, f32), minimum(f16, f32), squared_difference(f16, f32), mul(s32), 
@@ -130,10 +130,10 @@ binary_func_flag_op = jinja2.Template(
 {{indent}}CHECK_EQ(
 {{indent}}xnn_status_success, xnn_reshape_{{operation}}_{{DataType}}(
 {{indent}}                        binary_func_flag_op, a_shape, input1_dims.data(), b_shape, input2_dims.data(),
-{{indent}}                        /*threadpool=*/nullptr));
+{{indent}}                        /*threadpool=*/pthreadpool_));
 {{indent}}CHECK_EQ(
 {{indent}}xnn_status_success, xnn_setup_{{operation}}_{{DataType}}(binary_func_flag_op, ({{DataName}}*)(res_ptr), ({{DataName}}*)(out_ptr), ({{DataName}}*)(out_ptr)));
-{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(binary_func_flag_op, /*threadpool=*/nullptr));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(binary_func_flag_op, /*threadpool=*/pthreadpool_));
 """
 )
 @dataclass

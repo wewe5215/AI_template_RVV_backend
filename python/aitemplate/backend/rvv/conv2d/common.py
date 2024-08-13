@@ -81,7 +81,8 @@ void {{function_name}} (
     int padh,
     int stridew,
     int dilationw,
-    int padw
+    int padw,
+    pthreadpool* pthreadpool_
   ) {
 
   {{shape_function}}
@@ -132,7 +133,8 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
 {{indent}}      {{stridew}},
 {{indent}}      {{dilationw}},
 {{indent}}      {{padw}},
-{{indent}}      global_workspace_
+{{indent}}      global_workspace_,
+{{indent}}      threadpool_.get()
 {{indent}}    );
 {{indent}}  } catch (...) {
 {{indent}}    runtime = 0;
@@ -168,7 +170,8 @@ int benchmark_{{function_name}} (
   int,
   int,
   int,
-  uint8_t*
+  uint8_t*,
+  pthreadpool*
 );
 """
 )
@@ -212,7 +215,8 @@ int benchmark_{{function_name}} (
   int stridew,
   int dilationw,
   int padw,
-  uint8_t* global_workspace_
+  uint8_t* global_workspace_,
+  pthreadpool* pthreadpool_
 ) {
   Ptr in_data = RAII_DeviceMalloc(NI*HI*WI*CI*2);
   Ptr weight_data = RAII_DeviceMalloc(CO*KH*KW*CI*2);
@@ -301,7 +305,8 @@ PROFILER_MAIN_TEMPLATE = jinja2.Template(
 #include <string>
 #include <time.h>
 #include "xnnpack.h"
-
+#include <pthreadpool.h>
+#include <thread>
 {{benchmark_decls}}
 
 int main(int argc, char** argv) {
@@ -320,7 +325,9 @@ int main(int argc, char** argv) {
   int dilationw = std::stoi(argv[13]);
 
 {{shape_func}}
-
+  size_t num_threads = std::thread::hardware_concurrency();
+  std::unique_ptr<pthreadpool, decltype(&pthreadpool_destroy)> threadpool_(
+      pthreadpool_create(num_threads), pthreadpool_destroy);
   float runtime = 0;
   size_t workspace_size = 0;
   uint8_t* global_workspace_ = nullptr;
@@ -360,7 +367,8 @@ void {{func_name}}(
   int,
   int,
   int,
-  int
+  int,
+  pthreadpool*
 );
 """
 )
@@ -393,7 +401,8 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}    {{padh}},
 {{indent}}    {{stridew}},
 {{indent}}    {{dilationw}},
-{{indent}}    {{padw}}
+{{indent}}    {{padw}},
+{{indent}}    threadpool_.get()
 {{indent}});
 """
 )

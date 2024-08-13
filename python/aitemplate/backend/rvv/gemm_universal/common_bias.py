@@ -55,12 +55,9 @@ void {{function_name}} (
     int64_t* b_dim{{idx}},
 {% endfor %}
 {% for idx in range(input_ndims) %}
-  {% if idx == input_ndims - 1 %}
-    int64_t* c_dim{{idx}}
-  {% else %}
     int64_t* c_dim{{idx}},
-  {% endif %}
 {% endfor %}
+    pthreadpool* pthreadpool_
   ) {
   {{shape_eval}}
   {{input_addr_calculator}}
@@ -100,8 +97,9 @@ void {{func_name}}(
   int64_t*,
 {% endfor %}
 {% for idx in range(input_ndims) %}
-    int64_t*{% if not loop.last %},{% endif %}
+    int64_t*,
 {% endfor %}
+    pthreadpool*
 );
 """
 )

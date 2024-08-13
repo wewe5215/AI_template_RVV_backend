@@ -38,6 +38,8 @@ MODEL_TEMPLATE_CPU = jinja2.Template(
 #include <unordered_map>
 #include <math.h>
 #include <iomanip>
+#include <pthreadpool.h>
+#include <thread>
 
 {{ function_decl }}
 
@@ -69,7 +71,8 @@ class {{model_name}} : public ModelBase<{{model_name}}> {
             num_inputs,
             num_outputs,
             num_unbound_constants,
-            constants) {
+            constants),
+          threadpool_(pthreadpool_create(std::thread::hardware_concurrency()), pthreadpool_destroy) {
     {{ set_up_constants }}
     auto* blob_ptr = static_cast<uint8_t*>(blob_.get());
     {{ tensor_slice }}
@@ -172,6 +175,7 @@ class {{model_name}} : public ModelBase<{{model_name}}> {
 {{ dim_decl }}
 {{ jagged_decl }}
 {{ function_state }}
+std::unique_ptr<pthreadpool, decltype(&pthreadpool_destroy)> threadpool_;
 };
 } // namespace ait
 """

@@ -45,14 +45,14 @@ EXEC_TEMPLATE_AVG = jinja2.Template(
 {{indent}}    CI, /*input_pixel_stride=*/CI, /*output_pixel_stride=*/CO,
 {{indent}}    &w_size, &w_align,
 {{indent}}    /*output_height_out=*/nullptr, /*output_width_out=*/nullptr,
-{{indent}}    /*threadpool=*/nullptr));
+{{indent}}    /*threadpool=*/pthreadpool_));
 {{indent}}CHECK_LE(w_align, 16);
 {{indent}}std::vector<char> workspace_vector(w_size + w_align + 16);
 {{indent}}void* maybe_aligned_workspace = workspace_vector.data();
 {{indent}}void* aligned_workspace = \
     (void*)((intptr_t)maybe_aligned_workspace + w_align - (intptr_t)maybe_aligned_workspace % w_align);
 {{indent}}CHECK_EQ(xnn_status_success, xnn_setup_average_pooling2d_nhwc_f32(op_avg, aligned_workspace, (float*)(in_ptr), (float*)(out_ptr)));
-{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(op_avg, /*threadpool=*/nullptr));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(op_avg, /*threadpool=*/pthreadpool_));
 """
 )
 
@@ -69,9 +69,9 @@ EXEC_TEMPLATE_MAX = jinja2.Template(
 {{indent}}  xnn_status_success, xnn_reshape_max_pooling2d_nhwc_f32(
 {{indent}}                        op_max, NI, HI, WI, CI, /*input_pixel_stride=*/CI,
 {{indent}}                        /*output_pixel_stride=*/CO, /*output_height_out=*/nullptr, /*output_width_out=*/nullptr,
-{{indent}}                        /*threadpool=*/nullptr));
+{{indent}}                        /*threadpool=*/pthreadpool_));
 {{indent}}CHECK_EQ(xnn_status_success, xnn_setup_max_pooling2d_nhwc_f32(op_max, (float*)(in_ptr), (float*)(out_ptr)));
-{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(op_max, /*threadpool=*/nullptr));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(op_max, /*threadpool=*/pthreadpool_));
 """
 )
 
@@ -105,7 +105,8 @@ void {{function_name}}(
     int64_t kernel_h,
     int64_t kernel_w,
     int64_t stride,
-    int64_t pad
+    int64_t pad,
+    pthreadpool* pthreadpool_
     ) {
   {{shape_function}}
   {% if is_first_op %}
@@ -136,7 +137,8 @@ void {{func_name}}(
   int64_t,
   int64_t,
   int64_t,
-  int64_t
+  int64_t,
+  pthreadpool*
 );
 """
 )
@@ -156,7 +158,8 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}    {{kernel_h}},
 {{indent}}    {{kernel_w}},
 {{indent}}    {{stride}},
-{{indent}}    {{pad}}
+{{indent}}    {{pad}},
+{{indent}}    threadpool_.get()
 {{indent}});
 """
 )

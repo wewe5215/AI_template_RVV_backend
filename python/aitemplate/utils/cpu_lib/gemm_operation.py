@@ -36,9 +36,9 @@ template = jinja2.Template(
 {{indent}}  std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op(gemm_op, xnn_delete_operator);
 {{indent}}  CHECK_EQ(xnn_status_success, status);
 {{indent}}  CHECK_NE(nullptr, gemm_op);
-{{indent}}  CHECK_EQ(xnn_status_success, xnn_reshape_{{GemmSpecialization}}(gemm_op, M, /*threadpool=*/nullptr));
+{{indent}}  CHECK_EQ(xnn_status_success, xnn_reshape_{{GemmSpecialization}}(gemm_op, M, /*threadpool=*/pthreadpool_));
 {{indent}}  CHECK_EQ(xnn_status_success, xnn_setup_{{GemmSpecialization}}(gemm_op, ({{DataName}}*)(a_ptr), ({{DataName}}*)(c_ptr)));
-{{indent}}  CHECK_EQ(xnn_status_success, xnn_run_operator(gemm_op, /*threadpool=*/nullptr));
+{{indent}}  CHECK_EQ(xnn_status_success, xnn_run_operator(gemm_op, /*threadpool=*/pthreadpool_));
 
 """
 )
