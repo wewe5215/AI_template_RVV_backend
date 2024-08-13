@@ -745,6 +745,7 @@ float ModelContainer::BenchmarkImpl(
     for (size_t i = 0; i < count; ++i) {
       model->Run(stream, graph_mode);
     }
+    clock_gettime(CLOCK_MONOTONIC, &end);
   } catch (...) {
     std::lock_guard lk(models_mutex_);
     available_models_.push_back(model);
@@ -763,8 +764,7 @@ float ModelContainer::BenchmarkImpl(
     pending_models_.push_back(model);
   }
   pending_models_available_.notify_one();
-  clock_gettime(CLOCK_MONOTONIC, &end);
-  float elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e6;
+  float elapsed = (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_nsec - start.tv_nsec) / 1e6;
   LOG(INFO) << "Benchmark runtime ms/iter: " << elapsed / count;
   return elapsed;
 }
