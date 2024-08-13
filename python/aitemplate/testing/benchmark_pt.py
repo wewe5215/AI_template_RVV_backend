@@ -16,7 +16,7 @@
 helper function to benchmark eager pytorch
 """
 # pylint: disable=C0415
-
+from aitemplate.testing.detect_target import detect_target
 
 def benchmark_torch_function(iters: int, function, *args, **kwargs) -> float:
     """
@@ -37,19 +37,28 @@ def benchmark_torch_function(iters: int, function, *args, **kwargs) -> float:
         Runtime per iteration in ms.
     """
     import torch
-
+    import time
     # Warm up
     for _ in range(5):
         function(*args, **kwargs)
 
     # Start benchmark.
-    torch.cuda.synchronize()
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
-    start_event.record()
-    for _ in range(iters):
-        function(*args, **kwargs)
-    end_event.record()
-    torch.cuda.synchronize()
+    target = detect_target()
+    if target.name() == "cuda":
+        torch.cuda.synchronize()
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        start_event.record()
+        for _ in range(iters):
+            function(*args, **kwargs)
+        end_event.record()
+        torch.cuda.synchronize()
+        return (start_event.elapsed_time(end_event)) / iters
+    else:
+        start_time = time.time()
+        for _ in range(iters):
+            function(*args, **kwargs)
+        end_time = time.time()
+        elapsed_time = (end_time - start_time) * 1000
     # in ms
-    return (start_event.elapsed_time(end_event)) / iters
+        return elapsed_time / iters

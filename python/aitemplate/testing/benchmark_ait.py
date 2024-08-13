@@ -14,9 +14,9 @@
 #
 
 from typing import Optional
-
+from aitemplate.testing.detect_target import detect_target
 import torch
-
+import time
 
 def make_input_output_pools(
     *, pool_size, eval_pt_func, input_filter_func, output_filter_func
@@ -130,31 +130,58 @@ def run_benchmark(
     float
         The average time per iteration in *milliseconds*.
     """
-    if stream is None:
-        stream = torch.cuda.default_stream()
+    target = detect_target()
+    if target.name() == "cuda":
+        if stream is None:
+            stream = torch.cuda.default_stream()
 
-    _common_params = {
-        "ait_module": ait_module,
-        "inputs_pool": inputs_pool,
-        "outputs_pool": outputs_pool,
-        "sync": sync,
-        "stream_ptr": stream.cuda_stream,
-        "graph_mode": graph_mode,
-    }
-    # Warmup by running for num_warmup_iters
-    run_module_with_pools(
-        num_iters=num_warmup_iters,
-        **_common_params,
-    )
-    # Benchmark by running for num_iters
-    torch.cuda.synchronize()
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
-    start_event.record(stream=stream)
-    run_module_with_pools(
-        num_iters=num_iters,
-        **_common_params,
-    )
-    end_event.record(stream=stream)
-    torch.cuda.synchronize()
-    return start_event.elapsed_time(end_event) / num_iters
+        _common_params = {
+            "ait_module": ait_module,
+            "inputs_pool": inputs_pool,
+            "outputs_pool": outputs_pool,
+            "sync": sync,
+            "stream_ptr": stream.cuda_stream,
+            "graph_mode": graph_mode,
+        }
+        # Warmup by running for num_warmup_iters
+        run_module_with_pools(
+            num_iters=num_warmup_iters,
+            **_common_params,
+        )
+        # Benchmark by running for num_iters
+        torch.cuda.synchronize()
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+        start_event.record(stream=stream)
+        run_module_with_pools(
+            num_iters=num_iters,
+            **_common_params,
+        )
+        end_event.record(stream=stream)
+        torch.cuda.synchronize()
+        return (start_event.elapsed_time(end_event)) / num_iters
+    else:
+        stream = None
+
+        _common_params = {
+            "ait_module": ait_module,
+            "inputs_pool": inputs_pool,
+            "outputs_pool": outputs_pool,
+            "sync": sync,
+            "stream_ptr": None,
+            "graph_mode": graph_mode,
+        }
+        # Warmup by running for num_warmup_iters
+        run_module_with_pools(
+            num_iters=num_warmup_iters,
+            **_common_params,
+        )
+        # Benchmark by running for num_iters
+        start_time = time.time()
+        run_module_with_pools(
+            num_iters=num_iters,
+            **_common_params,
+        )
+        end_time = time.time()
+        elapsed_time = (end_time - start_time) * 1000
+        return elapsed_time / num_iters
