@@ -2,6 +2,11 @@
 #include <cstdio>
 #include <stdexcept>
 #include "xnnpack.h"
+#include <stdexcept>
+#include <limits>
+#include <stddef.h>
+#include <limits.h>
+
 #include "../include/logging.h"
 void conv2d_bias_add_relu_0 (
     void* in_ptr,

@@ -14,7 +14,8 @@
 //  limitations under the License.
 //
 #include "../include/../include/debug_utility.h"
-
+#include <cmath>
+#include <math.h>
 namespace {
 
 void inf_and_nan_checker(const _Float16* tensor, int64_t elem_cnt) {

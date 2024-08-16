@@ -16,7 +16,7 @@
 
 #include <sstream>
 #include <string>
-
+#include <cstdint>
 namespace ait {
 
 using DeviceError = bool;

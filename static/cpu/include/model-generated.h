@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <math.h>
 #include <iomanip>
-
+#include <time.h>
 
 void conv2d_bias_add_relu_0(
   void*,
