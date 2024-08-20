@@ -28,7 +28,7 @@ class Conv2dDepthwiseBias(Conv2dBiasAct):
         padding=0,
         dilation=1,
         groups=1,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__(
             "conv2d_depthwise_bias",

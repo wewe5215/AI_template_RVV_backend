@@ -29,7 +29,7 @@ class LayerNorm(Module):
         self,
         normalized_shape,
         eps=1e-5,
-        dtype="float16",
+        dtype="float32",
         **kwargs,
     ):
         """Standalone layernorm op.

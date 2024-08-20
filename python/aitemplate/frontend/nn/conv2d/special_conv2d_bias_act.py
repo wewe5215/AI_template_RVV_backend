@@ -35,7 +35,7 @@ class SpecialConv2dBiasAct(Module):
         padding=0,
         dilation=1,
         auto_padding=True,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__()
         if auto_padding and in_channels < 4:

@@ -31,7 +31,7 @@ class GroupNorm(Module):
         num_channels,
         eps=1e-5,
         affine=True,
-        dtype="float16",
+        dtype="float32",
         use_swish=False,
         **kwargs,
     ):

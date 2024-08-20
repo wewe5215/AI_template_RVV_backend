@@ -21,8 +21,8 @@ from aitemplate.compiler import compile_model
 from aitemplate.compiler.base import Tensor
 from aitemplate.testing import detect_target
 
-from .modeling.resnet import build_resnet_backbone
-from .weight_utils import timm_export
+from modeling.resnet import build_resnet_backbone
+from weight_utils import timm_export
 
 
 def mark_output(y):
@@ -46,8 +46,8 @@ class ResNet50Verification(unittest.TestCase):
     def test_resnet50(self):
         target = detect_target()
         batch_size = 1
-        torch_dtype = torch.float16
-        ait_dtype = "float16"
+        torch_dtype = torch.float32
+        ait_dtype = "float32"
         # Create input tensor, need to specify the shape, dtype and is_input flag
         x = Tensor(
             shape=[batch_size, 224, 224, 3],
@@ -64,23 +64,23 @@ class ResNet50Verification(unittest.TestCase):
         mark_output(y)
 
         timm_exporter = timm_export("resnet50", pretrained=False)
-        ait_params = timm_exporter.export_model(half=torch_dtype == torch.float16)
-        pt_model = timm_exporter.pt_model.to(dtype=torch_dtype, device="cuda")
+        ait_params = timm_exporter.export_model(half=False)
+        pt_model = timm_exporter.pt_model.to(dtype=torch_dtype, device="cpu")
         pt_model.eval()
         module = compile_model(y, target, "./tmp", "resnet50")
         for name, param in ait_params.items():
             module.set_constant_with_tensor(name, param)
 
         # ait model expects NHWC format
-        x_ait = torch.rand([batch_size, 224, 224, 3], dtype=torch_dtype, device="cuda")
+        x_ait = torch.rand([batch_size, 224, 224, 3], dtype=torch_dtype, device="cpu")
         # center the input wrt the training data for numerical stability
-        x_ait -= torch.tensor([0.485, 0.456, 0.406]).cuda()
-        x_ait /= torch.tensor([0.229, 0.224, 0.225]).cuda()
+        x_ait -= torch.tensor([0.485, 0.456, 0.406])
+        x_ait /= torch.tensor([0.229, 0.224, 0.225])
         # torch model expects NCHW format
         x_pt = torch.transpose(x_ait, 1, 3).contiguous()
         with torch.no_grad():
             y_pt = pt_model(x_pt)
-        y_ait = torch.zeros([batch_size, 1, 1, 1000], dtype=torch_dtype, device="cuda")
+        y_ait = torch.zeros([batch_size, 1, 1, 1000], dtype=torch_dtype, device="cpu")
         module.run_with_tensors([x_ait], [y_ait])
 
         torch.testing.assert_close(
@@ -89,5 +89,5 @@ class ResNet50Verification(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    torch.cuda.manual_seed(0)
+    torch.manual_seed(0)
     unittest.main()

@@ -66,7 +66,7 @@ class BasicStem(CNNBlockBase):
                 conv_op = nn.Conv2dBiasHardswish
             else:
                 raise NotImplementedError
-        self.conv1 = conv_op(in_channels, out_channels, 7, 2, 7 // 2)
+        self.conv1 = conv_op(in_channels, out_channels, 7, 2, 7 // 2, dtype="float")
         self.pool = nn.MaxPool2d(3, 2, 1)
 
     def forward(self, x):
@@ -122,7 +122,7 @@ class BottleneckBlock(CNNBlockBase):
         super().__init__(in_channels, out_channels, stride)
 
         if in_channels != out_channels:
-            self.downsample_0 = nn.Conv2dBias(in_channels, out_channels, 1, stride, 0)
+            self.downsample_0 = nn.Conv2dBias(in_channels, out_channels, 1, stride, 0, dtype="float")
         else:
             self.downsample_0 = None
 
@@ -246,7 +246,7 @@ class ResNet(nn.Module):
 
         if num_classes is not None:
             self.avgpool = nn.AvgPool2d(7, 1, 0)
-            self.fc = nn.Linear(curr_channels, num_classes)
+            self.fc = nn.Linear(curr_channels, num_classes, dtype="float")
 
         if out_features is None:
             out_features = [name]

@@ -42,11 +42,16 @@ class timm_export:
             )
         self.pt_state = self.pt_model.state_dict()
 
-    def export_model(self, half=True):
+    def export_model(self, half=False):
         fused_model = {}
         for param_name in self.pt_state.keys():
             self.transform_params(param_name, fused_model)
         ait_model = {k.replace(".", "_"): weight for k, weight in fused_model.items()}
+        if detect_target().name() == "rvv":
+            float_params = {}
+            for k, v in ait_model.items():
+                float_params[k] = v.detach().cpu()
+            return float_params
         if detect_target().name() == "cuda":
             self.export_conv0(ait_model, fused_model)
         if half:
@@ -148,7 +153,7 @@ def export_to_torch_tensor(model_name="resnet50"):
     if model_name != "resnet50":
         raise NotImplementedError
     timm2ait = timm_export(model_name)
-    ait_model = timm2ait.export_model(half=True)
+    ait_model = timm2ait.export_model(half=False)
     return ait_model
 
 
@@ -158,7 +163,7 @@ def export_to_numpy(param_path):
     ait_model = export_to_torch_tensor()
     np_weights = {}
     for k, v in ait_model.items():
-        np_weights[k] = v.detach().cpu().numpy().astype(np.float16)
+        np_weights[k] = v.detach().cpu().numpy().astype(np.float32)
 
     with open(param_path, "wb") as f:
         pickle.dump(np_weights, f)

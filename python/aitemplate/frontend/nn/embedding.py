@@ -56,7 +56,7 @@ class BertEmbeddings(Module):
         type_vocab_size,
         layer_norm_eps,
         hidden_dropout_prob,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__()
         assert (

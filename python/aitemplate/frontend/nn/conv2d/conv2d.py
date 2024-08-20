@@ -99,7 +99,7 @@ class Conv2d(Module):
         padding=0,
         dilation=1,
         groups=1,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__()
         self.weight = Parameter(

@@ -17,17 +17,31 @@ import os
 import click
 import timm
 import torch
-from aitemplate.testing.benchmark_pt import benchmark_torch_function
+import time
+# from aitemplate.testing.benchmark_pt import benchmark_torch_function
 
+def benchmark_function(iters: int, function, *args, **kwargs):
+    # Warm up
+    for _ in range(5):
+        function(*args, **kwargs)
 
+    # Start benchmark
+    start_time = time.time()
+    for _ in range(iters):
+        function(*args, **kwargs)
+    end_time = time.time()
+
+    # Calculate the average time per iteration in milliseconds
+    elapsed_time = (end_time - start_time) * 1000  # Convert to milliseconds
+    return elapsed_time / iters
 def benchmark(model, batch_size):
     with torch.inference_mode():
         input_shape = (batch_size, 3, 224, 224)
-        input_data = torch.randn(input_shape).cuda().half()
+        input_data = torch.randn(input_shape)
         # warm up
-        benchmark_torch_function(100, model, input_data)
+        benchmark_function(100, model, input_data)
         # benchmark
-        t = benchmark_torch_function(100, model, input_data)
+        t = benchmark_function(100, model, input_data)
         print("batch_size: {}, time: {}".format(batch_size, t))
         dev_flag = os.environ.get("HIP_VISIBLE_DEVICES", "-1")
         dev_flag = dev_flag.replace(",", "_")
@@ -38,7 +52,7 @@ def benchmark(model, batch_size):
 @click.command()
 @click.option("--batch-size", default=0, type=int)
 def main(batch_size):
-    model = timm.create_model("resnet50", pretrained=False).cuda().half()
+    model = timm.create_model("resnet50", pretrained=False)
     model.eval()
     if batch_size == 0:
         for batch_size in [1, 2, 4, 8, 16, 32, 64, 128, 256]:

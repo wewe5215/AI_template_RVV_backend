@@ -143,7 +143,7 @@ def generate_shifted_anchors(
 def gen_batch_inds(
     batch_size,
     rpn_post_nms_top_n,
-    dtype="float16",
+    dtype="float32",
 ):
     if batch_size > 1:
         inds = np.arange(batch_size)
@@ -169,7 +169,7 @@ class Proposal(Module):
         level=-1,
         f_proc=None,
         batch_size=1,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__()
         self.im_h, self.im_w = im_shape

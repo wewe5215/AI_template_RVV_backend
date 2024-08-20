@@ -25,7 +25,7 @@ class Identity(Module):
 
     def __init__(
         self,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__()
 

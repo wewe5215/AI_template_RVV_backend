@@ -45,7 +45,7 @@ class FlashAttention(Module):
         max_seq_len,
         dropout=0,
         causal=False,
-        dtype="float16",
+        dtype="float32",
     ):
         """Initialize attention module, create a tensor for seqlen"""
         super().__init__()
@@ -105,7 +105,7 @@ class MultiheadAttention(Module):
         causal=False,
         mask_seq=0,
         use_mem_eff=False,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__()
         assert (
@@ -230,7 +230,7 @@ class MultiheadAttention(Module):
             # permute: (B, Seqlen, num_heads, head_dim)
             if self.USE_CUDA:
                 scale = Tensor(
-                    shape=[], dtype="float16", name="scale", value=self.scale
+                    shape=[], dtype="float32", name="scale", value=self.scale
                 )
                 # [3, b, num_heads, seqlen, d]
                 _, b, num_heads, seqlen, d = self.get_shape(x)
@@ -323,7 +323,7 @@ class CrossAttention(Module):
         proj_drop=0.0,
         has_residual=True,
         causal=False,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__()
         assert (

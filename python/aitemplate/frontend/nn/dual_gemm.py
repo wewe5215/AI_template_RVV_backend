@@ -31,7 +31,7 @@ class DualGemm(Module):
         in_channels,
         out_channels,
         fast_gelu=True,
-        dtype="float16",
+        dtype="float32",
     ):
         """Initialize dual gemm module, create a tensor for weights"""
         super().__init__()
@@ -56,7 +56,7 @@ class T5DenseGatedGeluDense(Module):
         self,
         in_channels,
         out_channels,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__()
         self.wi_0_weight = Parameter(

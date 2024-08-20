@@ -53,7 +53,7 @@ def compile_module(model_name, batch_size, **kwargs):
     target = detect_target(**kwargs)
     # Create input tensor, need to specify the shape, dtype and is_input flag
     x = Tensor(
-        shape=[batch_size, 224, 224, 3], dtype="float16", name="input0", is_input=True
+        shape=[batch_size, 224, 224, 3], dtype="float32", name="input0", is_input=True
     )
     model = build_resnet_backbone(50, activation="ReLU")
     # Mark all parameters with name same to PyTorch name convention
@@ -80,9 +80,9 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True):
     mod.fold_constants(sync=True)
 
     # prepare input/output tensor
-    x_input = torch.randn([batch_size, 224, 224, 3]).cuda().half()
+    x_input = torch.randn([batch_size, 224, 224, 3])
     x_input = x_input.contiguous()
-    y_output = torch.zeros([batch_size, 1, 1, 1000]).cuda().half()
+    y_output = torch.zeros([batch_size, 1, 1, 1000])
     y_output = y_output.contiguous()
 
     # warm up
@@ -112,13 +112,13 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True):
 @click.option(
     "--use-fp16-acc",
     type=bool,
-    default=True,
+    default=False,
     help="Whether to use FP16 for accumulation (similar to TensorRT)",
 )
 @click.option("--use-graph", type=bool, default=True, help="Whether to use CUDA graph")
 @click.option("--batch-size", type=int, default=0, help="Batch size")
-def main(use_fp16_acc=True, use_graph=True, batch_size=0):
-    if detect_target().name() == "rocm":
+def main(use_fp16_acc=False, use_graph=True, batch_size=0):
+    if detect_target().name() == "rocm" or detect_target().name() == "rvv":
         use_graph = False
     if batch_size < 1:
         for bs in (1, 2, 4, 8, 16, 32, 64, 128, 256):

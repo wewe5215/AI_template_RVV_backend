@@ -86,7 +86,7 @@ def export_to_torch_tensor(model_name="resnet50"):
     if model_name != "resnet50":
         raise NotImplementedError
     timm2ait = timm_export(model_name)
-    params = timm2ait.export_model(half=True)
+    params = timm2ait.export_model(half=False)
     return params, timm2ait.pt_model
 
 
