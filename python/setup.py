@@ -53,11 +53,15 @@ class BinaryDistribution(Distribution):
     def is_pure(self):
         return True
 
+def safe_copytree(src, dst):
+    if os.path.exists(dst):
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst)
 
 # temp copy 3rdparty libs to build dir
-shutil.copytree("../3rdparty", "./aitemplate/3rdparty")
-shutil.copytree("../static", "./aitemplate/static")
-shutil.copytree("../licenses", "./aitemplate/licenses")
+safe_copytree("../3rdparty", "./aitemplate/3rdparty")
+safe_copytree("../static", "./aitemplate/static")
+safe_copytree("../licenses", "./aitemplate/licenses")
 
 
 def gen_file_list(srcs, f_cond):
