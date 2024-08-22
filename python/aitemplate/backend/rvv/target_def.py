@@ -39,7 +39,7 @@ from aitemplate.backend.target import (
 )
 
 from aitemplate.utils import environ
-from aitemplate.utils.misc import is_debug, is_linux
+from aitemplate.utils.misc import is_linux, is_windows, is_macos
 
 # pylint: disable=C0415,W0707,W0611,W0702,W1401
 
@@ -88,7 +88,7 @@ class RVV(Target):
             path to xnnpack compiler library
         """
         # TODO : to be revised later
-        xnnpack_path = os.environ.get("XNNPACK_PATH", "/Users/wewe5215/Desktop/AI_template_RVV_backend/3rdparty/XNNPACK/build/local/")
+        xnnpack_path = os.environ.get("XNNPACK_PATH", "/home/wewe5215/Desktop/AIT_RVV/AITemplate/3rdparty/XNNPACK/build/local/")
         return xnnpack_path
     def _build_gnu_host_compiler_options(self) -> List[str]:
         return [
@@ -162,7 +162,10 @@ class RVV(Target):
             options.append("-I" + path)
         for path in link_path:
             options.append("-L" + path)
-        options.append("-lxnnpack -lkleidiai -lpthreadpool -lcpuinfo -lpthread -g")
+        if is_macos():
+            options.append("-lxnnpack -lkleidiai -lpthreadpool -lcpuinfo -lpthread -g")
+        else:
+            options.append("-lXNNPACK -lpthreadpool -lcpuinfo -lpthread -g")
         return " ".join(options)
 
     def src_extension(self):
@@ -202,7 +205,7 @@ class RVV(Target):
 
 
     def cc(self):
-        cc = "clang++"
+        cc = "clang++-17"
         return cc
 
     def compile_cmd(self, executable=False):

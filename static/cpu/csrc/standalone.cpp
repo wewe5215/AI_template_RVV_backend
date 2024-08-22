@@ -37,7 +37,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
+#include <cstring>
 #include "macros.h"
 #include "model_interface.h"
 #include "raii_wrapper.h"

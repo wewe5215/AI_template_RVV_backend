@@ -107,6 +107,9 @@ def detect_target(**kwargs):
 
     """
     global IS_CUDA, FLAG
+    _LOGGER.info("Set target to RVV")
+    return RVV(arch="rv64gcv_zvfh", **kwargs)
+
     if FLAG:
         if IS_CUDA:
             return CUDA(arch=FLAG, **kwargs)
@@ -130,5 +133,4 @@ def detect_target(**kwargs):
         _LOGGER.info("Set target to ROCM")
         return ROCM(arch=flag, **kwargs)
     else:
-        _LOGGER.info("Set target to RVV")
-        return RVV(arch="rv64gcv_zvfh", **kwargs)
+        _LOGGER.info("target not implemented")

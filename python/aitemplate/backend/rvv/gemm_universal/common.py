@@ -133,6 +133,7 @@ SRC_TEMPLATE = jinja2.Template(
 #include <stdexcept>
 #include <cstdlib>
 #include <string>
+#include <pthreadpool.h>
 #include "xnnpack.h"
 #include "logging.h"
 {{extra_code}}
@@ -383,6 +384,9 @@ int benchmark_{{function_name}} (
 {% endfor %}
 {% endif %}
   ) {
+  size_t num_threads = std::thread::hardware_concurrency();
+  std::unique_ptr<pthreadpool, decltype(&pthreadpool_destroy)> threadpool_(
+      pthreadpool_create(num_threads), pthreadpool_destroy);
   // warmup
   for (int i = 0; i < 5; ++i) {
     {{func_call}}
