@@ -305,6 +305,8 @@ PROFILER_TEMPLATE = jinja2.Template(
 #include <ctime>
 #include <cstdlib>
 #include <stdexcept>
+#include <cstring>
+#include <thread>
 size_t GLOBAL_WORKSPACE_SIZE = 0;
 template <typename DType>
 struct ProfilerMemoryPool {
@@ -330,7 +332,7 @@ struct ProfilerMemoryPool {
     }
 
     if(is_output){
-      memset(ptr, 0, size * sizeof(DType));
+      std::memset(ptr, 0, size * sizeof(DType));
     }
     else{
       for (int64_t i = 0; i < size; ++i) {
