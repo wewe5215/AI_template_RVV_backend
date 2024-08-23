@@ -210,7 +210,7 @@ class RVV(Target):
 
     def compile_cmd(self, executable=False):
         if executable:
-            cmd = self.cc() + " " + self._compile_options + " -o {target} {src}"
+            cmd = self.cc() + " " + self._compile_options + " -o {target} {src} -Wl,--start-group -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl,--end-group"
         else:
             cmd = self.cc() + " " + self._compile_options + " -c -o {target} {src}"
         return cmd
