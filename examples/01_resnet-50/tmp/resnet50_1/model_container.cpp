@@ -13,7 +13,8 @@
 //  limitations under the License.
 //
 #include "model_container.h"
-
+#include "model_interface.h"
+#include "make_random_data.h"
 #include "device_functions-generated.h"
 #include "raii_wrapper.h"
 #include <time.h>
@@ -88,6 +89,18 @@ ModelContainer::ModelContainer(
   for (auto offset : constant_folding_outputs_offsets_) {
     constant_folder_->SetOutput(constants_ptr + offset, constant_idx++);
   }
+  std::mt19937 rnd_generator(1234);
+  std::vector<AITData> tensors;
+  for(int i = 2; i < num_params_; i ++){
+    auto& input_shape = max_param_shapes_[i];
+    auto shape = AITemplateParamShape{input_shape.data(), input_shape.size()};
+    Ptr data_generated = make_random_data(rnd_generator, shape, param_dtypes_[i]);
+    tensors.push_back(AITData(data_generated.get(), shape, param_dtypes_[i]));
+  }
+  const AITData* tensors_pointer = tensors.data();
+  auto handle = reinterpret_cast<AITemplateModelHandle>(this);
+  AITemplateModelContainerSetManyConstants(handle, &param_names_[2], tensors_pointer, num_params_-2);
+  AITemplateModelContainerFoldConstantsInDoubleBuffer(handle, true);
 }
 
 void ModelContainer::Run(
@@ -745,7 +758,6 @@ float ModelContainer::BenchmarkImpl(
     for (size_t i = 0; i < count; ++i) {
       model->Run(stream, graph_mode);
     }
-    clock_gettime(CLOCK_MONOTONIC, &end);
   } catch (...) {
     std::lock_guard lk(models_mutex_);
     available_models_.push_back(model);

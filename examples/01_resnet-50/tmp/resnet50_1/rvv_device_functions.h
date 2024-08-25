@@ -16,7 +16,7 @@
 
 #include <sstream>
 #include <string>
-
+#include <stdint.h>
 namespace ait {
 
 using DeviceError = bool;
