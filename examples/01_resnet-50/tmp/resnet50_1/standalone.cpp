@@ -37,12 +37,241 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
+#include <cstring>
 #include "macros.h"
 #include "model_interface.h"
 #include "raii_wrapper.h"
 #include "make_random_data.h"
+#include "model_container.h"
 using namespace ait;
+std::vector<const char*> param_names_;
+std::vector<std::vector<int64_t>> max_param_shapes_;
+void setup_constant(){
+  param_names_.resize(110);
+  max_param_shapes_.resize(110);
+  param_names_[0] = "input0";
+  param_names_[2] = "stem_conv1_weight";
+  param_names_[3] = "stem_conv1_bias";
+  param_names_[4] = "layer1_0_conv1_weight";
+  param_names_[5] = "layer1_0_conv1_bias";
+  param_names_[6] = "layer1_0_conv2_weight";
+  param_names_[7] = "layer1_0_conv2_bias";
+  param_names_[8] = "layer1_0_downsample_0_weight";
+  param_names_[9] = "layer1_0_downsample_0_bias";
+  param_names_[10] = "layer1_0_conv3_weight";
+  param_names_[11] = "layer1_0_conv3_bias";
+  param_names_[12] = "layer1_1_conv1_weight";
+  param_names_[13] = "layer1_1_conv1_bias";
+  param_names_[14] = "layer1_1_conv2_weight";
+  param_names_[15] = "layer1_1_conv2_bias";
+  param_names_[16] = "layer1_1_conv3_weight";
+  param_names_[17] = "layer1_1_conv3_bias";
+  param_names_[18] = "layer1_2_conv1_weight";
+  param_names_[19] = "layer1_2_conv1_bias";
+  param_names_[20] = "layer1_2_conv2_weight";
+  param_names_[21] = "layer1_2_conv2_bias";
+  param_names_[22] = "layer1_2_conv3_weight";
+  param_names_[23] = "layer1_2_conv3_bias";
+  param_names_[24] = "layer2_0_conv1_weight";
+  param_names_[25] = "layer2_0_conv1_bias";
+  param_names_[26] = "layer2_0_conv2_weight";
+  param_names_[27] = "layer2_0_conv2_bias";
+  param_names_[28] = "layer2_0_downsample_0_weight";
+  param_names_[29] = "layer2_0_downsample_0_bias";
+  param_names_[30] = "layer2_0_conv3_weight";
+  param_names_[31] = "layer2_0_conv3_bias";
+  param_names_[32] = "layer2_1_conv1_weight";
+  param_names_[33] = "layer2_1_conv1_bias";
+  param_names_[34] = "layer2_1_conv2_weight";
+  param_names_[35] = "layer2_1_conv2_bias";
+  param_names_[36] = "layer2_1_conv3_weight";
+  param_names_[37] = "layer2_1_conv3_bias";
+  param_names_[38] = "layer2_2_conv1_weight";
+  param_names_[39] = "layer2_2_conv1_bias";
+  param_names_[40] = "layer2_2_conv2_weight";
+  param_names_[41] = "layer2_2_conv2_bias";
+  param_names_[42] = "layer2_2_conv3_weight";
+  param_names_[43] = "layer2_2_conv3_bias";
+  param_names_[44] = "layer2_3_conv1_weight";
+  param_names_[45] = "layer2_3_conv1_bias";
+  param_names_[46] = "layer2_3_conv2_weight";
+  param_names_[47] = "layer2_3_conv2_bias";
+  param_names_[48] = "layer2_3_conv3_weight";
+  param_names_[49] = "layer2_3_conv3_bias";
+  param_names_[50] = "layer3_0_conv1_weight";
+  param_names_[51] = "layer3_0_conv1_bias";
+  param_names_[52] = "layer3_0_conv2_weight";
+  param_names_[53] = "layer3_0_conv2_bias";
+  param_names_[54] = "layer3_0_downsample_0_weight";
+  param_names_[55] = "layer3_0_downsample_0_bias";
+  param_names_[56] = "layer3_0_conv3_weight";
+  param_names_[57] = "layer3_0_conv3_bias";
+  param_names_[58] = "layer3_1_conv1_weight";
+  param_names_[59] = "layer3_1_conv1_bias";
+  param_names_[60] = "layer3_1_conv2_weight";
+  param_names_[61] = "layer3_1_conv2_bias";
+  param_names_[62] = "layer3_1_conv3_weight";
+  param_names_[63] = "layer3_1_conv3_bias";
+  param_names_[64] = "layer3_2_conv1_weight";
+  param_names_[65] = "layer3_2_conv1_bias";
+  param_names_[66] = "layer3_2_conv2_weight";
+  param_names_[67] = "layer3_2_conv2_bias";
+  param_names_[68] = "layer3_2_conv3_weight";
+  param_names_[69] = "layer3_2_conv3_bias";
+  param_names_[70] = "layer3_3_conv1_weight";
+  param_names_[71] = "layer3_3_conv1_bias";
+  param_names_[72] = "layer3_3_conv2_weight";
+  param_names_[73] = "layer3_3_conv2_bias";
+  param_names_[74] = "layer3_3_conv3_weight";
+  param_names_[75] = "layer3_3_conv3_bias";
+  param_names_[76] = "layer3_4_conv1_weight";
+  param_names_[77] = "layer3_4_conv1_bias";
+  param_names_[78] = "layer3_4_conv2_weight";
+  param_names_[79] = "layer3_4_conv2_bias";
+  param_names_[80] = "layer3_4_conv3_weight";
+  param_names_[81] = "layer3_4_conv3_bias";
+  param_names_[82] = "layer3_5_conv1_weight";
+  param_names_[83] = "layer3_5_conv1_bias";
+  param_names_[84] = "layer3_5_conv2_weight";
+  param_names_[85] = "layer3_5_conv2_bias";
+  param_names_[86] = "layer3_5_conv3_weight";
+  param_names_[87] = "layer3_5_conv3_bias";
+  param_names_[88] = "layer4_0_conv1_weight";
+  param_names_[89] = "layer4_0_conv1_bias";
+  param_names_[90] = "layer4_0_conv2_weight";
+  param_names_[91] = "layer4_0_conv2_bias";
+  param_names_[92] = "layer4_0_downsample_0_weight";
+  param_names_[93] = "layer4_0_downsample_0_bias";
+  param_names_[94] = "layer4_0_conv3_weight";
+  param_names_[95] = "layer4_0_conv3_bias";
+  param_names_[96] = "layer4_1_conv1_weight";
+  param_names_[97] = "layer4_1_conv1_bias";
+  param_names_[98] = "layer4_1_conv2_weight";
+  param_names_[99] = "layer4_1_conv2_bias";
+  param_names_[100] = "layer4_1_conv3_weight";
+  param_names_[101] = "layer4_1_conv3_bias";
+  param_names_[102] = "layer4_2_conv1_weight";
+  param_names_[103] = "layer4_2_conv1_bias";
+  param_names_[104] = "layer4_2_conv2_weight";
+  param_names_[105] = "layer4_2_conv2_bias";
+  param_names_[106] = "layer4_2_conv3_weight";
+  param_names_[107] = "layer4_2_conv3_bias";
+  param_names_[108] = "fc_weight";
+  param_names_[109] = "fc_bias";
+  param_names_[1] = "output_0";
+
+  max_param_shapes_[0] = {1, 224, 224, 3};
+  max_param_shapes_[2] = {64, 7, 7, 3};
+  max_param_shapes_[3] = {64};
+  max_param_shapes_[4] = {64, 1, 1, 64};
+  max_param_shapes_[5] = {64};
+  max_param_shapes_[6] = {64, 3, 3, 64};
+  max_param_shapes_[7] = {64};
+  max_param_shapes_[8] = {256, 1, 1, 64};
+  max_param_shapes_[9] = {256};
+  max_param_shapes_[10] = {256, 1, 1, 64};
+  max_param_shapes_[11] = {256};
+  max_param_shapes_[12] = {64, 1, 1, 256};
+  max_param_shapes_[13] = {64};
+  max_param_shapes_[14] = {64, 3, 3, 64};
+  max_param_shapes_[15] = {64};
+  max_param_shapes_[16] = {256, 1, 1, 64};
+  max_param_shapes_[17] = {256};
+  max_param_shapes_[18] = {64, 1, 1, 256};
+  max_param_shapes_[19] = {64};
+  max_param_shapes_[20] = {64, 3, 3, 64};
+  max_param_shapes_[21] = {64};
+  max_param_shapes_[22] = {256, 1, 1, 64};
+  max_param_shapes_[23] = {256};
+  max_param_shapes_[24] = {128, 1, 1, 256};
+  max_param_shapes_[25] = {128};
+  max_param_shapes_[26] = {128, 3, 3, 128};
+  max_param_shapes_[27] = {128};
+  max_param_shapes_[28] = {512, 1, 1, 256};
+  max_param_shapes_[29] = {512};
+  max_param_shapes_[30] = {512, 1, 1, 128};
+  max_param_shapes_[31] = {512};
+  max_param_shapes_[32] = {128, 1, 1, 512};
+  max_param_shapes_[33] = {128};
+  max_param_shapes_[34] = {128, 3, 3, 128};
+  max_param_shapes_[35] = {128};
+  max_param_shapes_[36] = {512, 1, 1, 128};
+  max_param_shapes_[37] = {512};
+  max_param_shapes_[38] = {128, 1, 1, 512};
+  max_param_shapes_[39] = {128};
+  max_param_shapes_[40] = {128, 3, 3, 128};
+  max_param_shapes_[41] = {128};
+  max_param_shapes_[42] = {512, 1, 1, 128};
+  max_param_shapes_[43] = {512};
+  max_param_shapes_[44] = {128, 1, 1, 512};
+  max_param_shapes_[45] = {128};
+  max_param_shapes_[46] = {128, 3, 3, 128};
+  max_param_shapes_[47] = {128};
+  max_param_shapes_[48] = {512, 1, 1, 128};
+  max_param_shapes_[49] = {512};
+  max_param_shapes_[50] = {256, 1, 1, 512};
+  max_param_shapes_[51] = {256};
+  max_param_shapes_[52] = {256, 3, 3, 256};
+  max_param_shapes_[53] = {256};
+  max_param_shapes_[54] = {1024, 1, 1, 512};
+  max_param_shapes_[55] = {1024};
+  max_param_shapes_[56] = {1024, 1, 1, 256};
+  max_param_shapes_[57] = {1024};
+  max_param_shapes_[58] = {256, 1, 1, 1024};
+  max_param_shapes_[59] = {256};
+  max_param_shapes_[60] = {256, 3, 3, 256};
+  max_param_shapes_[61] = {256};
+  max_param_shapes_[62] = {1024, 1, 1, 256};
+  max_param_shapes_[63] = {1024};
+  max_param_shapes_[64] = {256, 1, 1, 1024};
+  max_param_shapes_[65] = {256};
+  max_param_shapes_[66] = {256, 3, 3, 256};
+  max_param_shapes_[67] = {256};
+  max_param_shapes_[68] = {1024, 1, 1, 256};
+  max_param_shapes_[69] = {1024};
+  max_param_shapes_[70] = {256, 1, 1, 1024};
+  max_param_shapes_[71] = {256};
+  max_param_shapes_[72] = {256, 3, 3, 256};
+  max_param_shapes_[73] = {256};
+  max_param_shapes_[74] = {1024, 1, 1, 256};
+  max_param_shapes_[75] = {1024};
+  max_param_shapes_[76] = {256, 1, 1, 1024};
+  max_param_shapes_[77] = {256};
+  max_param_shapes_[78] = {256, 3, 3, 256};
+  max_param_shapes_[79] = {256};
+  max_param_shapes_[80] = {1024, 1, 1, 256};
+  max_param_shapes_[81] = {1024};
+  max_param_shapes_[82] = {256, 1, 1, 1024};
+  max_param_shapes_[83] = {256};
+  max_param_shapes_[84] = {256, 3, 3, 256};
+  max_param_shapes_[85] = {256};
+  max_param_shapes_[86] = {1024, 1, 1, 256};
+  max_param_shapes_[87] = {1024};
+  max_param_shapes_[88] = {512, 1, 1, 1024};
+  max_param_shapes_[89] = {512};
+  max_param_shapes_[90] = {512, 3, 3, 512};
+  max_param_shapes_[91] = {512};
+  max_param_shapes_[92] = {2048, 1, 1, 1024};
+  max_param_shapes_[93] = {2048};
+  max_param_shapes_[94] = {2048, 1, 1, 512};
+  max_param_shapes_[95] = {2048};
+  max_param_shapes_[96] = {512, 1, 1, 2048};
+  max_param_shapes_[97] = {512};
+  max_param_shapes_[98] = {512, 3, 3, 512};
+  max_param_shapes_[99] = {512};
+  max_param_shapes_[100] = {2048, 1, 1, 512};
+  max_param_shapes_[101] = {2048};
+  max_param_shapes_[102] = {512, 1, 1, 2048};
+  max_param_shapes_[103] = {512};
+  max_param_shapes_[104] = {512, 3, 3, 512};
+  max_param_shapes_[105] = {512};
+  max_param_shapes_[106] = {2048, 1, 1, 512};
+  max_param_shapes_[107] = {2048};
+  max_param_shapes_[108] = {1000, 2048};
+  max_param_shapes_[109] = {1000};
+  max_param_shapes_[1] = {1, 1, 1, 1000};
+  return;
+}
 
 using OutputDataPtr = std::unique_ptr<void, std::function<void(void*)>>;
 
@@ -562,13 +791,42 @@ int run_testcase(const char* input_file, bool benchmark) {
   return 0;
 }
 
+void free_tensors(AITData* tensors, int num_tensors) {
+    if (tensors != nullptr) {
+        for (int i = 0; i < num_tensors; i++) {
+            if (tensors[i].ptr != nullptr) {
+                free(tensors[i].ptr);  // Free the memory for data_generated
+                tensors[i].ptr = nullptr;
+            }
+        }
+        free(tensors);  // Free the memory for tensors array
+        tensors = nullptr;
+    }
+}
+
 int run_with_random_inputs() {
   AITemplateModelHandle handle;
   AITemplateModelContainerCreate(&handle, /*num_runtimes*/ 1);
-
   auto deleter = [](void* data) { free(data); };
 
   std::vector<OutputData> outputs;
+  setup_constant();
+  size_t num_params_ = 110;
+  AITData* tensors = (AITData*)malloc(sizeof(AITData)*(num_params_-2));
+  for(int i = 2; i < num_params_; i++){
+    auto& input_shape = max_param_shapes_[i];
+    auto shape = AITemplateParamShape{input_shape.data(), input_shape.size()};
+    int64_t* data_generated = (int64_t*)malloc(shape.Numel() * sizeof(int64_t));
+    std::uniform_int_distribution<> dist(-10, 10);
+    std::mt19937 rnd_generator(1234);
+    for (size_t j = 0; j < shape.Numel(); j++) {
+      data_generated[j] = static_cast<int64_t>(dist(rnd_generator));
+    }
+    tensors[i-2] = AITData((void*)data_generated, shape, AITemplateDtype::kFloat);
+  }
+  const AITData* tensors_pointer = tensors;
+  AITemplateModelContainerSetManyConstants(handle, &param_names_[2], tensors_pointer, num_params_-2);
+  AITemplateModelContainerFoldConstantsInDoubleBuffer(handle, true);
   AIT_ERROR_CHECK(run(handle, outputs));
 
   // print out something
@@ -580,6 +838,7 @@ int run_with_random_inputs() {
     }
     std::cout << "\n";
   }
+  free_tensors(tensors, num_params_-2);
   // We are done and delete the handle.
   AITemplateModelContainerDelete(handle);
   return 0;
