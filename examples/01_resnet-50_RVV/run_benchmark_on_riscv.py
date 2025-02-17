@@ -24,6 +24,17 @@ class FakeTorchTensor:
         # Expose the __array_interface__ for interoperability with other libraries.
         self.__array_interface__ = array.__array_interface__
 
+    def __getitem__(self, index):
+        """
+        Enable subscript/slicing operations.
+        Delegates to the underlying NumPy array and wraps the result in a FakeTorchTensor if it's an array.
+        """
+        result = self.array[index]
+        if isinstance(result, np.ndarray):
+            return FakeTorchTensor(result)
+        else:
+            return result
+
     def cpu(self):
         """
         Mimic the torch.Tensor.cpu() method.
@@ -52,6 +63,14 @@ class FakeTorchTensor:
         Returns the shape of the tensor as a tuple.
         """
         return self.array.shape
+
+    def flatten(self):
+        """
+        Mimic the torch.Tensor.flatten() method.
+        Returns a new FakeTorchTensor with a one-dimensional (flattened) version of the array.
+        """
+        flat_array = self.array.flatten()
+        return FakeTorchTensor(flat_array)
 
     def data_ptr(self):
         """
