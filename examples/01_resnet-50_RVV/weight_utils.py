@@ -149,10 +149,10 @@ class timm_export:
         ait_model[pt_name.replace(".", "_")] = conv_w
 
 
-def export_to_torch_tensor(model_name="resnet50"):
+def export_to_torch_tensor(model_name="resnet50", pretrained=True):
     if model_name != "resnet50":
         raise NotImplementedError
-    timm2ait = timm_export(model_name)
+    timm2ait = timm_export(model_name, pretrained)
     ait_model = timm2ait.export_model(half=False)
     return ait_model
 

@@ -4,6 +4,7 @@ import click
 import pickle
 import subprocess
 from model import Model
+from FakeTorchTensor import FakeTorchTensor
 import numpy as np
 import sys
 
@@ -11,87 +12,10 @@ import sys
 if "numpy._core" not in sys.modules:
     sys.modules["numpy._core"] = np.core
 
-class FakeTorchTensor:
-    def __init__(self, array):
-        """
-        Initialize with a NumPy array.
-        """
-        self.array = array
-        self.dtype = array.dtype
-        self.shape = array.shape
-        self.strides = array.strides
-        self.ndim = array.ndim
-        # Expose the __array_interface__ for interoperability with other libraries.
-        self.__array_interface__ = array.__array_interface__
-
-    def __getitem__(self, index):
-        """
-        Enable subscript/slicing operations.
-        Delegates to the underlying NumPy array and wraps the result in a FakeTorchTensor if it's an array.
-        """
-        result = self.array[index]
-        if isinstance(result, np.ndarray):
-            return FakeTorchTensor(result)
-        else:
-            return result
-
-    def cpu(self):
-        """
-        Mimic the torch.Tensor.cpu() method.
-        Since this is a CPU-only tensor, return self.
-        """
-        return self
-
-    def numpy(self):
-        """
-        Mimic the torch.Tensor.numpy() method.
-        Returns the underlying NumPy array.
-        """
-        return self.array
-
-    def reshape(self, *new_shape):
-        """
-        Mimic the torch.Tensor.reshape() method.
-        Returns a new FakeTorchTensor with the array reshaped.
-        """
-        reshaped_array = self.array.reshape(*new_shape)
-        return FakeTorchTensor(reshaped_array)
-
-    def size(self):
-        """
-        Mimic the torch.Tensor.size() method.
-        Returns the shape of the tensor as a tuple.
-        """
-        return self.array.shape
-
-    def flatten(self):
-        """
-        Mimic the torch.Tensor.flatten() method.
-        Returns a new FakeTorchTensor with a one-dimensional (flattened) version of the array.
-        """
-        flat_array = self.array.flatten()
-        return FakeTorchTensor(flat_array)
-
-    def data_ptr(self):
-        """
-        Mimic the torch.Tensor.data_ptr() method.
-        Returns an integer representing the memory address of the data.
-        """
-        return self.array.ctypes.data
-
-    @property
-    def ptr(self):
-        """
-        Provide a property alias for data_ptr.
-        """
-        return self.data_ptr()
-
-    def __repr__(self):
-        return f"FakeTorchTensor(shape={self.shape}, dtype={self.dtype})"
 
 def load_data(batch_size):
-    weights_file = f"weights_file_{batch_size}.npz"
-    io_file = f"io_tensors_{batch_size}.npz"
+    weights_file = f"static/weights_file_{batch_size}.npz"
+    io_file = f"static/io_tensors_{batch_size}.npz"
     
     if not os.path.exists(weights_file):
         raise FileNotFoundError(f"Weight file not found: {weights_file}")
@@ -110,6 +34,21 @@ def load_data(batch_size):
     
     print(f"[Target] Loaded weights, input, and output data")
     return weights, x_input, y_output
+
+def transfer_file(file: str, target_user: str, target_ip: str, target_dir: str):
+    """
+    
+    Parameters:
+        file (str): The path to the file to be transferred.
+        target_user (str): The username on the target machine.
+        target_ip (str): The IP address of the target machine.
+        target_dir (str): The destination directory on the target machine.
+    """
+    subprocess.run(
+        ["scp", file, f"{target_user}@{target_ip}:{target_dir}"],
+        check=True
+    )
+    print("[Host] file transferred successfully.")
 
 def benchmark(model_name, batch_size, mod=None, graph_mode=True):
     model_name = f"{model_name}_{batch_size}"
@@ -136,7 +75,8 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True):
     print(f"batch_size: {batch_size}, latency: {t}")
     dev_flag = os.environ.get("HIP_VISIBLE_DEVICES", "-1")
     dev_flag = dev_flag.replace(",", "_")
-    with open(f"resnet50_ait_benchmark_dev_{dev_flag}.txt", "a") as f:
+    benchmark_out = f"resnet50_ait_benchmark_dev_{dev_flag}.txt"
+    with open(benchmark_out, "a") as f:
         f.write(f"batch_size: {batch_size}, latency: {t}\n")
 @click.command()
 @click.option(
