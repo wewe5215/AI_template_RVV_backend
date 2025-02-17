@@ -144,3 +144,6 @@ tags
 
 # vim temp files
 *.swp
+
+*.npz
+*.txt
