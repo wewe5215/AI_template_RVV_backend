@@ -65,6 +65,7 @@ def run(model_name, batch_size, mod=None, graph_mode=True):
     y_output_np = y_output.cpu().detach().numpy().astype(np.float32)
     np.savez_compressed(output_file, y_output=y_output_np)
 @click.command()
+@click.option("--model-name", type=str, default="resnet50", help="Model name to use")
 @click.option(
     "--use-fp16-acc",
     type=bool,
@@ -73,16 +74,16 @@ def run(model_name, batch_size, mod=None, graph_mode=True):
 )
 @click.option("--use-graph", type=bool, default=True, help="Whether to use CUDA graph")
 @click.option("--batch-size", type=int, default=0, help="Batch size")
-def main(use_fp16_acc=False, use_graph=True, batch_size=0):
-    use_graph = False
+def main(model_name, use_fp16_acc=False, use_graph=True, batch_size=0):
+    use_graph = False  # This seems redundant, but keeping it as per original logic
+
     if batch_size < 1:
         for bs in (1, 2, 4, 8, 16, 32, 64, 128, 256):
-            # compile_module("resnet50", bs, use_fp16_acc=use_fp16_acc)
-            run("resnet50", bs, graph_mode=use_graph)
+            # compile_module(model_name, bs, use_fp16_acc=use_fp16_acc)
+            run(model_name, bs, graph_mode=use_graph)
     else:
-        # compile_module("resnet50", batch_size, use_fp16_acc=use_fp16_acc)
-        run("resnet50", batch_size, graph_mode=use_graph)
-
+        # compile_module(model_name, batch_size, use_fp16_acc=use_fp16_acc)
+        run(model_name, batch_size, graph_mode=use_graph)
 
 if __name__ == "__main__":
     main()
