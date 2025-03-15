@@ -2,7 +2,8 @@ import numpy as np
 from group_op_and_lmul import fetch_lmul_for_op
 import math
 # Fetch LMUL values for each op (used later for index scaling)
-weight_to_lmul = fetch_lmul_for_op()
+batch_size = 1
+weight_to_lmul = fetch_lmul_for_op(batch_size)
 vlen = 256
 
 def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
@@ -34,7 +35,7 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
         
         # Determine how many columns to retain.
         # For pruning_ratio = 0.5, we want to keep the top 50% columns.
-        keep_count = int(np.ceil(pruning_ratio * input_channel))
+        keep_count = int(np.ceil((1 - pruning_ratio) * input_channel))
         
         # If all accumulator values are the same, simply keep the first keep_count columns.
         if np.all(accumulator == accumulator[0]):
@@ -106,21 +107,21 @@ def prune_model_weights(np_weights, pruning_ratio):
 
             # Calculate nr based on your mapping (using weight_to_lmul) and vlen.
             nr = weight_to_lmul[key] * (vlen / 32)  # 32 for float32
-            print(f'key = {key} being pruned with lmul = {weight_to_lmul[key]}, value.ndim = {value.ndim}')
+            # print(f'key = {key} being pruned with lmul = {weight_to_lmul[key]}, value.ndim = {value.ndim}')
             if weight_to_lmul[key] == 1 or weight_to_lmul[key] == 4:
                 mr = 7
             elif weight_to_lmul[key] == 2:
                 mr = 8
             else:
                 mr = 3
-            print(f'mr = {mr}, weight_to_lmul[key] = {weight_to_lmul[key]}')
+            # print(f'mr = {mr}, weight_to_lmul[key] = {weight_to_lmul[key]}')
             # Apply column-wise pruning using the provided ratio.
             pruned_weight, indices = f32_data_pruning_column_wise_with_ratio(weight_2d, nr, mr, pruning_ratio)
             new_model[key] = pruned_weight
             new_model[key + "_indice"] = indices
             part1 = math.ceil((output_channel) / mr)
-            part2 = (kernel_height * kernel_width * input_channel) * pruning_ratio
-            print(f'pruned_weight shape = {pruned_weight.shape}')
+            part2 = (kernel_height * kernel_width * input_channel) * (1 - pruning_ratio)
+            # print(f'pruned_weight shape = {pruned_weight.shape}')
             print(f'indice name = {key}_indice, {{{part1}, {part2}}}, indice shape = {indices.shape}')
             # Also retain the corresponding bias if present.
             bias_key = key.replace("weight", "bias")

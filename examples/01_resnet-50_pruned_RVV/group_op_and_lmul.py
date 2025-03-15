@@ -1,7 +1,7 @@
 import re
-def fetch_lmul_for_op():
+def fetch_lmul_for_op(batch_size = 1):
     operator_to_lmul = {}
-    with open("chosen_lmul_bs1.txt", "r") as f:
+    with open(f"chosen_lmul_bs{batch_size}.txt", "r") as f:
         for line in f:
             line = line.strip()
             # Check that the line is formatted with pipe delimiters.
