@@ -1,6 +1,6 @@
 import numpy as np
 from group_op_and_lmul import fetch_lmul_for_op
-
+import math
 # Fetch LMUL values for each op (used later for index scaling)
 weight_to_lmul = fetch_lmul_for_op()
 vlen = 256
@@ -20,7 +20,6 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
       indices: a 1D numpy array (dtype uint16) with the recorded column indices
     """
     output_channel, input_channel = weight.shape
-    # print(f'weight_shape = {weight.shape}')
     pruned_weight = []   # List to store selected weight elements.
     indices = []         # List to store selected column indices (for the first row in each block).
     
@@ -33,25 +32,36 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
         # Compute accumulator: sum of absolute values for each column in the block.
         accumulator = np.sum(np.abs(block), axis=0)
         
-        # Determine threshold so that the bottom pruning_ratio fraction of columns are pruned.
-        # (That is, keep columns with accumulator values in the top (1-pruning_ratio)*100 percentile.)
-        threshold = np.percentile(accumulator, pruning_ratio * 100)
+        # Determine how many columns to retain.
+        # For pruning_ratio = 0.5, we want to keep the top 50% columns.
+        keep_count = int(np.ceil(pruning_ratio * input_channel))
         
-        # For each element in the block, select the element if its column's accumulator passes the threshold.
-        for j in range(end_offset):
-            for k in range(input_channel):
-                # Use '>=' for even number of columns, '>' for odd (following the C-code logic).
-                if input_channel % 2 == 0:
-                    select = accumulator[k] >= threshold
-                else:
-                    select = accumulator[k] > threshold
-                
-                if select:
+        # If all accumulator values are the same, simply keep the first keep_count columns.
+        if np.all(accumulator == accumulator[0]):
+            for j in range(end_offset):
+                for k in range(keep_count):
                     pruned_weight.append(block[j, k])
-                    # For the first row in the block, record the column index (multiplied by nr).
                     if j == 0:
-                        indices.append(k * nr)
-                        
+                        indices.append(k)
+        else:
+            # Determine threshold so that the bottom pruning_ratio fraction of columns are pruned.
+            # (That is, keep columns with accumulator values in the top (1-pruning_ratio)*100 percentile.)
+            threshold = np.percentile(accumulator, pruning_ratio * 100)
+            
+            # For each element in the block, select the element if its column's accumulator passes the threshold.
+            for j in range(end_offset):
+                for k in range(input_channel):
+                    # Use '>=' for even number of columns, '>' for odd (following the C-code logic).
+                    if input_channel % 2 == 0:
+                        select = accumulator[k] >= threshold
+                    else:
+                        select = accumulator[k] > threshold
+                    if select:
+                        pruned_weight.append(block[j, k])
+                        # For the first row in the block, record the column index.
+                        if j == 0:
+                            indices.append(k)
+    
     pruned_weight = np.array(pruned_weight, dtype=np.float32)
     indices = np.array(indices, dtype=np.uint16)
     return pruned_weight, indices
@@ -103,14 +113,15 @@ def prune_model_weights(np_weights, pruning_ratio):
                 mr = 8
             else:
                 mr = 3
+            print(f'mr = {mr}, weight_to_lmul[key] = {weight_to_lmul[key]}')
             # Apply column-wise pruning using the provided ratio.
             pruned_weight, indices = f32_data_pruning_column_wise_with_ratio(weight_2d, nr, mr, pruning_ratio)
             new_model[key] = pruned_weight
             new_model[key + "_indice"] = indices
-            part1 = (output_channel + mr - 1) / mr
-            part2 = (kernel_height * kernel_width * input_channel) // 2
+            part1 = math.ceil((output_channel) / mr)
+            part2 = (kernel_height * kernel_width * input_channel) * pruning_ratio
+            print(f'pruned_weight shape = {pruned_weight.shape}')
             print(f'indice name = {key}_indice, {{{part1}, {part2}}}, indice shape = {indices.shape}')
-            # print(indices)
             # Also retain the corresponding bias if present.
             bias_key = key.replace("weight", "bias")
             if bias_key in np_weights:
