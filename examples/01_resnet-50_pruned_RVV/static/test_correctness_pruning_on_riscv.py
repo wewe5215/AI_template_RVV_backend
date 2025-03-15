@@ -13,9 +13,9 @@ if "numpy._core" not in sys.modules:
     sys.modules["numpy._core"] = np.core
 
 
-def load_data(batch_size):
-    weights_file = f"static/weights_file_pruned_{batch_size}.npz"
-    io_file = f"static/io_tensors_{batch_size}.npz"
+def load_data(model_name, batch_size):
+    weights_file = f"metadata_{model_name}/weights_file_pruned_{batch_size}.npz"
+    io_file = f"metadata_{model_name}/io_tensors_{batch_size}.npz"
     
     if not os.path.exists(weights_file):
         raise FileNotFoundError(f"Weight file not found: {weights_file}")
@@ -49,11 +49,11 @@ def transfer_file(file: str, target_user: str, target_ip: str, target_dir: str):
         check=True
     )
     print("[Host] file transferred successfully.")
-
+# pruning ratio = (# pruned elements) / (# all of the elements)
 def run(model_name, batch_size, mod=None, graph_mode=True):
     model_name = f"{model_name}_{batch_size}"
     mod = Model(os.path.join(f"./{model_name}", "test.so"))
-    weights, x_input, y_output = load_data(batch_size)
+    weights, x_input, y_output = load_data(model_name, batch_size)
     for name, param in weights.items():
             mod.set_constant_with_tensor(name, param)
 
@@ -61,7 +61,7 @@ def run(model_name, batch_size, mod=None, graph_mode=True):
     mod.fold_constants(sync=True)
     mod.run_with_tensors([x_input], [y_output])
 
-    output_file = f"output_file_pruned_{model_name}.npz"
+    output_file = f"output_file_{model_name}.npz"
     y_output_np = y_output.cpu().detach().numpy().astype(np.float32)
     np.savez_compressed(output_file, y_output=y_output_np)
 @click.command()
