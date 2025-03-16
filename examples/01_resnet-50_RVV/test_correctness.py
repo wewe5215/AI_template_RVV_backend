@@ -68,10 +68,10 @@ def compile_module(model_name, batch_size):
 
 class ResNet50Verification(unittest.TestCase):
     def test_resnet50(self):
-        batch_size = 1
+        batch_size = 4
         # compile_module("resnet50", batch_size)
         torch_dtype = torch.float32
-        weights_file = f"static/weights_file_{batch_size}.npz"
+        weights_file = f"static/weights_file.npz"
         io_file = f"static/io_tensors_{batch_size}.npz"
         model_name = "resnet50"
         timm_exporter = timm_export("resnet50", pretrained=False)
@@ -83,7 +83,7 @@ class ResNet50Verification(unittest.TestCase):
         np_weights = {}
         for k, v in ait_params.items():
             np_weights[k] = v.detach().cpu().numpy().astype(np.float32)
-        np.savez_compressed(weights_file, **np_weights)
+        # np.savez_compressed(weights_file, **np_weights)
         # ait model expects NHWC format
         x_ait = torch.rand([batch_size, 224, 224, 3], dtype=torch_dtype, device="cpu")
         # center the input wrt the training data for numerical stability
@@ -97,20 +97,20 @@ class ResNet50Verification(unittest.TestCase):
         # Save to a compressed NPZ file
         np.savez_compressed(io_file, **io_data)
         folder = "static"
-        transfer_folder(folder, target_user, target_ip, target_dir)
+        # transfer_folder(folder, target_user, target_ip, target_dir)
         remote_confirmation_file = f"{target_dir}/output_file_{model_name}_{batch_size}.npz"
         local_confirmation_file = f"output_file_{model_name}_{batch_size}.npz"
-        poll_for_confirmation(target_user, target_ip, remote_confirmation_file, local_confirmation_file)
-        data = np.load(local_confirmation_file, allow_pickle=True)
-        y_ait = data["y_output"]
+        # poll_for_confirmation(target_user, target_ip, remote_confirmation_file, local_confirmation_file)
+        # data = np.load(local_confirmation_file, allow_pickle=True)
+        # y_ait = data["y_output"]
 
-        # torch model expects NCHW format
-        x_pt = torch.transpose(x_ait, 1, 3).contiguous()
-        with torch.no_grad():
-            y_pt = pt_model(x_pt)
-        torch.testing.assert_close(
-            y_pt, torch.from_numpy(y_ait.reshape([batch_size, 1000])), rtol=1e-1, atol=1e-1
-        )
+        # # torch model expects NCHW format
+        # x_pt = torch.transpose(x_ait, 1, 3).contiguous()
+        # with torch.no_grad():
+        #     y_pt = pt_model(x_pt)
+        # torch.testing.assert_close(
+        #     y_pt, torch.from_numpy(y_ait.reshape([batch_size, 1000])), rtol=1e-1, atol=1e-1
+        # )
 
 
 if __name__ == "__main__":

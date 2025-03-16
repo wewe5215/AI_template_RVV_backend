@@ -26,7 +26,7 @@ from aitemplate.testing import detect_target
 from modeling.resnet import build_resnet_backbone
 from weight_utils import export_to_torch_tensor
 import subprocess
-from static.remote_send_receive_files import transfer_folder, check_remote_file_exists, retrieve_confirmation_file, poll_for_confirmation
+from remote_send_receive_files import transfer_folder, check_remote_file_exists, retrieve_confirmation_file, poll_for_confirmation
 target_user = "riscv"                # Your RISC-V board username
 target_ip   = "192.168.33.96"              # Your RISC-V board IP address
 target_dir  = f"/home/{target_user}/Desktop/AITemplate_Benchmark_on_XNNPACK" # Target directory to store files
@@ -118,7 +118,7 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True):
     print(f"Input/output tensors have been saved to {io_file}")
 
     folder = "static"
-    transfer_folder(folder, target_user, target_ip, target_dir)
+    # transfer_folder(folder, target_user, target_ip, target_dir)
 
 
 @click.command()

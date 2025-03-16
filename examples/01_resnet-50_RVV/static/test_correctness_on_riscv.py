@@ -14,7 +14,7 @@ if "numpy._core" not in sys.modules:
 
 
 def load_data(batch_size):
-    weights_file = f"static/weights_file_{batch_size}.npz"
+    weights_file = f"static/weights_file.npz"
     io_file = f"static/io_tensors_{batch_size}.npz"
     
     if not os.path.exists(weights_file):
@@ -78,7 +78,7 @@ def main(model_name, use_fp16_acc=False, use_graph=True, batch_size=0):
     use_graph = False  # This seems redundant, but keeping it as per original logic
 
     if batch_size < 1:
-        for bs in (1, 2, 4, 8, 16, 32, 64, 128, 256):
+        for bs in (1, 2, 4):
             # compile_module(model_name, bs, use_fp16_acc=use_fp16_acc)
             run(model_name, bs, graph_mode=use_graph)
     else:

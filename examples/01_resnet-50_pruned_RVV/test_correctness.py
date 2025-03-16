@@ -77,7 +77,7 @@ class ResNet50Verification(unittest.TestCase):
             metadata_folder = f"metadata_revised_cnhw_pruned_{int(pruning_ratio*100)}_{model_name}_{batch_size}"
         else:
             metadata_folder = f"metadata_revised_cnhw_pruned_{model_name}_{batch_size}"
-        metadata_folder = "test"
+        # metadata_folder = "test"
         weights_file = f"{metadata_folder}/weights_file_pruned_{batch_size}.npz"
         io_file = f"{metadata_folder}/io_tensors_{batch_size}.npz"
         timm_exporter = timm_export("resnet50", pretrained=False)
