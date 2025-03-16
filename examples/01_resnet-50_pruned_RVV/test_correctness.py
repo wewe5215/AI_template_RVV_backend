@@ -23,7 +23,7 @@ from aitemplate.compiler.base import Tensor
 from aitemplate.testing import detect_target
 from modeling.resnet import build_resnet_backbone
 from weight_utils import timm_export, export_to_torch_tensor
-from static.remote_send_receive_files import transfer_folder, check_remote_file_exists, retrieve_confirmation_file, poll_for_confirmation
+from remote_send_receive_files import transfer_folder, check_remote_file_exists, retrieve_confirmation_file, poll_for_confirmation
 target_user = "riscv"                # Your RISC-V board username
 target_ip   = "192.168.33.96"              # Your RISC-V board IP address
 target_dir  = f"/home/{target_user}/Desktop/AITemplate_Benchmark_on_XNNPACK" # Target directory to store files
@@ -69,23 +69,46 @@ def compile_module(model_name, batch_size):
 
 class ResNet50Verification(unittest.TestCase):
     def test_resnet50(self):
-        batch_size = 1
-        # compile_module("resnet50", batch_size)
-        torch_dtype = torch.float32
-        # pruned_weights_file = f"static/weights_file_pruned_{batch_size}.npz"
-        weights_file = f"static/weights_file_{batch_size}.npz"
-        io_file = f"static/io_tensors_{batch_size}.npz"
+        batch_size = 4
+        pruning_ratio = 0.75
         model_name = "resnet50"
+        torch_dtype = torch.float32
+        if pruning_ratio != 0.5:
+            metadata_folder = f"metadata_revised_cnhw_pruned_{int(pruning_ratio*100)}_{model_name}_{batch_size}"
+        else:
+            metadata_folder = f"metadata_revised_cnhw_pruned_{model_name}_{batch_size}"
+        metadata_folder = "test"
+        weights_file = f"{metadata_folder}/weights_file_pruned_{batch_size}.npz"
+        io_file = f"{metadata_folder}/io_tensors_{batch_size}.npz"
         timm_exporter = timm_export("resnet50", pretrained=False)
         ait_params = timm_exporter.export_model(half=False)
-        
         pt_model = timm_exporter.pt_model.to(dtype=torch_dtype, device="cpu")
         pt_model.eval()
 
         np_weights = {}
         for k, v in ait_params.items():
             np_weights[k] = v.detach().cpu().numpy().astype(np.float32)
-        new_np_weights = prune_model_weights(np_weights, 0.5)
+        new_np_weights = prune_model_weights(np_weights, pruning_ratio, batch_size)
+        # i = 110
+        # for key, value in new_np_weights.items():
+        #     if "indice" in key:
+        #         size = value.shape
+        #         if len(size) == 1:
+        #             size_str = str(size[0])
+        #         else:
+        #             size_str = ", ".join(map(str, size))
+        #         print(f'     max_param_shapes_[{i}] = {{{size_str}}};')
+        #         i = i + 1
+        # i = 110
+        # for key, value in new_np_weights.items():
+        #     if "indice" in key:
+        #         print(f'     param_names_[{i}] = "{key}";')
+        #         i = i + 1
+        # i = 108
+        # for key, value in new_np_weights.items():
+        #     if "indice" in key:
+        #         print(f'    unbound_constant_name_to_idx_["{key}"] = {i};')
+        #         i = i + 1
         # np.savez_compressed(weights_file, **np_weights)
         np.savez_compressed(weights_file, **new_np_weights)
         # ait model expects NHWC format
@@ -100,10 +123,9 @@ class ResNet50Verification(unittest.TestCase):
         io_data = {"x_input": x_input_np, "y_output": y_output_np}
         # Save to a compressed NPZ file
         np.savez_compressed(io_file, **io_data)
-        folder = "static"
-        transfer_folder(folder, target_user, target_ip, target_dir)
-        remote_confirmation_file = f"{target_dir}/output_file_pruned_cnhw_pruned_{model_name}_{batch_size}.npz"
-        local_confirmation_file = f"output_file_pruned_cnhw_pruned_{model_name}_{batch_size}.npz"
+        transfer_folder(metadata_folder, target_user, target_ip, target_dir)
+        remote_confirmation_file = f"{target_dir}/output_file_{model_name}_{batch_size}.npz"
+        local_confirmation_file = f"output_file_{model_name}_{batch_size}.npz"
         poll_for_confirmation(target_user, target_ip, remote_confirmation_file, local_confirmation_file)
         data = np.load(local_confirmation_file, allow_pickle=True)
         y_ait = data["y_output"]
@@ -112,15 +134,17 @@ class ResNet50Verification(unittest.TestCase):
         x_pt = torch.transpose(x_ait, 1, 3).contiguous()
         with torch.no_grad():
             y_pt = pt_model(x_pt)
+        y_np = y_pt.cpu().numpy()
+        np.savez(f"revised_cnhw_pruned_{int(pruning_ratio*100)}_{model_name}_{batch_size}_y_pt.npz", y=y_np)
+        # print("my answer:")
+        # for i in torch.from_numpy(y_ait.reshape([batch_size, 1000])):
+        #     print(f"{i} ")
+        # print("golden:")
+        # for i in (y_pt.reshape([1, 1000])):
+        #     print(f"{i} ")
         # torch.testing.assert_close(
         #     y_pt, torch.from_numpy(y_ait.reshape([batch_size, 1000])), rtol=1e-1, atol=1e-1
         # )
-        print("my answer:")
-        for i in torch.from_numpy(y_ait.reshape([batch_size, 1000])):
-            print(f"{i} ")
-        print("golden:")
-        for i in y_pt:
-            print(f"{i} ")
 
 
 if __name__ == "__main__":

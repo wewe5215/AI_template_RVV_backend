@@ -1,7 +1,7 @@
 import re
-def fetch_lmul_for_op(batch_size = 1):
+def fetch_lmul_for_op(batch_size):
     operator_to_lmul = {}
-    with open(f"chosen_lmul_bs{batch_size}.txt", "r") as f:
+    with open(f"chosen_lmul_bs{batch_size}.md", "r") as f:
         for line in f:
             line = line.strip()
             # Check that the line is formatted with pipe delimiters.
@@ -14,7 +14,7 @@ def fetch_lmul_for_op(batch_size = 1):
                 # Extract operator names (split on commas)
                 operators = [op.strip() for op in operators_field.split(",") if op.strip()]
                 try:
-                    lmul = int(lmul_field)
+                    lmul = lmul_field
                 except ValueError:
                     lmul = lmul_field  # fallback if conversion fails
                 # Record each operator with its LMUL
@@ -43,7 +43,7 @@ def fetch_lmul_for_op(batch_size = 1):
                 continue
             # In the expected pattern, the weight variable is the second argument.
             weight = args[1]
-            weight_to_lmul[weight] = int(lmul)
+            weight_to_lmul[weight] = lmul
 
     # print("\nWeight to LMUL mapping for operators found in model-generated.h:")
     # print(weight_to_lmul)
