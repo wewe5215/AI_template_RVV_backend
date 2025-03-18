@@ -88,7 +88,7 @@ class RVV(Target):
             path to xnnpack compiler library
         """
         # TODO : to be revised later
-        xnnpack_path = os.environ.get("XNNPACK_PATH", "/home/wewe5215/Desktop/AIT_RVV/AITemplate/3rdparty/XNNPACK/build/local/")
+        xnnpack_path = os.environ.get("XNNPACK_PATH", "/Users/wewe5215/Desktop/AI_template_RVV_backend/3rdparty/XNNPACK/build/local/")
         return xnnpack_path
     def _build_gnu_host_compiler_options(self) -> List[str]:
         return [
@@ -205,12 +205,15 @@ class RVV(Target):
 
 
     def cc(self):
-        cc = "clang++-17"
+        cc = "clang++"
         return cc
 
     def compile_cmd(self, executable=False):
         if executable:
-            cmd = self.cc() + " " + self._compile_options + " -o {target} {src} -Wl,--start-group -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl,--end-group"
+            if is_macos():
+                cmd = self.cc() + " " + self._compile_options + " -o {target} {src} -Wl,-lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl"
+            else:
+                cmd = self.cc() + " " + self._compile_options + " -o {target} {src} -Wl,--start-group -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl,--end-group"
         else:
             cmd = self.cc() + " " + self._compile_options + " -c -o {target} {src}"
         return cmd
