@@ -32,6 +32,44 @@ class FireModule(nn.Module):
         # Concatenate along the channel dimension (axis=3 in NHWC format)
         return ops.concatenate()([out1, out3], dim=3)
 
+def identical_elem_tuple_to_int(param):
+    """
+    Convert tuples with all the same int elem to a single int 
+    (ex. (3, 3, 3) --> 3)
+    """
+    if isinstance(param, int):
+        return param
+    if not isinstance(param, (list, tuple)) or not all(x == param[0] for x in param):
+        raise RuntimeError(f"AIT supports square param values only, but got {param}")
+    return param[0]
+
+class AdaptiveAvgPool2d(nn.Module):
+    def __init__(self, output_size):
+        super().__init__()
+        self.output_size = output_size
+
+    def forward(self, x):
+        # Convert to NHWC as expected by the converter.
+        x_nhwc = x
+        # Assume static shape is available in the tensor attributes.
+        shape = [var._attrs["values"][0] for var in x_nhwc._attrs["shape"]]
+        print(f'shape in adaptiveavgpool2d is {shape}')
+        HI, WI, CI = shape[1], shape[2], shape[3]
+        if CI % 2 != 0:
+            raise RuntimeError(
+                f"AIT avg_pool2d expects input channel dim to align w/ a multiple of 2 but got {CI}"
+            )
+        if HI != WI:
+            raise RuntimeError(
+                f"adaptive_avg_pool2d currently only supports square input H/W but got H: {HI} and W: {WI}"
+            )
+        # Compute stride and kernel size to reduce HI x WI to output_size x output_size.
+        stride = HI // self.output_size
+        kernel_size = HI - (self.output_size - 1) * stride
+        # Use the plain AvgPool2d with computed parameters.
+        result = nn.AvgPool2d(kernel_size, stride, 0)(x_nhwc)
+        # Convert the result back to NCHW if needed.
+        return result
 
 class SqueezeNet(nn.Module):
     def __init__(self, num_classes=1000, activation="ReLU"):
@@ -54,8 +92,8 @@ class SqueezeNet(nn.Module):
                 raise NotImplementedError(f"Activation {activation} not implemented")
         
         # Initial conv layer: 7x7 conv, stride 2, padding 3, output channels=96.
-        self.conv1 = conv_op(3, 96, 7, 2, 7 // 2, dtype="float")
-        self.maxpool1 = nn.MaxPool2d(3, 2, 1)
+        self.conv1 = conv_op(3, 96, 7, 2, 3, dtype="float")
+        self.maxpool1 = nn.MaxPool2d(3, 2, padding=1)
         
         # Fire modules
         self.fire2 = FireModule(in_channels=96,  squeeze_channels=16, expand1x1_channels=64,  expand3x3_channels=64,  activation=activation)
@@ -72,13 +110,15 @@ class SqueezeNet(nn.Module):
         # Final conv layer (classifier conv).
         # In the original SqueezeNet, conv10 maps from 512 channels to num_classes.
         # Here we choose to map to 1000 channels and then use an FC to allow flexibility.
-        self.conv10 = conv_op(512, 1000, kernel_size=1, stride=1, padding=0, dtype="float")
+        self.dropout = nn.Dropout(0.5)
+        self.conv10 = nn.Conv2dBiasRelu(512, 1000, kernel_size=1, stride=1, padding=0, dtype="float")
         
         # Final classification layers (like in ResNet)
         if num_classes is not None:
             # Assume the spatial size of conv10 output is 8x8 for a 224x224 input.
-            self.avgpool = nn.AvgPool2d(14, 1, 0)  # fixed kernel to reduce 8x8 to 1x1
-            self.reshape = nn.Reshape()
+            # self.avgpool = nn.AvgPool2d(14, 1, 0)  # fixed kernel to reduce 8x8 to 1x1
+            self.avgpool = AdaptiveAvgPool2d(1)
+            # self.reshape = nn.Reshape()
 
     def forward(self, x):
         x = self.conv1(x)
@@ -93,11 +133,12 @@ class SqueezeNet(nn.Module):
         x = self.fire8(x)
         x = self.maxpool8(x)
         x = self.fire9(x)
+        x = self.dropout(x)
         x = self.conv10(x)
         if self.num_classes is not None:
             x = self.avgpool(x)
             # Flatten the tensor: reshape from (N, 1000, 1, 1) to (N, 1000)
-            x = self.reshape(x, [x._size(0), -1])
+            # x = self.reshape(x, [x._size(0), -1])
         return x
 
 

@@ -25,6 +25,7 @@ import timm
 import torch
 from aitemplate.testing import detect_target
 import torchvision.models as models
+
 CONV_WEIGHT_PATTERN = re.compile(r"features\.\d+\.(squeeze|expand1x1|expand3x3)\.weight")
 name_mapping = {
     "features.0.weight": "conv1.weight",
@@ -98,8 +99,8 @@ class timm_export:
             self.transform_params(param_name, fused_model)
         # Replace dots with underscores in keys for AITemplate.
         ait_model = {k.replace(".", "_"): weight.float() for k, weight in fused_model.items()}
-        if detect_target().name() == "rvv":
-            self.export_conv0(ait_model, fused_model)
+        # if detect_target().name() == "rvv":
+        #     self.export_conv0(ait_model, fused_model)
         if half:
             half_params = {}
             for k, v in ait_model.items():
@@ -123,6 +124,7 @@ class timm_export:
         # print(f"conv1_weight: device={conv_w.device}, contiguous={conv_w.is_contiguous()}, dtype={conv_w.dtype}")
 
     def transform_params(self, param_name, fused_model):
+        print(f'weight shape = {(self.pt_state[param_name]).shape}')
         if param_name == "features.0.weight":
             fused_model["conv1.weight"] = (self.pt_state["features.0.weight"]).permute(0, 2, 3, 1).contiguous()
             fused_model["conv1.bias"] = (self.pt_state["features.0.bias"]).contiguous()

@@ -62,6 +62,7 @@ class SqueezeNetVerification(unittest.TestCase):
         #     print(f'name = {name}, param.shape = {param.shape}')
 
         pt_model = timm_exporter.pt_model.to(dtype=torch_dtype, device="cpu")
+        print(f'pt_model:{pt_model}')
         pt_model.eval()
 
         # Compile the AITemplate model.
