@@ -31,7 +31,7 @@ def mark_output(y):
         y[i]._attrs["is_output"] = True
         y[i]._attrs["name"] = "output_%d" % (i)
         y_shape = [d._attrs["values"][0] for d in y[i]._attrs["shape"]]
-        print("output_{} shape: {}".format(i, y_shape))
+        # print("output_{} shape: {}".format(i, y_shape))
 
 
 class SqueezeNetVerification(unittest.TestCase):
@@ -57,6 +57,10 @@ class SqueezeNetVerification(unittest.TestCase):
         # Export weights from timm SqueezeNet model to AITemplate format.
         timm_exporter = timm_export("squeezenet1_0", pretrained=False)
         ait_params = timm_exporter.export_model(half=False)
+        # print("ait_params")
+        # for name, param in ait_params.items():
+        #     print(f'name = {name}, param.shape = {param.shape}')
+
         pt_model = timm_exporter.pt_model.to(dtype=torch_dtype, device="cpu")
         pt_model.eval()
 

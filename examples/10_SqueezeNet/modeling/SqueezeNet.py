@@ -54,8 +54,8 @@ class SqueezeNet(nn.Module):
                 raise NotImplementedError(f"Activation {activation} not implemented")
         
         # Initial conv layer: 7x7 conv, stride 2, padding 3, output channels=96.
-        self.conv1 = conv_op(3, 96, kernel_size=7, stride=2, padding=3, dtype="float")
-        self.maxpool1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.conv1 = conv_op(3, 96, 7, 2, 7 // 2, dtype="float")
+        self.maxpool1 = nn.MaxPool2d(3, 2, 1)
         
         # Fire modules
         self.fire2 = FireModule(in_channels=96,  squeeze_channels=16, expand1x1_channels=64,  expand3x3_channels=64,  activation=activation)
@@ -78,7 +78,6 @@ class SqueezeNet(nn.Module):
         if num_classes is not None:
             # Assume the spatial size of conv10 output is 8x8 for a 224x224 input.
             self.avgpool = nn.AvgPool2d(14, 1, 0)  # fixed kernel to reduce 8x8 to 1x1
-            self.fc = nn.Linear(1000, num_classes, dtype="float")
             self.reshape = nn.Reshape()
 
     def forward(self, x):
@@ -99,7 +98,6 @@ class SqueezeNet(nn.Module):
             x = self.avgpool(x)
             # Flatten the tensor: reshape from (N, 1000, 1, 1) to (N, 1000)
             x = self.reshape(x, [x._size(0), -1])
-            x = self.fc(x)
         return x
 
 
