@@ -215,15 +215,31 @@ class timm_export:
                 fused_model[new_key_weight] = fused_w
                 fused_model[new_key_bias]  = fused_b
             elif name == "classifier.weight":
+                bn_w =  torch.tensor(self.pt_state["features.norm5.weight"])
+                bn_b =  torch.tensor(self.pt_state["features.norm5.bias"])
+                bn_mean =  torch.tensor(self.pt_state["features.norm5.running_mean"])
+                bn_var =  torch.tensor(self.pt_state["features.norm5.running_var"])
                 fc_w =  torch.tensor(self.pt_state["classifier.weight"])
                 fc_b =  torch.tensor(self.pt_state["classifier.bias"])
-                fused_model["fc.weight"] = fc_w
-                fused_model["fc.bias"]   = fc_b
-            elif "norm5.weight" in name:
-                fused_model["norm5.weight"] =  torch.tensor(self.pt_state["features.norm5.weight"])
-                fused_model["norm5.bias"] =  torch.tensor(self.pt_state["features.norm5.bias"])
-                fused_model["norm5.running_mean"] =  torch.tensor(self.pt_state["features.norm5.running_mean"])
-                fused_model["norm5.running_var"] =  torch.tensor(self.pt_state["features.norm5.running_var"])
+                # Fuse BN post-convolution (here convolution is just the identity for features into FC)
+                # We treat each input feature like an "output channel" of a conv for formula:
+                epsilon = 1e-5
+                # Compute the BN scale factor: bn_w / sqrt(bn_var + epsilon)
+                s = bn_w * torch.rsqrt(bn_var + epsilon)  # shape: [1024]
+
+                # Fuse the FC weights by scaling each column with s.
+                fused_fc_w = fc_w * s.unsqueeze(0)  # shape: [1000, 1024]
+
+                # The batch norm transformation is:
+                #   out = s * x + (bn_b - s * bn_mean)
+                # So the fused FC layer becomes:
+                #   y = fc_w * out + fc_b
+                #     = (fc_w * s) * x + [fc_w @ (bn_b - s * bn_mean) + fc_b]
+                # Thus, the new bias is:
+                fused_fc_b = fc_b + fc_w.matmul(bn_b - s * bn_mean)  # shape: [1000]
+
+                fused_model["fc.weight"] = fused_fc_w
+                fused_model["fc.bias"]   = fused_fc_b
     def transform_downsample(self, param_name):
         assert "downsample" in param_name
         tags = param_name.split(".")

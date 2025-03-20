@@ -69,9 +69,9 @@ class Densenet121Verification(unittest.TestCase):
         pt_model.eval()
         module = compile_model(y, target, "./tmp", "densenet121")
         for name, param in ait_params.items():
-            print(f'ait_params name: {name}, param.shape = {param.shape}')
+            # print(f'ait_params name: {name}, param.shape = {param.shape}')
             module.set_constant_with_tensor(name, param)
-        print(f'pt_model:{pt_model}')
+        # print(f'pt_model:{pt_model}')
         # print(f'module:{module}')
         # ait model expects NHWC format
         x_ait = torch.rand([batch_size, 224, 224, 3], dtype=torch_dtype, device="cpu")
@@ -86,7 +86,7 @@ class Densenet121Verification(unittest.TestCase):
         module.run_with_tensors([x_ait], [y_ait])
 
         torch.testing.assert_close(
-            y_pt, y_ait.reshape([batch_size, 1000]), rtol=1, atol=1
+            y_pt, y_ait.reshape([batch_size, 1000]), rtol=1e-1, atol=1
         )
 
 
