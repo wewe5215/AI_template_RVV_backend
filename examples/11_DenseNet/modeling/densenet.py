@@ -2,6 +2,7 @@ import numpy as np
 from aitemplate.frontend import nn
 from aitemplate.testing import detect_target
 from aitemplate.compiler import ops
+from aitemplate.frontend.nn import batch_norm
 # ---------------------------------------------------------------------------
 # Base class (similar to ResNet’s CNNBlockBase)
 # ---------------------------------------------------------------------------
@@ -185,6 +186,10 @@ class DenseNet(nn.Module):
 
         if num_classes is not None:
             # Global average pooling (assuming input features yield a 7x7 feature map)
+            final_channels = self._out_feature_channels[self.stage_names[-1]]
+            self.norm5 = getattr(batch_norm, "BatchNorm2d")(
+                final_channels, eps=1e-05, permute_input_output=False
+            )
             self.avgpool = nn.AvgPool2d(7, 1, 0)
             self.fc = nn.Linear(self._out_feature_channels[self.stage_names[-1]], num_classes, dtype="float")
 
@@ -203,6 +208,7 @@ class DenseNet(nn.Module):
             if name in self._out_features:
                 outputs[name] = x
         if self.num_classes is not None:
+            x = self.norm5(x)
             x = self.avgpool(x)
             x = self.fc(x)
             if x._rank() == 2:
