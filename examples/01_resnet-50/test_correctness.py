@@ -42,12 +42,13 @@ def mark_output(y):
         print("output_{} shape: {}".format(i, y_shape))
 
 
-class ResNet50Verification(unittest.TestCase):
-    def test_resnet50(self):
+class ResNetVerification(unittest.TestCase):
+    def test_resnet(self):
         target = detect_target()
         batch_size = 1
         torch_dtype = torch.float32
         ait_dtype = "float32"
+        depth = 152
         # Create input tensor, need to specify the shape, dtype and is_input flag
         x = Tensor(
             shape=[batch_size, 224, 224, 3],
@@ -55,7 +56,7 @@ class ResNet50Verification(unittest.TestCase):
             name="input0",
             is_input=True,
         )
-        model = build_resnet_backbone(50, activation="ReLU")
+        model = build_resnet_backbone(depth, activation="ReLU")
         # Mark all parameters with name same to PyTorch name convention
         model.name_parameter_tensor()
         # Forward the input tensor to the model, get output tensor
@@ -63,11 +64,11 @@ class ResNet50Verification(unittest.TestCase):
         # Mark output tensor
         mark_output(y)
 
-        timm_exporter = timm_export("resnet50", pretrained=False)
+        timm_exporter = timm_export(f"resnet{depth}", pretrained=False)
         ait_params = timm_exporter.export_model(half=False)
         pt_model = timm_exporter.pt_model.to(dtype=torch_dtype, device="cpu")
         pt_model.eval()
-        module = compile_model(y, target, "./tmp", "resnet50")
+        module = compile_model(y, target, "./tmp", f"resnet{depth}")
         for name, param in ait_params.items():
             module.set_constant_with_tensor(name, param)
 
