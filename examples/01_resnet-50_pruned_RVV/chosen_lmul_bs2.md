@@ -1,25 +1,55 @@
-| Dimensions                                  | operator                                                                                                                                             | lmul |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| 2, 64, 3, 7, 7, 224, 224, 112, 112, 2, 1, 3 | conv2d_bias_relu_0                                                                                                                                   | No Pruning    |
-| 2, 256, 64, 1, 1, 56, 56, 56, 56, 1, 1, 0   | conv2d_bias_2, conv2d_bias_add_relu_5, conv2d_bias_add_relu_8, conv2d_bias_add_relu_11                                                               | No Pruning    |
-| 2, 64, 64, 1, 1, 56, 56, 56, 56, 1, 1, 0    | conv2d_bias_relu_3                                                                                                                                   | No Pruning    |
-| 2, 64, 64, 3, 3, 56, 56, 56, 56, 1, 1, 1    | conv2d_bias_relu_4, conv2d_bias_relu_7, conv2d_bias_relu_10                                                                                          | No Pruning    |
-| 2, 64, 256, 1, 1, 56, 56, 56, 56, 1, 1, 0   | conv2d_bias_relu_6, conv2d_bias_relu_9                                                                                                               | No Pruning    |
-| 2, 512, 256, 1, 1, 56, 56, 28, 28, 2, 1, 0  | conv2d_bias_13                                                                                                                                       | No Pruning    |
-| 2, 128, 256, 1, 1, 56, 56, 56, 56, 1, 1, 0  | conv2d_bias_relu_12                                                                                                                                  | No Pruning    |
-| 2, 128, 128, 3, 3, 56, 56, 28, 28, 2, 1, 1  | conv2d_bias_relu_14                                                                                                                                  | No Pruning    |
-| 2, 512, 128, 1, 1, 28, 28, 28, 28, 1, 1, 0  | conv2d_bias_add_relu_15, conv2d_bias_add_relu_15, layer2_2_conv3, layer2_3_conv3                                                                     | 8    |
-| 2, 128, 512, 1, 1, 28, 28, 28, 28, 1, 1, 0  | conv2d_bias_relu_16, layer2_2_conv1, layer2_3_conv1                                                                                                  | 4    |
-| 2, 128, 128, 3, 3, 28, 28, 28, 28, 1, 1, 1  | conv2d_bias_relu_17, layer2_2_conv2, layer2_3_conv2                                                                                                  | 2    |
-| 2, 1024, 512, 1, 1, 28, 28, 14, 14, 2, 1, 0 | conv2d_bias_26                                                                                                                                       | 4    |
-| 2, 256, 512, 1, 1, 28, 28, 28, 28, 1, 1, 0  | conv2d_bias_relu_25                                                                                                                                  | 8    |
-| 2, 256, 256, 3, 3, 28, 28, 14, 14, 2, 1, 1  | conv2d_bias_relu_27                                                                                                                                  | 4    |
-| 2, 1024, 256, 1, 1, 14, 14, 14, 14, 1, 1, 0 | conv2d_bias_add_relu_28, conv2d_bias_add_relu_31, conv2d_bias_add_relu_34, conv2d_bias_add_relu_37, conv2d_bias_add_relu_40, conv2d_bias_add_relu_43 | 2    |
-| 2, 256, 1024, 1, 1, 14, 14, 14, 14, 1, 1, 0 | conv2d_bias_relu_29, conv2d_bias_relu_32, conv2d_bias_relu_35, conv2d_bias_relu_38, conv2d_bias_relu_41                                              | 2    |
-| 2, 256, 256, 3, 3, 14, 14, 14, 14, 1, 1, 1  | conv2d_bias_relu_30, conv2d_bias_relu_33, conv2d_bias_relu_36, conv2d_bias_relu_39, conv2d_bias_relu_42                                              | 2    |
-| 2, 2048, 1024, 1, 1, 14, 14, 7, 7, 2, 1, 0  | conv2d_bias_45                                                                                                                                       | 1    |
-| 2, 512, 1024, 1, 1, 14, 14, 14, 14, 1, 1, 0 | conv2d_bias_relu_44                                                                                                                                  | 2    |
-| 2, 512, 512, 3, 3, 14, 14, 7, 7, 2, 1, 1    | conv2d_bias_relu_46                                                                                                                                  | 4    |
-| 2, 2048, 512, 1, 1, 7, 7, 7, 7, 1, 1, 0     | conv2d_bias_add_relu_47, conv2d_bias_add_relu_50, conv2d_bias_add_relu_53                                                                            | 1    |
-| 2, 512, 2048, 1, 1, 7, 7, 7, 7, 1, 1, 0     | conv2d_bias_relu_48, conv2d_bias_relu_51                                                                                                             | 4    |
-| 2, 512, 512, 3, 3, 7, 7, 7, 7, 1, 1, 1      | conv2d_bias_relu_49, conv2d_bias_relu_52                                                                                                             | 2    |
+|**Parameter**|operator|**Dimension**|lmul|
+|---|---|---|---|
+|stem_conv1_weight|conv2d_bias_relu_0|64 , 7 , 7 , 3|2|
+|layer1_0_conv1_weight|conv2d_bias_relu_3|64 , 1 , 1 , 64|8|
+|layer1_0_conv2_weight|conv2d_bias_relu_4|64 , 3 , 3 , 64|2|
+|layer1_0_downsample_0_weight|conv2d_bias_2|256 , 1 , 1 , 64|8|
+|layer1_0_conv3_weight|conv2d_bias_add_relu_5|256 , 1 , 1 , 64|8|
+|layer1_1_conv1_weight|conv2d_bias_relu_6|64 , 1 , 1 , 256|8|
+|layer1_1_conv2_weight|conv2d_bias_relu_4|64 , 3 , 3 , 64|2|
+|layer1_1_conv3_weight|conv2d_bias_add_relu_5|256 , 1 , 1 , 64|8|
+|layer1_2_conv1_weight|conv2d_bias_relu_6|64 , 1 , 1 , 256|8|
+|layer1_2_conv2_weight|conv2d_bias_relu_4|64 , 3 , 3 , 64|2|
+|layer1_2_conv3_weight|conv2d_bias_add_relu_5|256 , 1 , 1 , 64|8|
+|layer2_0_conv1_weight|conv2d_bias_relu_12|128 , 1 , 1 , 256|8|
+|layer2_0_conv2_weight|conv2d_bias_relu_14|128 , 3 , 3 , 128|4|
+|layer2_0_downsample_0_weight|conv2d_bias_13|512 , 1 , 1 , 256|4|
+|layer2_0_conv3_weight|conv2d_bias_add_relu_15|512 , 1 , 1 , 128|8|
+|layer2_1_conv1_weight|conv2d_bias_relu_16|128 , 1 , 1 , 512|4|
+|layer2_1_conv2_weight|conv2d_bias_relu_17|128 , 3 , 3 , 128|2|
+|layer2_1_conv3_weight|conv2d_bias_add_relu_15|512 , 1 , 1 , 128|8|
+|layer2_2_conv1_weight|conv2d_bias_relu_16|128 , 1 , 1 , 512|4|
+|layer2_2_conv2_weight|conv2d_bias_relu_17|128 , 3 , 3 , 128|2|
+|layer2_2_conv3_weight|conv2d_bias_add_relu_15|512 , 1 , 1 , 128|8|
+|layer2_3_conv1_weight|conv2d_bias_relu_16|128 , 1 , 1 , 512|4|
+|layer2_3_conv2_weight|conv2d_bias_relu_17|128 , 3 , 3 , 128|2|
+|layer2_3_conv3_weight|conv2d_bias_add_relu_15|512 , 1 , 1 , 128|8|
+|layer3_0_conv1_weight|conv2d_bias_relu_25|256 , 1 , 1 , 512|8|
+|layer3_0_conv2_weight|conv2d_bias_relu_27|256 , 3 , 3 , 256|4|
+|layer3_0_downsample_0_weight|conv2d_bias_26|1024 , 1 , 1 , 512|4|
+|layer3_0_conv3_weight|conv2d_bias_add_relu_28|1024 , 1 , 1 , 256|2|
+|layer3_1_conv1_weight|conv2d_bias_relu_29|256 , 1 , 1 , 1024|2|
+|layer3_1_conv2_weight|conv2d_bias_relu_30|256 , 3 , 3 , 256|2|
+|layer3_1_conv3_weight|conv2d_bias_add_relu_28|1024 , 1 , 1 , 256|2|
+|layer3_2_conv1_weight|conv2d_bias_relu_29|256 , 1 , 1 , 1024|2|
+|layer3_2_conv2_weight|conv2d_bias_relu_30|256 , 3 , 3 , 256|2|
+|layer3_2_conv3_weight|conv2d_bias_add_relu_28|1024 , 1 , 1 , 256|2|
+|layer3_3_conv1_weight|conv2d_bias_relu_29|256 , 1 , 1 , 1024|2|
+|layer3_3_conv2_weight|conv2d_bias_relu_30|256 , 3 , 3 , 256|2|
+|layer3_3_conv3_weight|conv2d_bias_add_relu_28|1024 , 1 , 1 , 256|2|
+|layer3_4_conv1_weight|conv2d_bias_relu_29|256 , 1 , 1 , 1024|2|
+|layer3_4_conv2_weight|conv2d_bias_relu_30|256 , 3 , 3 , 256|2|
+|layer3_4_conv3_weight|conv2d_bias_add_relu_28|1024 , 1 , 1 , 256|2|
+|layer3_5_conv1_weight|conv2d_bias_relu_29|256 , 1 , 1 , 1024|2|
+|layer3_5_conv2_weight|conv2d_bias_relu_30|256 , 3 , 3 , 256|2|
+|layer3_5_conv3_weight|conv2d_bias_add_relu_28|1024 , 1 , 1 , 256|2|
+|layer4_0_conv1_weight|conv2d_bias_relu_44|512 , 1 , 1 , 1024|2|
+|layer4_0_conv2_weight|conv2d_bias_relu_46|512 , 3 , 3 , 512|4|
+|layer4_0_downsample_0_weight|conv2d_bias_45|2048 , 1 , 1 , 1024|1|
+|layer4_0_conv3_weight|conv2d_bias_add_relu_47|2048 , 1 , 1 , 512|1|
+|layer4_1_conv1_weight|conv2d_bias_relu_48|512 , 1 , 1 , 2048|4|
+|layer4_1_conv2_weight|conv2d_bias_relu_49|512 , 3 , 3 , 512|2|
+|layer4_1_conv3_weight|conv2d_bias_add_relu_47|2048 , 1 , 1 , 512|1|
+|layer4_2_conv1_weight|conv2d_bias_relu_48|512 , 1 , 1 , 2048|4|
+|layer4_2_conv2_weight|conv2d_bias_relu_49|512 , 3 , 3 , 512|2|
+|layer4_2_conv3_weight|conv2d_bias_add_relu_47|2048 , 1 , 1 , 512|1|
