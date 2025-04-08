@@ -23,6 +23,7 @@ from aitemplate.compiler.transform.fuse_conv_patterns import (
     get_conv2d_bias_elementwise_patterns,
     get_conv2d_bias_pattern,
     get_cuda_only_conv2d_bias_elementwise_patterns,
+    get_rvv_only_conv2d_bias_elementwise_patterns,
 )
 from aitemplate.compiler.transform.fuse_utils import transform_simple_fusion_patterns
 
@@ -48,6 +49,13 @@ def _transform_cuda_only_conv2d_bias_elementwise(
 
     return transform_simple_fusion_patterns(sorted_graph, fusion_patterns)
 
+def _transform_rvv_only_conv2d_bias_elementwise(
+    sorted_graph: List[Tensor],
+) -> List[Tensor]:
+    fusion_patterns = get_rvv_only_conv2d_bias_elementwise_patterns()
+
+    return transform_simple_fusion_patterns(sorted_graph, fusion_patterns)
+
 
 def fuse_conv_elementwise(sorted_graph: List[Tensor], _: str) -> List[Tensor]:
     """
@@ -66,6 +74,12 @@ def fuse_conv_elementwise(sorted_graph: List[Tensor], _: str) -> List[Tensor]:
     if Target.current().name() == "cuda":
         funcs = [
             _transform_cuda_only_conv2d_bias_elementwise,
+        ]
+        for func in funcs:
+            sorted_graph = func(sorted_graph)
+    elif Target.current().name() == "rvv":
+        funcs = [
+            _transform_rvv_only_conv2d_bias_elementwise,
         ]
         for func in funcs:
             sorted_graph = func(sorted_graph)
