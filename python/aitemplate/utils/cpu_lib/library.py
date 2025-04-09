@@ -174,6 +174,11 @@ class Conv2dKind(enum.Enum):
     GroupConv2dBiasRelu = auto()
     TransposedConv2d = auto()
     TransposedConv2dBiasRelu = auto()
+    Conv2dDepthwise = auto()
+    Conv2dDepthwiseBias = auto()
+    Conv2dDepthwiseBiasAdd = auto()
+    Conv2dDepthwiseBiasRelu = auto()
+    Conv2dDepthwiseBiasAddRelu = auto()
 
 
 Conv2dKindNames = {
@@ -187,6 +192,11 @@ Conv2dKindNames = {
     Conv2dKind.GroupConv2dBiasRelu: "group_conv2d_bias_relu",
     Conv2dKind.TransposedConv2d: "transposed_conv2d",
     Conv2dKind.TransposedConv2dBiasRelu: "transposed_conv2d_bias_relu",
+    Conv2dKind.Conv2dDepthwise: "conv2d_depthwise",
+    Conv2dKind.Conv2dDepthwiseBias: "conv2d_depthwise_bias",
+    Conv2dKind.Conv2dDepthwiseBiasAdd: "conv2d_depthwise_bias_add",
+    Conv2dKind.Conv2dDepthwiseBiasRelu: "conv2d_depthwise_bias_relu",
+    Conv2dKind.Conv2dDepthwiseBiasAddRelu: "conv2d_depthwise_bias_add_relu",
 }
 
 

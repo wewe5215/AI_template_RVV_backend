@@ -22,6 +22,7 @@ from aitemplate.frontend.nn.conv2d.conv2d_bias_add_hardswish import (
     Conv2dBiasAddHardswish,
 )
 from aitemplate.frontend.nn.conv2d.conv2d_bias_add_relu import Conv2dBiasAddRelu
+from aitemplate.frontend.nn.conv2d.conv2d_bias_add import Conv2dBiasAdd
 from aitemplate.frontend.nn.conv2d.conv2d_bias_few_channels import Conv2dBiasFewChannels
 from aitemplate.frontend.nn.conv2d.conv2d_bias_hardswish import Conv2dBiasHardswish
 from aitemplate.frontend.nn.conv2d.conv2d_bias_hardswish_few_channels import (

@@ -84,6 +84,41 @@ template = jinja2.Template(
 {{indent}}CHECK_EQ(xnn_run_operator(op_conv, /*threadpool=*/pthreadpool_), xnn_status_success);
             """
         )
+template_depthwise = jinja2.Template(
+            """
+{{indent}}//{{name}}
+{{indent}}xnn_operator_t op_conv = nullptr;
+{{indent}}const xnn_status status = xnn_create_{{Conv2DSpecialization}}(
+{{indent}}  PH, PW, PH, PW, i32_kernel_h, i32_kernel_w,
+{{indent}}  SH, SW, DH, DW, CI, 1,
+{{indent}}  1, 1 * CI, 1 * CO, ({{DataName}}*)(weight_ptr), ({{DataName}}*)(bias_ptr),
+{% if is_relu %}
+{{indent}}  0, std::numeric_limits<{{DataName}}>::infinity(),
+{% else %}
+{{indent}}  -std::numeric_limits<{{DataName}}>::infinity(), std::numeric_limits<{{DataName}}>::infinity(),
+{% endif %}
+{{indent}}  /*flags=*/0, nullptr, nullptr, &op_conv);
+{{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op_conv(op_conv, xnn_delete_operator);
+{{indent}}CHECK_EQ(status, xnn_status_success);
+{{indent}}CHECK_NE(op_conv, nullptr);
+{{indent}}size_t workspace_size = SIZE_MAX;
+{{indent}}size_t workspace_alignment = SIZE_MAX;
+{{indent}}CHECK_EQ(
+{{indent}}  xnn_reshape_{{Conv2DSpecialization}}(
+{{indent}}    op_conv, i32_batch, i32_in_h, i32_in_w,
+{{indent}}    &workspace_size, &workspace_alignment,
+{{indent}}    /*output_height_out=*/nullptr, /*output_width_out=*/nullptr,
+{{indent}}    /*threadpool=*/pthreadpool_), xnn_status_success);
+{{indent}}CHECK_EQ(workspace_size, 0);
+{{indent}}CHECK_EQ(workspace_alignment, 1);
+{{indent}}CHECK_EQ(xnn_setup_{{Conv2DSpecialization}}(
+{{indent}}    op_conv, 
+{{indent}}    /*workspace=*/nullptr, 
+{{indent}}    ({{DataName}}*)(in_ptr), 
+{{indent}}    ({{DataName}}*)(out_ptr)), xnn_status_success);
+{{indent}}CHECK_EQ(xnn_run_operator(op_conv, /*threadpool=*/pthreadpool_), xnn_status_success);
+            """
+        )
 code_snippet = jinja2.Template(
 """
 {% if not is_bias %}
@@ -199,24 +234,53 @@ class Conv2DOperation:
           self.operation_kind == library.Conv2dKind.Conv2dBiasAdd or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasReluAdd or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasSigmoid or \
-          self.operation_kind == library.Conv2dKind.Conv2dBiasAddRelu :
+          self.operation_kind == library.Conv2dKind.Conv2dBiasAddRelu or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBias or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAdd or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasRelu or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAddRelu:
           is_bias = True
-        conv2d = template.render(
-            indent="  ",
-            name=self.__str__(),
-            DataName = library.DataTypeTag[self.A.element],
-            is_relu = (
-                self.operation_kind == library.Conv2dKind.Conv2dBiasRelu or
-                self.operation_kind == library.Conv2dKind.Conv2dBiasReluAdd
-            ),
-            ADType=library.DataTypeTag[self.A.element],
-            BDType=library.DataTypeTag[self.B.element],
-            CDType=library.DataTypeTag[self.C.element],
-            AccDType=library.DataTypeTag[library.DataType.f32],
-            CShuffleDType=library.DataTypeTag[self.C.element],
-            epilogue_functor=library.TensorOperationTag[self.epilogue_functor],
-            Conv2DSpecialization=Conv2DSpecializationTag[self.conv2d_specialization],
-        )
+        is_depthwise = False
+        if self.operation_kind == library.Conv2dKind.Conv2dDepthwise or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBias or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAdd or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasRelu or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAddRelu:
+            is_depthwise = True
+        if is_depthwise:
+            conv2d = template_depthwise.render(
+                indent="  ",
+                name=self.__str__(),
+                DataName = library.DataTypeTag[self.A.element],
+                is_relu = (
+                    self.operation_kind == library.Conv2dKind.Conv2dBiasRelu or
+                    self.operation_kind == library.Conv2dKind.Conv2dBiasReluAdd
+                ),
+                ADType=library.DataTypeTag[self.A.element],
+                BDType=library.DataTypeTag[self.B.element],
+                CDType=library.DataTypeTag[self.C.element],
+                AccDType=library.DataTypeTag[library.DataType.f32],
+                CShuffleDType=library.DataTypeTag[self.C.element],
+                epilogue_functor=library.TensorOperationTag[self.epilogue_functor],
+                Conv2DSpecialization=Conv2DSpecializationTag[self.conv2d_specialization],
+            )
+        else:
+            conv2d = template.render(
+                indent="  ",
+                name=self.__str__(),
+                DataName = library.DataTypeTag[self.A.element],
+                is_relu = (
+                    self.operation_kind == library.Conv2dKind.Conv2dBiasRelu or
+                    self.operation_kind == library.Conv2dKind.Conv2dBiasReluAdd
+                ),
+                ADType=library.DataTypeTag[self.A.element],
+                BDType=library.DataTypeTag[self.B.element],
+                CDType=library.DataTypeTag[self.C.element],
+                AccDType=library.DataTypeTag[library.DataType.f32],
+                CShuffleDType=library.DataTypeTag[self.C.element],
+                epilogue_functor=library.TensorOperationTag[self.epilogue_functor],
+                Conv2DSpecialization=Conv2DSpecializationTag[self.conv2d_specialization],
+            )
         extra_kind_code = generate_tensorOP(self.operation_kind, self.extra_kind, self.A.element)
         program = code_snippet.render(
             is_bias = is_bias,
