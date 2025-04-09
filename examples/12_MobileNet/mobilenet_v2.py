@@ -3,6 +3,7 @@ from aitemplate.frontend import nn
 from aitemplate.testing import detect_target
 from aitemplate.compiler import ops
 from aitemplate.compiler.ops.common.epilogue import FuncEnum
+
 # -----------------------------------------------------------------------------
 # Base class (same as provided)
 # -----------------------------------------------------------------------------
@@ -25,7 +26,7 @@ class MobileNetV2Stem(CNNBlockBase):
     The stem of MobileNetV2 consists of a single 3×3 convolution with stride 2
     and padding 1 followed by a non-linear activation.
     """
-    def __init__(self, in_channels=3, out_channels=32, norm="BN", activation="ReLU"):
+    def __init__(self, in_channels=3, out_channels=32, norm="BN", activation="ReLU6"):
         # For a 3x3 conv with stride 2, no extra pooling is needed.
         # We pass an effective stride value (here 2) to the base.
         super().__init__(in_channels, out_channels, 2)
@@ -38,7 +39,9 @@ class MobileNetV2Stem(CNNBlockBase):
             else:
                 raise NotImplementedError
         else:
-            if activation == "ReLU":
+            if activation == "ReLU6":
+                conv_op = nn.Conv2dBiasRelu6
+            elif activation == "ReLU":
                 conv_op = nn.Conv2dBiasRelu
             elif activation == "Hardswish":
                 conv_op = nn.Conv2dBiasHardswish
@@ -67,7 +70,7 @@ class MobileInvertedResidual(nn.Module):
     
     A residual connection is used if stride == 1 and in_channels == out_channels.
     """
-    def __init__(self, in_channels, out_channels, stride, expansion_factor, norm="BN", activation="ReLU"):
+    def __init__(self, in_channels, out_channels, stride, expansion_factor, norm="BN", activation="ReLU6"):
         super().__init__()
         self.stride = stride
         self.use_res_connect = (self.stride == 1 and in_channels == out_channels)
@@ -80,22 +83,36 @@ class MobileInvertedResidual(nn.Module):
             if detect_target().name() == "cuda":
                 conv_op = nn.Conv2dBiasReluFewChannels
             else:
-                conv_op = nn.Conv2dBiasRelu
+                if activation == "ReLU6":
+                    conv_op = nn.Conv2dBiasRelu6
+                elif activation == "ReLU":
+                    conv_op = nn.Conv2dBiasRelu
             self.expansion_conv = conv_op(in_channels, hidden_dim, kernel_size=1, stride=1, padding=0, dtype="float")
         else:
             self.expansion_conv = None
 
         # In depthwise conv, the number of groups equals the number of input channels (hidden_dim).
         # We assume this operator accepts an extra parameter "groups".
-        self.depthwise_conv = nn.Conv2dBiasRelu(
-            hidden_dim if self.expansion_conv is not None else in_channels,
-            hidden_dim if self.expansion_conv is not None else in_channels,
-            kernel_size=3,
-            stride=stride,
-            padding=1,
-            groups=(hidden_dim if self.expansion_conv is not None else in_channels),
-            dtype="float"
-        )
+        if activation == "ReLU6":
+            self.depthwise_conv = nn.Conv2dDepthwiseBiasRelu6(
+                hidden_dim if self.expansion_conv is not None else in_channels,
+                hidden_dim if self.expansion_conv is not None else in_channels,
+                kernel_size=3,
+                stride=stride,
+                padding=1,
+                groups=(hidden_dim if self.expansion_conv is not None else in_channels),
+                dtype="float"
+            )
+        elif activation == "ReLU":
+            self.depthwise_conv = nn.Conv2dDepthwiseBiasRelu(
+                hidden_dim if self.expansion_conv is not None else in_channels,
+                hidden_dim if self.expansion_conv is not None else in_channels,
+                kernel_size=3,
+                stride=stride,
+                padding=1,
+                groups=(hidden_dim if self.expansion_conv is not None else in_channels),
+                dtype="float"
+            )
         if self.use_res_connect:
             self.projection_conv = nn.Conv2dBiasAdd(
                 hidden_dim if self.expansion_conv is not None else in_channels,
@@ -126,10 +143,39 @@ class MobileInvertedResidual(nn.Module):
         return x
 
 # -----------------------------------------------------------------------------
+# make_mobile_stage Function
+# -----------------------------------------------------------------------------
+def make_mobile_stage(num_blocks, in_channels, out_channels, expansion_factor, stride, norm="BN", activation="ReLU6"):
+    """
+    Creates a stage by stacking 'num_blocks' MobileInvertedResidual blocks.
+    
+    Args:
+        num_blocks (int): Number of MobileInvertedResidual blocks to stack.
+        in_channels (int): Number of input channels for the stage.
+        out_channels (int): Number of output channels (after projection) for each block.
+        expansion_factor (int): Expansion factor for the inverted residual block.
+        stride (int): Stride for the first block in the stage; subsequent blocks have stride 1.
+        norm (str): Normalization method.
+        activation (str): Activation function.
+        
+    Returns:
+        nn.Sequential: A sequential container of MobileInvertedResidual blocks.
+    """
+    blocks = []
+    for i in range(num_blocks):
+        block_stride = stride if i == 0 else 1
+        block = MobileInvertedResidual(in_channels, out_channels, block_stride,
+                                       expansion_factor=expansion_factor,
+                                       norm=norm, activation=activation)
+        blocks.append(block)
+        in_channels = out_channels
+    return nn.Sequential(*blocks)
+
+# -----------------------------------------------------------------------------
 # MobileNetV2 Backbone
 # -----------------------------------------------------------------------------
 class MobileNetV2(nn.Module):
-    def __init__(self, num_classes=1000, width_mult=1.0, norm="BN", activation="ReLU"):
+    def __init__(self, num_classes=1000, width_mult=1.0, norm="BN", activation="ReLU6"):
         """
         Builds the MobileNetV2 backbone.
         
@@ -156,25 +202,33 @@ class MobileNetV2(nn.Module):
             [6, 320, 1, 1],
         ]
         
-        features = []
+        blocks = []
         # Set current input channel from the stem.
         in_channels = input_channel
         for t, c, n, s in inverted_residual_settings:
             out_channels = int(c * width_mult)
-            for i in range(n):
-                stride = s if i == 0 else 1
-                block = MobileInvertedResidual(in_channels, out_channels, stride, expansion_factor=t,
-                                               norm=norm, activation=activation)
-                features.append(block)
-                in_channels = out_channels
-        self.features = nn.Sequential(*features)
+            # Here you could use the make_mobile_stage function instead of the inline loop.
+            # For demonstration, we use the function to create each stage.
+            stage = make_mobile_stage(num_blocks=n,
+                                      in_channels=in_channels,
+                                      out_channels=out_channels,
+                                      expansion_factor=t,
+                                      stride=s,
+                                      norm=norm,
+                                      activation=activation)
+            blocks.append(stage)
+            in_channels = out_channels
+        self.blocks = nn.Sequential(*blocks)
         
         # Final convolution layer: 1x1 conv to expand to last_channel.
         last_channel = int(1280 * width_mult) if width_mult > 1.0 else 1280
         if detect_target().name() == "cuda":
             conv_op = nn.Conv2dBiasReluFewChannels
         else:
-            conv_op = nn.Conv2dBiasRelu
+            if activation == "ReLU6":
+                conv_op = nn.Conv2dBiasRelu6
+            elif activation == "ReLU":
+                conv_op = nn.Conv2dBiasRelu
         self.final_conv = conv_op(in_channels, last_channel, kernel_size=1, stride=1, padding=0, dtype="float")
         
         # Optionally add global average pooling and a classifier.
@@ -189,7 +243,7 @@ class MobileNetV2(nn.Module):
     def forward(self, x):
         # x is NHWC.
         x = self.stem(x)         # Output reduced spatially.
-        x = self.features(x)     # Apply inverted residual blocks.
+        x = self.blocks(x)     # Apply inverted residual blocks.
         x = self.final_conv(x)   # Final 1×1 conv.
         # If classification is desired, apply pooling and fc.
         if hasattr(self, "fc"):
@@ -202,7 +256,7 @@ class MobileNetV2(nn.Module):
 # -----------------------------------------------------------------------------
 # Builder Function
 # -----------------------------------------------------------------------------
-def build_mobilenetv2_backbone(num_classes=1000, width_mult=1.0, norm="BN", activation="ReLU"):
+def build_mobilenetv2_backbone(num_classes=1000, width_mult=1.0, norm="BN", activation="ReLU6"):
     """
     Create a MobileNetV2 backbone.
     
@@ -223,7 +277,7 @@ def build_mobilenetv2_backbone(num_classes=1000, width_mult=1.0, norm="BN", acti
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     # Create a MobileNetV2 model instance.
-    model = build_mobilenetv2_backbone(num_classes=1000, width_mult=1.0, norm="BN", activation="ReLU")
+    model = build_mobilenetv2_backbone(num_classes=1000, width_mult=1.0, norm="BN", activation="ReLU6")
     # Print a summary of modules to inspect structure.
     for module in model.modules():
         print(module)

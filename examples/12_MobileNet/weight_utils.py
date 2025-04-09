@@ -60,9 +60,7 @@ class export_mobilenet:
         if model_name != "mobilenetv2":
             raise NotImplementedError("Only MobileNetV2 is supported in this version.")
         with torch.no_grad():
-            # Load MobileNetV2 from torchvision
-            weights = MobileNet_V2_Weights.IMAGENET1K_V1
-            self.pt_model = models.mobilenet_v2(weights=weights)
+            self.pt_model = timm.create_model('mobilenetv2_100', pretrained=True)
         self.pt_state = self.pt_model.state_dict()
 
     def export_model(self, half=False):
@@ -88,56 +86,50 @@ class export_mobilenet:
 
     def transform_params(self, name, fused_model):
         # ----- Stem block fusion -----
-        # In torchvision MobileNetV2, the stem block is at features[0]:
-        # Convolution weights: "features.0.0.weight"
-        # BatchNorm parameters: "features.0.1.weight", "features.0.1.bias",
-        #                       "features.0.1.running_mean", and "features.0.1.running_var"
-        parts = name.split(".")
-        block_index = int(parts[1])
-        if name.startswith("features.0.0.weight"):
+        if name.startswith("conv_stem.weight"):
             conv_w = self.pt_state[name]
-            bn_w = self.pt_state["features.0.1.weight"]
-            bn_b = self.pt_state["features.0.1.bias"]
-            bn_mean = self.pt_state["features.0.1.running_mean"]
-            bn_var = self.pt_state["features.0.1.running_var"]
+            bn_w = self.pt_state["bn1.weight"]
+            bn_b = self.pt_state["bn1.bias"]
+            bn_mean = self.pt_state["bn1.running_mean"]
+            bn_var = self.pt_state["bn1.running_var"]
             fused_w, fused_b = fuse_conv_bn(conv_w, bn_w, bn_b, bn_mean, bn_var)
             # Permute from NCHW to NHWC (if required by AITemplate)
             fused_w = fused_w.permute(0, 2, 3, 1).contiguous()
             fused_model["stem.conv.weight"] = fused_w
             fused_model["stem.conv.bias"] = fused_b
-        elif name.startswith("features.18.0.weight"):
+        elif name.startswith("conv_head.weight"):
             conv_w = self.pt_state[name]
-            bn_w = self.pt_state["features.18.1.weight"]
-            bn_b = self.pt_state["features.18.1.bias"]
-            bn_mean = self.pt_state["features.18.1.running_mean"]
-            bn_var = self.pt_state["features.18.1.running_var"]
+            bn_w = self.pt_state["bn2.weight"]
+            bn_b = self.pt_state["bn2.bias"]
+            bn_mean = self.pt_state["bn2.running_mean"]
+            bn_var = self.pt_state["bn2.running_var"]
             fused_w, fused_b = fuse_conv_bn(conv_w, bn_w, bn_b, bn_mean, bn_var)
             # Permute from NCHW to NHWC (if required by AITemplate)
             fused_w = fused_w.permute(0, 2, 3, 1).contiguous()
             fused_model["final.conv.weight"] = fused_w
             fused_model["final.conv.bias"] = fused_b
-        elif name.startswith("features.1.conv.0.0.weight") or name.startswith("features.1.conv.1.weight"):
-            conv_index = int(parts[3])
+        elif name.startswith("blocks.0.0.") and ("conv_dw" in name or "conv_pw" in name):
+            parts = name.split(".")
+            block_index = int(parts[1])
+            conv_type = parts[3]
             conv_w = self.pt_state[name]
-            print(f'block_index = {block_index}, conv_index = {conv_index}')
-            if conv_index == 0: # features.1.conv.0.0.weight
-                conv_sub_index = int(parts[4])
-                bn_index = str(int(conv_sub_index) + 1)
-                bn_key_prefix = f"features.{block_index}.conv.{conv_index}.{bn_index}"
+            print(f'block_index = {block_index}, conv_type = {conv_type}')
+            if conv_type == "conv_dw":
+                bn_key_prefix = f"blocks.0.0.bn1"
                 print(f'bn_key_prefix = {bn_key_prefix}')
                 bn_w = self.pt_state[bn_key_prefix + ".weight"]
                 bn_b = self.pt_state[bn_key_prefix + ".bias"]
                 bn_mean = self.pt_state[bn_key_prefix + ".running_mean"]
                 bn_var = self.pt_state[bn_key_prefix + ".running_var"]
-                new_key = f'features.{block_index-1}.depthwise.conv.weight'
-            elif conv_index == 1:
-                bn_index = str(int(conv_index) + 1)
-                bn_key_prefix = f"features.{block_index}.conv.{bn_index}"
+                new_key = f'blocks.0.0.depthwise.conv.weight'
+            elif conv_type == "conv_pw":
+                bn_key_prefix = f"blocks.0.0.bn2"
+                print(f'bn_key_prefix = {bn_key_prefix}')
                 bn_w = self.pt_state[bn_key_prefix + ".weight"]
                 bn_b = self.pt_state[bn_key_prefix + ".bias"]
                 bn_mean = self.pt_state[bn_key_prefix + ".running_mean"]
                 bn_var = self.pt_state[bn_key_prefix + ".running_var"]
-                new_key = f'features.{block_index-1}.projection.conv.weight'
+                new_key = f'blocks.0.0.projection.conv.weight'
             else:
                 pass
             fused_w, fused_b = fuse_conv_bn(conv_w, bn_w, bn_b, bn_mean, bn_var)
@@ -145,42 +137,46 @@ class export_mobilenet:
             fused_model[new_key] = fused_w
             fused_model[new_key.replace("weight", "bias")] = fused_b
         # ----- Inverted Residual Blocks -----
-        # For the inverted residual blocks, assume keys are of the form:
-        #   "features.<i>.conv.<j>.weight"  (with i >= 1)
-        # where we assume the BN for that convolution is stored in the subsequent index.
-        elif name.startswith("features.") and block_index > 1 and (("conv.0.0" in name) or ("conv.1.0") in name or ("conv.2") in name) and name.endswith("weight"):
-            conv_index = int(parts[3])
-            if conv_index == 0 or conv_index == 1: # features.2.conv.1.0.weight
-                conv_sub_index = int(parts[4])
-                conv_w = self.pt_state[name]
-                bn_index = str(int(conv_sub_index) + 1)
-                bn_key_prefix = f"features.{block_index}.conv.{conv_index}.{bn_index}"
+        elif name.startswith("blocks.") and ("conv_dw" in name or "conv_pw" in name or "conv_pwl" in name) and name.endswith("weight"):
+            parts = name.split(".")
+            block_index = int(parts[1])
+            conv_type = parts[3]
+            sub_block_index = parts[2]
+            conv_w = self.pt_state[name]
+            print(f'block_index = {block_index}, sub_block_index = {sub_block_index}, conv_type = {conv_type}')
+            if conv_type == "conv_pw":
+                bn_key_prefix = f"blocks.{block_index}.{sub_block_index}.bn1"
+                print(f'bn_key_prefix = {bn_key_prefix}')
                 bn_w = self.pt_state[bn_key_prefix + ".weight"]
                 bn_b = self.pt_state[bn_key_prefix + ".bias"]
                 bn_mean = self.pt_state[bn_key_prefix + ".running_mean"]
                 bn_var = self.pt_state[bn_key_prefix + ".running_var"]
-                if conv_index == 0:
-                    new_key = f'features.{block_index-1}.expansion.conv.weight'
-                else:
-                    new_key = f'features.{block_index-1}.depthwise.conv.weight'
-            elif conv_index == 2:
-                conv_w = self.pt_state[name]
-                bn_index = str(int(conv_index) + 1)
-                bn_key_prefix = f"features.{block_index}.conv.{bn_index}"
+                new_key = f'blocks.{block_index}.{sub_block_index}.expansion.conv.weight'
+            elif conv_type == "conv_dw":
+                bn_key_prefix = f"blocks.{block_index}.{sub_block_index}.bn2"
+                print(f'bn_key_prefix = {bn_key_prefix}')
                 bn_w = self.pt_state[bn_key_prefix + ".weight"]
                 bn_b = self.pt_state[bn_key_prefix + ".bias"]
                 bn_mean = self.pt_state[bn_key_prefix + ".running_mean"]
                 bn_var = self.pt_state[bn_key_prefix + ".running_var"]
-                new_key = f'features.{block_index-1}.projection.conv.weight'
+                new_key = f'blocks.{block_index}.{sub_block_index}.depthwise.conv.weight'
+            elif conv_type == "conv_pwl":
+                bn_key_prefix = f"blocks.{block_index}.{sub_block_index}.bn3"
+                print(f'bn_key_prefix = {bn_key_prefix}')
+                bn_w = self.pt_state[bn_key_prefix + ".weight"]
+                bn_b = self.pt_state[bn_key_prefix + ".bias"]
+                bn_mean = self.pt_state[bn_key_prefix + ".running_mean"]
+                bn_var = self.pt_state[bn_key_prefix + ".running_var"]
+                new_key = f'blocks.{block_index}.{sub_block_index}.projection.conv.weight'
             fused_w, fused_b = fuse_conv_bn(conv_w, bn_w, bn_b, bn_mean, bn_var)
             fused_w = fused_w.permute(0, 2, 3, 1).contiguous()
             fused_model[new_key] = fused_w
             fused_model[new_key.replace("weight", "bias")] = fused_b
 
         # ----- Classifier -----
-        elif name.startswith("classifier"):
-            fused_model["fc.weight"] = self.pt_state["classifier.1.weight"]
-            fused_model["fc.bias"] = self.pt_state["classifier.1.bias"]
+        elif name.startswith("classifier.weight"):
+            fused_model["fc.weight"] = self.pt_state["classifier.weight"]
+            fused_model["fc.bias"] = self.pt_state["classifier.bias"]
 
     def export_to_torch_tensor(self, half=False):
         return self.export_model(half=half)

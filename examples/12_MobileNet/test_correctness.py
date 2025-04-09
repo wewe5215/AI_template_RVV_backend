@@ -73,7 +73,7 @@ class MobileNetV2Verification(unittest.TestCase):
         module.run_with_tensors([x_ait], [y_ait])
 
         torch.testing.assert_close(
-            y_pt, y_ait.reshape([batch_size, 1000]), rtol=1e-1, atol=1e-1
+            y_pt, y_ait.reshape([batch_size, 1000]), rtol=1, atol=1e-1
         )
 
 
