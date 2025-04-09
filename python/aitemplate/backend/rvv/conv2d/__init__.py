@@ -33,4 +33,5 @@ from aitemplate.backend.rvv.conv2d import (
     transposed_conv2d,
     transposed_conv2d_bias,
     conv2d_depthwise,
+    conv2d_depthwise_bias,
 )
