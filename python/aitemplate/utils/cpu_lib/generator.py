@@ -159,6 +159,12 @@ def GenerateTensorOp(manifest):
         library.Conv2dKind.Conv2dBiasRelu,
         library.TensorOperation.PassThrough,
     )
+    # Conv2dBiasRelu6
+    CreateConv2dFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dBiasRelu6,
+        library.TensorOperation.PassThrough,
+    )
     # Conv2dBiasAdd
     CreateConv2dFwdOperator(
         manifest,
@@ -171,10 +177,22 @@ def GenerateTensorOp(manifest):
         library.Conv2dKind.Conv2dBiasReluAdd,
         library.TensorOperation.Add,
     )
+    # Conv2dBiasRelu6Add
+    CreateConv2dFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dBiasRelu6Add,
+        library.TensorOperation.Add,
+    )
     # Conv2dBiasAddRelu
     CreateConv2dFwdOperator(
         manifest,
         library.Conv2dKind.Conv2dBiasAddRelu,
+        library.TensorOperation.Add,
+    )
+    # Conv2dBiasAddRelu6
+    CreateConv2dFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dBiasAddRelu6,
         library.TensorOperation.Add,
     )
     # Conv2dDepthwise
@@ -201,10 +219,22 @@ def GenerateTensorOp(manifest):
         library.Conv2dKind.Conv2dDepthwiseBiasRelu,
         library.TensorOperation.PassThrough,
     )
+    # Conv2dDepthwiseBiasRelu6
+    CreateConv2dFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dDepthwiseBiasRelu6,
+        library.TensorOperation.PassThrough,
+    )
     # Conv2dDepthwiseBiasAddRelu
     CreateConv2dFwdOperator(
         manifest,
         library.Conv2dKind.Conv2dDepthwiseBiasAddRelu,
+        library.TensorOperation.Add,
+    )
+    # Conv2dDepthwiseBiasAddRelu6
+    CreateConv2dFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dDepthwiseBiasAddRelu6,
         library.TensorOperation.Add,
     )
     # # Conv2dBiasSigmoid

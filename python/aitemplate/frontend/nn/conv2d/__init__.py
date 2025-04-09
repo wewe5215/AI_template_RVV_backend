@@ -29,12 +29,15 @@ from aitemplate.frontend.nn.conv2d.conv2d_bias_hardswish_few_channels import (
     Conv2dBiasHardswishFewChannels,
 )
 from aitemplate.frontend.nn.conv2d.conv2d_bias_relu import Conv2dBiasRelu
+from aitemplate.frontend.nn.conv2d.conv2d_bias_relu6 import Conv2dBiasRelu6
 from aitemplate.frontend.nn.conv2d.conv2d_bias_relu_few_channels import (
     Conv2dBiasReluFewChannels,
 )
 from aitemplate.frontend.nn.conv2d.conv2d_bias_sigmoid import Conv2dBiasSigmoid
 from aitemplate.frontend.nn.conv2d.conv2d_depthwise import Conv2dDepthwise
 from aitemplate.frontend.nn.conv2d.conv2d_depthwise_bias import Conv2dDepthwiseBias
+from aitemplate.frontend.nn.conv2d.conv2d_depthwise_bias_relu import Conv2dDepthwiseBiasRelu
+from aitemplate.frontend.nn.conv2d.conv2d_depthwise_bias_relu6 import Conv2dDepthwiseBiasRelu6
 from aitemplate.frontend.nn.conv2d.transposed_conv2d_bias import ConvTranspose2dBias
 from aitemplate.frontend.nn.conv2d.transposed_conv2d_bias_relu import (
     ConvTranspose2dBiasRelu,

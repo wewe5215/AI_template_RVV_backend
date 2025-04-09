@@ -31,12 +31,15 @@ from aitemplate.compiler.ops.conv.conv2d_bias_hardswish_few_channels import (
     conv2d_bias_hardswish_few_channels,
 )
 from aitemplate.compiler.ops.conv.conv2d_bias_relu import conv2d_bias_relu
+from aitemplate.compiler.ops.conv.conv2d_bias_relu6 import conv2d_bias_relu6
 from aitemplate.compiler.ops.conv.conv2d_bias_relu_few_channels import (
     conv2d_bias_relu_few_channels,
 )
 from aitemplate.compiler.ops.conv.conv2d_bias_sigmoid import conv2d_bias_sigmoid
 from aitemplate.compiler.ops.conv.conv2d_depthwise import conv2d_depthwise
 from aitemplate.compiler.ops.conv.conv2d_depthwise_bias import conv2d_depthwise_bias
+from aitemplate.compiler.ops.conv.conv2d_depthwise_bias_relu import conv2d_depthwise_bias_relu
+from aitemplate.compiler.ops.conv.conv2d_depthwise_bias_relu6 import conv2d_depthwise_bias_relu6
 from aitemplate.compiler.ops.conv.conv3d import conv3d
 from aitemplate.compiler.ops.conv.conv3d_bias import conv3d_bias
 from aitemplate.compiler.ops.conv.depthwise_conv3d import depthwise_conv3d

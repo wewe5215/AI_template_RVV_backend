@@ -168,17 +168,23 @@ class Conv2dKind(enum.Enum):
     Conv2dBias = auto()
     Conv2dBiasAdd = auto()
     Conv2dBiasRelu = auto()
+    Conv2dBiasRelu6 = auto()
     Conv2dBiasAddRelu = auto()
+    Conv2dBiasAddRelu6 = auto()
     Conv2dBiasReluAdd = auto()
+    Conv2dBiasRelu6Add = auto()
     Conv2dBiasSigmoid = auto()
     GroupConv2dBiasRelu = auto()
+    GroupConv2dBiasRelu6 = auto()
     TransposedConv2d = auto()
     TransposedConv2dBiasRelu = auto()
     Conv2dDepthwise = auto()
     Conv2dDepthwiseBias = auto()
     Conv2dDepthwiseBiasAdd = auto()
     Conv2dDepthwiseBiasRelu = auto()
+    Conv2dDepthwiseBiasRelu6 = auto()
     Conv2dDepthwiseBiasAddRelu = auto()
+    Conv2dDepthwiseBiasAddRelu6 = auto()
 
 
 Conv2dKindNames = {
@@ -186,17 +192,23 @@ Conv2dKindNames = {
     Conv2dKind.Conv2dBias: "conv2d_bias",
     Conv2dKind.Conv2dBiasAdd: "conv2d_bias_add",
     Conv2dKind.Conv2dBiasRelu: "conv2d_bias_relu",
+    Conv2dKind.Conv2dBiasRelu6: "conv2d_bias_relu6",
     Conv2dKind.Conv2dBiasAddRelu: "conv2d_bias_add_relu",
+    Conv2dKind.Conv2dBiasAddRelu6: "conv2d_bias_add_relu6",
     Conv2dKind.Conv2dBiasReluAdd: "conv2d_bias_relu_add",
+    Conv2dKind.Conv2dBiasRelu6Add: "conv2d_bias_relu6_add",
     Conv2dKind.Conv2dBiasSigmoid: "conv2d_bias_sigmoid",
     Conv2dKind.GroupConv2dBiasRelu: "group_conv2d_bias_relu",
+    Conv2dKind.GroupConv2dBiasRelu6: "group_conv2d_bias_relu6",
     Conv2dKind.TransposedConv2d: "transposed_conv2d",
     Conv2dKind.TransposedConv2dBiasRelu: "transposed_conv2d_bias_relu",
     Conv2dKind.Conv2dDepthwise: "conv2d_depthwise",
     Conv2dKind.Conv2dDepthwiseBias: "conv2d_depthwise_bias",
     Conv2dKind.Conv2dDepthwiseBiasAdd: "conv2d_depthwise_bias_add",
     Conv2dKind.Conv2dDepthwiseBiasRelu: "conv2d_depthwise_bias_relu",
+    Conv2dKind.Conv2dDepthwiseBiasRelu6: "conv2d_depthwise_bias_relu6",
     Conv2dKind.Conv2dDepthwiseBiasAddRelu: "conv2d_depthwise_bias_add_relu",
+    Conv2dKind.Conv2dDepthwiseBiasAddRelu6: "conv2d_depthwise_bias_add_relu6",
 }
 
 

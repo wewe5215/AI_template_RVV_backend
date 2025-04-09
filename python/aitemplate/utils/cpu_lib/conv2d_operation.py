@@ -59,6 +59,8 @@ template = jinja2.Template(
 {{indent}}  CO, 1 * CI, 1 * CO, ({{DataName}}*)(weight_ptr), ({{DataName}}*)(bias_ptr),
 {% if is_relu %}
 {{indent}}  0, std::numeric_limits<{{DataName}}>::infinity(),
+{% elif is_relu6 %}
+{{indent}}  0, 6,
 {% else %}
 {{indent}}  -std::numeric_limits<{{DataName}}>::infinity(), std::numeric_limits<{{DataName}}>::infinity(),
 {% endif %}
@@ -94,6 +96,8 @@ template_depthwise = jinja2.Template(
 {{indent}}  1, 1 * CI, 1 * CO, ({{DataName}}*)(weight_ptr), ({{DataName}}*)(bias_ptr),
 {% if is_relu %}
 {{indent}}  0, std::numeric_limits<{{DataName}}>::infinity(),
+{% elif is_relu6 %}
+{{indent}}  0, 6,
 {% else %}
 {{indent}}  -std::numeric_limits<{{DataName}}>::infinity(), std::numeric_limits<{{DataName}}>::infinity(),
 {% endif %}
@@ -139,6 +143,8 @@ binary_func_minmax_flag_op = jinja2.Template(
 {{indent}}xnn_operator_t binary_func_minmax_flag_op = nullptr;
 {% if is_relu %}
 {{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{operation}}_{{DataType}}(0, std::numeric_limits<{{DataName}}>::infinity(), 0, &binary_func_minmax_flag_op));
+{% elif is_relu6 %}
+{{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{operation}}_{{DataType}}(0, 6, 0, &binary_func_minmax_flag_op));
 {% else %}
 {{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{operation}}_{{DataType}}(-std::numeric_limits<{{DataName}}>::infinity(), std::numeric_limits<{{DataName}}>::infinity(), 0, &binary_func_minmax_flag_op));
 {% endif %}
@@ -213,6 +219,10 @@ class Conv2DOperation:
                         operation_kind == library.Conv2dKind.Conv2dBiasAddRelu and \
                         operation_type == library.TensorOperation.Add
                     ),
+                    is_relu6 = (
+                        operation_kind == library.Conv2dKind.Conv2dBiasAddRelu6 and \
+                        operation_type == library.TensorOperation.Add
+                    ),
                     operation = library.TensorOperationTag[operation_type],
                     DataType = library.DataTypeNames[element],
                     DataName = library.DataTypeTag[element],
@@ -231,21 +241,28 @@ class Conv2DOperation:
         is_bias = False
         if self.operation_kind == library.Conv2dKind.Conv2dBias or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasRelu or \
+          self.operation_kind == library.Conv2dKind.Conv2dBiasRelu6 or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasAdd or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasReluAdd or \
+          self.operation_kind == library.Conv2dKind.Conv2dBiasRelu6Add or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasSigmoid or \
           self.operation_kind == library.Conv2dKind.Conv2dBiasAddRelu or \
+          self.operation_kind == library.Conv2dKind.Conv2dBiasAddRelu6 or \
           self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBias or \
           self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAdd or \
           self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasRelu or \
-          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAddRelu:
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasRelu6 or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAddRelu or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAddRelu6:
           is_bias = True
         is_depthwise = False
         if self.operation_kind == library.Conv2dKind.Conv2dDepthwise or \
           self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBias or \
           self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAdd or \
           self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasRelu or \
-          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAddRelu:
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasRelu6 or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAddRelu or \
+          self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAddRelu6:
             is_depthwise = True
         if is_depthwise:
             conv2d = template_depthwise.render(
@@ -254,7 +271,15 @@ class Conv2DOperation:
                 DataName = library.DataTypeTag[self.A.element],
                 is_relu = (
                     self.operation_kind == library.Conv2dKind.Conv2dBiasRelu or
-                    self.operation_kind == library.Conv2dKind.Conv2dBiasReluAdd
+                    self.operation_kind == library.Conv2dKind.Conv2dBiasReluAdd or
+                    self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasRelu or
+                    self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAddRelu
+                ),
+                is_relu6 = (
+                    self.operation_kind == library.Conv2dKind.Conv2dBiasRelu6 or
+                    self.operation_kind == library.Conv2dKind.Conv2dBiasRelu6Add or
+                    self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasRelu6 or
+                    self.operation_kind == library.Conv2dKind.Conv2dDepthwiseBiasAddRelu6
                 ),
                 ADType=library.DataTypeTag[self.A.element],
                 BDType=library.DataTypeTag[self.B.element],
@@ -272,6 +297,10 @@ class Conv2DOperation:
                 is_relu = (
                     self.operation_kind == library.Conv2dKind.Conv2dBiasRelu or
                     self.operation_kind == library.Conv2dKind.Conv2dBiasReluAdd
+                ),
+                is_relu6 = (
+                    self.operation_kind == library.Conv2dKind.Conv2dBiasRelu6 or
+                    self.operation_kind == library.Conv2dKind.Conv2dBiasRelu6Add
                 ),
                 ADType=library.DataTypeTag[self.A.element],
                 BDType=library.DataTypeTag[self.B.element],

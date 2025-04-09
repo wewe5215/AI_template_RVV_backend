@@ -12,27 +12,32 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-# flake8: noqa
 """
-rvv conv2d module init
+conv2d depthwise bias relu module
 """
-from aitemplate.backend.rvv.conv2d import (
-    conv2d,
-    conv2d_bias,
-    conv2d_bias_add,
-    conv2d_bias_add_hardswish,
-    conv2d_bias_add_relu,
-    conv2d_bias_few_channels,
-    conv2d_bias_hardswish,
-    conv2d_bias_hardswish_few_channels,
-    conv2d_bias_relu,
-    conv2d_bias_relu6,
-    conv2d_bias_relu_few_channels,
-    conv2d_bias_sigmoid,
-    conv2d_depthwise,
-    conv2d_depthwise_bias,
-    conv2d_depthwise_bias_relu,
-    conv2d_depthwise_bias_relu6,
-    transposed_conv2d,
-    transposed_conv2d_bias,
-)
+from aitemplate.frontend.nn.conv2d.common_conv2d_bias_act import Conv2dBiasAct
+
+
+class Conv2dDepthwiseBiasRelu(Conv2dBiasAct):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride,
+        padding=0,
+        dilation=1,
+        groups=1,
+        dtype="float32",
+    ):
+        super().__init__(
+            "conv2d_depthwise_bias_relu",
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding,
+            dilation,
+            groups,
+            dtype,
+        )
