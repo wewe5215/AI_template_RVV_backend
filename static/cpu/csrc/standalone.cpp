@@ -37,7 +37,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
+#include <cstring>
 #include "macros.h"
 #include "model_interface.h"
 #include "raii_wrapper.h"
@@ -89,6 +89,20 @@ static void make_random_bfloat16_values(
     size_t numel,
     float lb,
     float ub) {
+  std::uniform_real_distribution<> dist(lb, ub);
+  for (size_t i = 0; i < numel; i++) {
+    float v = static_cast<float>(dist(rnd_generator));
+    // fixme: if encountered precision loss, then change the type conversion method
+    h_data[i] = (uint16_t)(v);
+  }
+}
+
+static void make_random_uint16_values(
+  std::mt19937& rnd_generator,
+  bfloat16* h_data,
+  size_t numel,
+  float lb,
+  float ub) {
   std::uniform_real_distribution<> dist(lb, ub);
   for (size_t i = 0; i < numel; i++) {
     float v = static_cast<float>(dist(rnd_generator));
@@ -152,6 +166,14 @@ static Ptr make_random_data(
           numel,
           /*lb*/ 0,
           /*ub*/ 1);
+      break;
+      case AITemplateDtype::k_Uint16:
+    make_random_uint16_values(
+        rnd_generator,
+        static_cast<uint16_t*>(h_data.get()),
+        numel,
+        /*lb*/ 1.0,
+        /*ub*/ 2.0);
       break;
     default:
       throw std::runtime_error("unsupported dtype for making random data");

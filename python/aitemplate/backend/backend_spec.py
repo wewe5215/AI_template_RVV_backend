@@ -35,10 +35,232 @@ class BackendSpec:
 class CPUBackendSpec(BackendSpec):
     func_enum_to_func_name: Dict[FuncEnum, str] = field(
         default_factory=lambda: {
-            FuncEnum.ADD: "+",
-            FuncEnum.SUB: "-",
-            FuncEnum.MUL: "*",
-            FuncEnum.DIV: "/",
+            FuncEnum.ADD: {
+                "half2": "__hadd2",
+                "bfloat16_2": "__hadd2",
+                "half": "__hadd",
+                "bfloat16": "__hadd",
+                "float": "__hadd2_f32",
+            },
+            FuncEnum.SUB: {
+                "half2": "__hsub2",
+                "bfloat16_2": "__hsub2",
+                "half": "__hsub",
+                "bfloat16": "__hsub",
+                "float": "__hsub2_f32",
+            },
+            FuncEnum.MUL: {
+                "half2": "__hmul2",
+                "bfloat16_2": "__hmul2",
+                "half": "__hmul",
+                "bfloat16": "__hmul",
+                "float": "__hmul2_f32",
+            },
+            FuncEnum.DIV: {
+                "half2": "__h2div",
+                "bfloat16_2": "__h2div",
+                "half": "__hdiv",
+                "bfloat16": "__hdiv",
+                "float": "__h2div_f32",
+            },
+            FuncEnum.COS: {
+                "half2": "h2cos",
+                "bfloat16_2": "h2cos",
+                "half": "hcos",
+                "bfloat16": "hcos",
+                "float": "cosf",
+            },
+            FuncEnum.SIN: {
+                "half2": "h2sin",
+                "bfloat16_2": "h2sin",
+                "half": "hsin",
+                "bfloat16": (
+                    "hsin"
+                ),
+                "float": "sinf",
+            },
+            FuncEnum.TANH: {
+                "half2": "fast_tanh",
+                "bfloat16_2": "fast_tanh",
+                "half": "fast_tanh",
+                "bfloat16": "fast_tanh",
+                "float": "tanh",
+            },
+            FuncEnum.ABS: {
+                "half2": "__habs2",
+                "bfloat16_2": "__habs2",
+                "half": "__habs",
+                "bfloat16": "__habs",
+                "float": "fabsf",
+            },
+            FuncEnum.LOGE: {
+                "half2": "h2log",
+                "bfloat16_2": "h2log",
+                "half": "hlog",
+                "bfloat16": "hlog",
+                "float": "logf",
+            },
+            FuncEnum.LOG1P: {
+                "half2": "h2log1p",
+                "bfloat16_2": "h2log1p",
+                "half": "hlog1p",
+                "bfloat16": "hlog1p",
+                "float": "log1pf",
+            },
+            
+            FuncEnum.EXP: {
+                "half2": "h2exp",
+                "bfloat16_2": "h2exp",
+                "half": "hexp",
+                "bfloat16": "hexp",
+                "float": "expf",
+            },
+            FuncEnum.SQRT: {
+                "half2": "h2sqrt",
+                "bfloat16_2": "h2sqrt",
+                "half": "hsqrt",
+                "bfloat16": "hsqrt",
+                "float": "sqrtf",
+            },
+            FuncEnum.MAX: {
+                "half2": "hmax2_nan",
+                "bfloat16_2": "hmax2_nan",
+                "half": "hmax_nan_f16",
+                "bfloat16": "hmax_nan_f16",
+                "float": "fmaxf_nan",
+            },
+            FuncEnum.MIN: {
+                "half2": "hmin2_nan",
+                "bfloat16_2": "hmin2_nan",
+                "half": "hmin_nan_f16",
+                "bfloat16": "hmin_nan_f16",
+                "float": "fminf_nan",
+            },
+            FuncEnum.SIGN: {
+                "half2": "h2sign_custom",
+                "bfloat16_2": "h2sign_custom",
+                "half": "sign_custom<half>",
+                "bfloat16": "sign_custom<bfloat16>",
+                "float": "sign_custom<float>",
+            },
+            FuncEnum.SIGMOID: {
+                "half2": "h2sigmoid_custom",
+                "bfloat16_2": "h2sigmoid_custom",
+                "half": "hsigmoid_custom",
+                "bfloat16": "hsigmoid_custom",
+                "float": "fsigmoid_custom",
+            },
+            FuncEnum.LRELU: {
+                "half2": "leaky_relu",
+                "bfloat16_2": "leaky_relu",
+                "half": "leaky_relu_f16",
+                "bfloat16": "leaky_relu_f16",
+                "float": "leaky_relu",
+            },
+            FuncEnum.HARDTANH: {
+                "half2": "h2hard_tanh",
+                "bfloat16_2": "h2hard_tanh",
+                "half": "hard_tanh",
+                "float": "hard_tanh",
+                "bfloat16": "hard_tanh",
+            },
+            FuncEnum.RELU: {
+                "half2": "relu",
+                "bfloat16_2": "relu",
+                "half": "relu_f16",
+                "bfloat16": "relu_f16",
+                "float": "relu",
+            },
+            FuncEnum.NAN_TO_NUM: {
+                "half2": "nan_to_num",
+                "bfloat16_2": "nan_to_num",
+                "half": "nan_to_num_f16",
+                "bfloat16": "nan_to_num_f16",
+                "float": "nan_to_num",
+            },
+            FuncEnum.CLAMP_NAN_TO_NUM: {
+                "half2": "clamp_nan_to_num",
+                "bfloat16_2": "clamp_nan_to_num",
+                "half": "clamp_nan_to_num_f16",
+                "bfloat16": "clamp_nan_to_num_f16",
+                "float": "clamp_nan_to_num",
+            },
+            FuncEnum.SILU: {
+                "half2": "h2silu",
+                "bfloat16_2": "h2silu",
+                "half": "hsilu",
+                "bfloat16": "hsilu",
+                "float": "fsilu",
+            },
+            FuncEnum.POW: {
+                "half2": "h2pow",
+                "bfloat16_2": "h2pow",
+                "half": "hpow",
+                "bfloat16": "hpow",
+                "float": "fpow",
+            },
+            FuncEnum.GELU: {
+                "half": "hgelu",
+                "bfloat16": "hgelu",
+                "float": "fgelu",
+            },
+            FuncEnum.FASTGELU: {
+                "half": "h_fast_gelu",
+                "bfloat16": "h_fast_gelu",
+                "float": "f_fast_gelu",
+            },
+            FuncEnum.SOFTPLUS: {
+                "half2": "h2softplus",
+                "bfloat16_2": "h2softplus",
+                "half": "hsoftplus",
+                "bfloat16": "hsoftplus",
+                "float": "fsoftplus",
+            },
+            FuncEnum.ELU: {
+                "half2": "h2elu",
+                "bfloat16_2": "h2elu",
+                "half": "helu",
+                "bfloat16": "helu",
+                "float": "felu",
+            },
+            FuncEnum.SOFTSIGN: {
+                "float": "fsoftsign",
+                "half": "hsoftsign",
+                "half2": "h2softsign",
+                "bfloat16": "hsoftsign",
+                "bfloat16_2": "h2softsign",
+            },
+            FuncEnum.FLOOR_DIV: {
+                "float": "floor_div",
+                "half": "floor_div",
+                "half2": "floor_div",
+                "bfloat16": "floor_div",
+                "bfloat16_2": "floor_div",
+            },
+            FuncEnum.FLOOR: {
+                "float": "__floor",
+                "half": "__floor",
+                "half2": "__floor",
+                "bfloat16": "__floor",
+                "bfloat16_2": "__floor",
+            },
+            FuncEnum.CELU: {
+                "float": "fcelu",
+                "half": "hcelu",
+                "half2": "h2celu",
+                "bfloat16": "hcelu",
+                "bfloat16_2": "h2celu",
+            },
+        }
+    )
+    backend_datatype_convertors: Dict[str, Dict[str, str]] = field(
+        default_factory=lambda: {
+            "half": {"float": "__half2float"},
+            "bfloat16": {"float": "__bfloat162float"},
+            "float": {
+                "half": "__float2half_rn",
+                "bfloat16": "__float2bfloat16_rn",
+            },
         }
     )
     # it seems like this factory will not be used
@@ -96,6 +318,15 @@ class CPUBackendSpec(BackendSpec):
             16: "int4",
         }
     )
+    op_type_priority_list: List[str] = field(
+        default_factory=lambda: [
+            "half2",
+            "half",
+            "bfloat16_2",
+            "bfloat16",
+            "float",
+        ]
+    )
 
     def get_dtype_to_dtype(self, dtype: str, type_dict: Dict[str, str]):
         data_type = type_dict.get(dtype)
@@ -111,6 +342,81 @@ class CPUBackendSpec(BackendSpec):
 
     def dtype_to_lib_type(self, dtype: str):
         raise NotImplementedError
+    def get_elementwise_op_backend_type(
+        self,
+        num_elements: int,
+        dtype: str,
+    ) -> str:
+        """
+        Get a backend type execution in elementwise ops.
+        For example, if we're dealing with fp16, we might be able to use half2 if num_elements is divisible by 2.
+        """
+        if dtype in ("float", "float32"):
+            return "float"
+        elif dtype == "float16":
+            if num_elements % 2 == 0:
+                return "half2"
+            else:
+                return "half"
+        elif dtype == "bfloat16":
+            if num_elements % 2 == 0:
+                return "bfloat16_2"
+            else:
+                return "bfloat16"
+        raise NotImplementedError("Unsupported dtype {}!".format(dtype))
+
+    def get_elementwise_read_backend_type(
+        self,
+        num_elements: int,
+        dtype: str,
+    ) -> str:
+        """
+        Get a backend type for reading in elementwise ops.
+        For example, if we're dealing with fp16 and num_elements is divisible by 8,
+        we can use uint4.
+        """
+        if dtype in ("float", "float32", "int32"):
+            num_elems_to_backend_type = ((4, "float"), (2, "float"), (1, "float"))
+
+        elif dtype == "float16":
+            num_elems_to_backend_type = (
+                (8, "uint4"),
+                (4, "uint2"),
+                (2, "uint"),
+                (1, "half"),
+            )
+        elif dtype == "bfloat16":
+            num_elems_to_backend_type = (
+                (8, "uint4"),
+                (4, "uint2"),
+                (2, "uint"),
+                (1, "bfloat16"),
+            )
+        elif dtype == "int64":
+            num_elems_to_backend_type = (
+                (2, "uint4"),
+                (1, "uint2"),
+            )
+        else:
+            raise NotImplementedError("Unsupported dtype {}!".format(dtype))
+
+        for mod, dtype in num_elems_to_backend_type:
+            if num_elements % mod == 0:
+                return dtype
+
+        raise RuntimeError(
+            f"Failed to infer data type due to invalid num elems to backend type mapping: {num_elems_to_backend_type}"
+        )
+    def get_candidate_op_types(self, op_t: str) -> List[str]:
+        res = []
+        found = False
+        for t in self.op_type_priority_list:
+            if t == op_t:
+                found = True
+            if found:
+                res.append(t)
+        return res
+
 
 
 @dataclass
@@ -575,7 +881,7 @@ class RVVSpec(CPUBackendSpec):
     backend_name = "rvv"
     index_type = "int64_t"
     prefix = "rvv"
-    # stream = "stream"
+    stream = "void"
     # cub = "cub"
 
     cast_to_ptr_template = jinja2.Template("({{dtype}}*)({{name}})")

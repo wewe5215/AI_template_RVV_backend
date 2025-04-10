@@ -67,7 +67,7 @@ class Linear(Module):
         out_channels,
         bias=True,
         specialization=None,
-        dtype="float16",
+        dtype="float32",
         **kwargs,
     ):
         super().__init__()

@@ -66,7 +66,7 @@ class BasicStem(CNNBlockBase):
                 conv_op = nn.Conv2dBiasHardswish
             else:
                 raise NotImplementedError
-        self.conv1 = conv_op(in_channels, out_channels, 7, 2, 7 // 2)
+        self.conv1 = conv_op(in_channels, out_channels, 7, 2, 7 // 2, dtype="float")
         self.pool = nn.MaxPool2d(3, 2, 1)
 
     def forward(self, x):
@@ -81,11 +81,34 @@ class BasicBlock(CNNBlockBase):
     with two 3x3 conv layers and a projection shortcut if needed.
     """
 
-    def __init__(self, in_channels, out_channels, *, stride=1, norm="BN"):
+    def __init__(self, in_channels, out_channels, *, stride=1, norm="BN", activation="ReLU"):
         super().__init__(in_channels, out_channels, stride)
+        # If the input and output dimensions differ, or if we need to change the spatial size,
+        # use a 1x1 convolution for the shortcut.
+        if in_channels != out_channels or stride != 1:
+            self.downsample_0 = nn.Conv2dBias(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, dtype="float")
+        else:
+            self.downsample_0 = None
+
+        # For simplicity we assume the activation is ReLU.
+        # Here we use fused conv operations similar to the BottleneckBlock.
+        # The first conv: 3x3 with 'stride' and padding 1.
+        self.conv1 = nn.Conv2dBiasRelu(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
+        # The second conv: 3x3 with stride 1 and padding 1.
+        # This op is fused with an "add" of the shortcut and a ReLU.
+        self.conv2 = nn.Conv2dBiasAddRelu(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x):
-        raise NotImplementedError()
+        out = self.conv1(x)
+        # Determine the shortcut connection.
+        if self.downsample_0 is not None:
+            downsample = self.downsample_0(x)
+        else:
+            downsample = x
+        # Fuse the addition of the shortcut with the second convolution's output
+        # and apply the final ReLU.
+        out = self.conv2(out, downsample)
+        return out
 
 
 class BottleneckBlock(CNNBlockBase):
@@ -122,7 +145,7 @@ class BottleneckBlock(CNNBlockBase):
         super().__init__(in_channels, out_channels, stride)
 
         if in_channels != out_channels:
-            self.downsample_0 = nn.Conv2dBias(in_channels, out_channels, 1, stride, 0)
+            self.downsample_0 = nn.Conv2dBias(in_channels, out_channels, 1, stride, 0, dtype="float")
         else:
             self.downsample_0 = None
 
@@ -246,7 +269,7 @@ class ResNet(nn.Module):
 
         if num_classes is not None:
             self.avgpool = nn.AvgPool2d(7, 1, 0)
-            self.fc = nn.Linear(curr_channels, num_classes)
+            self.fc = nn.Linear(curr_channels, num_classes, dtype="float")
 
         if out_features is None:
             out_features = [name]
@@ -412,7 +435,10 @@ def build_resnet_backbone(depth, activation):
     width_per_group = 64
     bottleneck_channels = num_groups * width_per_group
     in_channels = 64
-    out_channels = 256
+    if depth >= 50:
+        out_channels = 256
+    else:
+        out_channels = 64
 
     stem = BasicStem(in_channels=3, out_channels=64, norm=norm, activation=activation)
 

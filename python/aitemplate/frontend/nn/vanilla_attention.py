@@ -145,7 +145,7 @@ class VanillaMultiheadAttention(Module):
 
         if self.mask_seq:
             self.output_mask = Parameter(
-                shape=[mask_seq, num_heads, head_dim], dtype="float16"
+                shape=[mask_seq, num_heads, head_dim], dtype="float32"
             )
         self.qkv = Linear(dim, dim * 3, bias=qkv_bias)
 

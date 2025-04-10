@@ -33,8 +33,8 @@ CONV_WEIGHT_PATTERN = re.compile(r"conv\d+\.weight")
 class timm_export:
     def __init__(self, model_name, pretrained=True):
         self.model_name = model_name
-        if model_name != "resnet50":
-            raise NotImplementedError
+        # if model_name != "resnet50":
+        #     raise NotImplementedError
 
         with torch.no_grad():
             self.pt_model = timm.create_model(
@@ -42,11 +42,16 @@ class timm_export:
             )
         self.pt_state = self.pt_model.state_dict()
 
-    def export_model(self, half=True):
+    def export_model(self, half=False):
         fused_model = {}
         for param_name in self.pt_state.keys():
             self.transform_params(param_name, fused_model)
         ait_model = {k.replace(".", "_"): weight for k, weight in fused_model.items()}
+        if detect_target().name() == "rvv":
+            float_params = {}
+            for k, v in ait_model.items():
+                float_params[k] = v.detach().cpu()
+            return float_params
         if detect_target().name() == "cuda":
             self.export_conv0(ait_model, fused_model)
         if half:
@@ -145,23 +150,24 @@ class timm_export:
 
 
 def export_to_torch_tensor(model_name="resnet50"):
-    if model_name != "resnet50":
-        raise NotImplementedError
+    # if model_name != "resnet50":
+    #     raise NotImplementedError
     timm2ait = timm_export(model_name)
-    ait_model = timm2ait.export_model(half=True)
+    ait_model = timm2ait.export_model(half=False)
     return ait_model
 
 
 @click.command()
 @click.option("--param-path", type=str, default="resnet50.pkl")
 def export_to_numpy(param_path):
-    ait_model = export_to_torch_tensor()
+    ait_model = export_to_torch_tensor(model_name="resnet18")
     np_weights = {}
     for k, v in ait_model.items():
-        np_weights[k] = v.detach().cpu().numpy().astype(np.float16)
+        np_weights[k] = v.detach().cpu().numpy().astype(np.float32)
+        # print(f'k = {k}')
 
-    with open(param_path, "wb") as f:
-        pickle.dump(np_weights, f)
+    # with open(param_path, "wb") as f:
+    #     pickle.dump(np_weights, f)
 
 
 if __name__ == "__main__":

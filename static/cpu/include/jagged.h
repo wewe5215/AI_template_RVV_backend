@@ -13,7 +13,7 @@
 //  limitations under the License.
 //
 #pragma once
-
+#include <cstdint>
 namespace ait {
 
 // This structure is used to pack the offset metadata related to a

@@ -33,7 +33,7 @@ class Conv2dBiasReluFewChannels(SpecialConv2dBiasAct):
         padding=0,
         dilation=1,
         auto_padding=True,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__(
             "conv2d_bias_relu_few_channels",

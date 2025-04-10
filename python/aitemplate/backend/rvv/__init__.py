@@ -25,7 +25,7 @@ from aitemplate.backend.rvv import (
 # from aitemplate.backend.rvv.common import *
 from aitemplate.backend.rvv.conv2d import *
 # from aitemplate.backend.rvv.conv3d import *
-# from aitemplate.backend.rvv.elementwise import *
+from aitemplate.backend.rvv.elementwise import *
 # from aitemplate.backend.rvv.embedding import *
 # from aitemplate.backend.rvv.gemm_special import *
 from aitemplate.backend.rvv.gemm_universal import *
@@ -36,7 +36,7 @@ from aitemplate.backend.rvv.padding import *
 from aitemplate.backend.rvv.pool2d import *
 # from aitemplate.backend.rvv.reduce import *
 # from aitemplate.backend.rvv.softmax import *
-# from aitemplate.backend.rvv.tensor import *
+from aitemplate.backend.rvv.tensor import *
 # from aitemplate.backend.rvv.upsample import *
 from aitemplate.backend.rvv.view_ops import *
 # from aitemplate.backend.rvv.vision_ops import *

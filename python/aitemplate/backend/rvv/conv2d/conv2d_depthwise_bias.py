@@ -17,15 +17,24 @@ Codegen for conv2d_depthwise.
 """
 
 from aitemplate.backend import registry
-from aitemplate.backend.rvv.conv2d import common, conv2d_depthwise as cdw
+from aitemplate.backend.rvv.conv2d import common
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
 @registry.reg("rvv.conv2d_depthwise_bias.config")
 def conv2d_depthwise_config(func_attrs, dtype="float16"):
-    """Populates conv2d_depthwise cutlass configs into 'op_instance' field."""
-    func_attrs["op_instance"] = cdw.extract_config(func_attrs, dtype)
+    """Populates conv2d_depthwise configs into 'op_instance' field."""
+    import cpu_lib
+    op_kind = cpu_lib.library.Conv2dKind.Conv2dDepthwiseBias
+    extra_kind = cpu_lib.library.TensorOperation.PassThrough
+    # if dtype == "float32": --> TODO: uncomment later
+    conv2d_specialization = cpu_lib.conv2d_operation.Conv2DSpecialization.ConvNhwcF32
+    func_attrs["op_instance"] = common.extract_config(
+        dtype = dtype,
+        op_kind = op_kind,
+        extra_kind = extra_kind,
+        conv2d_specialization = conv2d_specialization)
 
 
 @registry.reg("rvv.conv2d_depthwise_bias.gen_profiler")
@@ -36,10 +45,7 @@ def gen_profiler(func_attrs, workdir, profiler_filename, shape_template):
         workdir=workdir,
         profiler_filename=profiler_filename,
         shape_template=shape_template,
-        f_emit_instance=cdw.emit_instance,
         is_bias=True,
-        is_depthwise=True,
-        instance_name_base="DeviceConvFwdInstance",
     )
 
 
@@ -56,9 +62,7 @@ def gen_function(
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
-        f_emit_instance=cdw.emit_instance,
         is_bias=True,
-        is_depthwise=True,
     )
 
 

@@ -27,7 +27,7 @@ class _BatchNorm(Module):
         self,
         num_features,
         eps=1e-5,
-        dtype="float16",
+        dtype="float32",
         permute_input_output=False,
         **kwargs,
     ):
@@ -80,7 +80,7 @@ class BatchNorm1d(_BatchNorm):
         self,
         num_features,
         eps=1e-5,
-        dtype="float16",
+        dtype="float32",
         permute_input_output=False,
         **kwargs,
     ):
@@ -110,7 +110,7 @@ class BatchNorm2d(_BatchNorm):
         self,
         num_features,
         eps=1e-5,
-        dtype="float16",
+        dtype="float32",
         permute_input_output=False,
         **kwargs,
     ):
@@ -132,7 +132,7 @@ class BatchNorm3d(_BatchNorm):
         self,
         num_features,
         eps=1e-5,
-        dtype="float16",
+        dtype="float32",
         permute_input_output=False,
         **kwargs,
     ):

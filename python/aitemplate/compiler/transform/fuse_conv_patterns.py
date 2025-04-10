@@ -135,3 +135,16 @@ def get_cuda_only_conv2d_bias_elementwise_patterns():
     ]
 
     return conv2d_bias_patterns + transposed_conv2d_patterns
+
+def get_rvv_only_conv2d_bias_elementwise_patterns():
+    conv2d_bias_patterns = [
+        (
+            (
+                conv2d_bias(stride=1, pad=0),
+                elementwise(FuncEnum.ADD),
+            ),
+            conv2d_bias_add,
+        ),
+    ]
+
+    return conv2d_bias_patterns

@@ -133,8 +133,7 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
 {{indent}}      {{stridew}},
 {{indent}}      {{dilationw}},
 {{indent}}      {{padw}},
-{{indent}}      global_workspace_,
-{{indent}}      threadpool_.get()
+{{indent}}      global_workspace_
 {{indent}}    );
 {{indent}}  } catch (...) {
 {{indent}}    runtime = 0;
@@ -170,8 +169,7 @@ int benchmark_{{function_name}} (
   int,
   int,
   int,
-  uint8_t*,
-  pthreadpool*
+  uint8_t*
 );
 """
 )
@@ -215,8 +213,7 @@ int benchmark_{{function_name}} (
   int stridew,
   int dilationw,
   int padw,
-  uint8_t* global_workspace_,
-  pthreadpool* pthreadpool_
+  uint8_t* global_workspace_
 ) {
   Ptr in_data = RAII_DeviceMalloc(NI*HI*WI*CI*2);
   Ptr weight_data = RAII_DeviceMalloc(CO*KH*KW*CI*2);
@@ -257,6 +254,9 @@ int benchmark_{{function_name}} (
   fill_random(bias, CO);
   fill_random(res, NO*HO*WO*CO);
     {% endif %}
+  size_t num_threads = std::thread::hardware_concurrency();
+  std::unique_ptr<pthreadpool, decltype(&pthreadpool_destroy)> threadpool_(
+      pthreadpool_create(num_threads), pthreadpool_destroy);
   // warmup
 {{func_call}}
   struct timespec start, end;
@@ -291,6 +291,8 @@ PROFILER_BENCHMARK_TEMPLATE = jinja2.Template(
 #include <random>
 #include "xnnpack.h"
 #include "logging.h"
+#include <pthreadpool.h>
+#include <thread>
 {{extra_header}}
 static size_t GLOBAL_WORKSPACE_SIZE_{{instance_name}} = 0;
 {{functions}}
@@ -305,8 +307,6 @@ PROFILER_MAIN_TEMPLATE = jinja2.Template(
 #include <string>
 #include <time.h>
 #include "xnnpack.h"
-#include <pthreadpool.h>
-#include <thread>
 {{benchmark_decls}}
 
 int main(int argc, char** argv) {
@@ -325,9 +325,6 @@ int main(int argc, char** argv) {
   int dilationw = std::stoi(argv[13]);
 
 {{shape_func}}
-  size_t num_threads = std::thread::hardware_concurrency();
-  std::unique_ptr<pthreadpool, decltype(&pthreadpool_destroy)> threadpool_(
-      pthreadpool_create(num_threads), pthreadpool_destroy);
   float runtime = 0;
   size_t workspace_size = 0;
   uint8_t* global_workspace_ = nullptr;
@@ -427,13 +424,13 @@ def extract_config(
     spec = RVVSpec()
     lib_dtype = spec.dtype_to_lib_type(dtype)
     conv2d_ops = OrderedDict()
-    _LOGGER.info(f"_operators =  {Target.current()._operators}")
+    _LOGGER.debug(f"_operators =  {Target.current()._operators}")
     extract_ops = list(Target.current()._operators[op_kind][extra_kind].items())
     for key, value in extract_ops:
         for op in value:
             if lib_dtype == cpu_lib.library.DataTypeNames[op.A.element]:
                     conv2d_ops[key] = value[0]
-    _LOGGER.info(f"conv2d_ops = {conv2d_ops}, value =  {value}")
+    _LOGGER.debug(f"conv2d_ops = {conv2d_ops}, value =  {value}")
     return conv2d_ops
 
 
@@ -669,7 +666,7 @@ def gen_function(
         is_transpose=is_transpose,
         is_depthwise=is_depthwise,
         function_name=func_name,
-        is_first_op = (match.group(1) == '0'),
+        is_first_op = (match.group(1) == '0' or match.group(1) == '1' or match.group(1) == '2'),
         shape_function=shape_func,
         exec_paths=program,
     )

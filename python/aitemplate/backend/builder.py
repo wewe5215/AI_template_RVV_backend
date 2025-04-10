@@ -27,7 +27,7 @@ import subprocess
 from hashlib import sha1
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
-
+from aitemplate.utils.misc import is_linux, is_windows, is_macos
 import jinja2
 
 from aitemplate.backend import build_cache
@@ -457,8 +457,11 @@ clean_constants:
     {{build_exe_cmd}}
 """
         )
-
+        link_path = Target.current().get_link_directories()
         build_so_cmd = "$(CC) -shared $(fPIC_flag) $(CFLAGS) -o $@ $(obj_files)"
+        for path in link_path:
+            build_so_cmd += " -L" + path
+        build_so_cmd += " -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -g"
         standalone_src = "standalone.cu"
         standalone_obj = "standalone.obj"
         windll_obj = "windll.obj"
@@ -826,6 +829,7 @@ clean:
                 .compile_cmd(executable=(not target.endswith(".obj")))
                 .format(target=target, src=src_list)
             )
+            _LOGGER.info(f"cmd_line = {cmd_line}, Target.current().name = {Target.current().name()}")
             if self._do_trace:
                 cmd_line = _augment_for_trace(cmd_line)
             else:

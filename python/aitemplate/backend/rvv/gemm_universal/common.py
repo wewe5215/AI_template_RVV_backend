@@ -133,6 +133,7 @@ SRC_TEMPLATE = jinja2.Template(
 #include <stdexcept>
 #include <cstdlib>
 #include <string>
+#include <pthreadpool.h>
 #include "xnnpack.h"
 #include "logging.h"
 {{extra_code}}
@@ -304,6 +305,8 @@ PROFILER_TEMPLATE = jinja2.Template(
 #include <ctime>
 #include <cstdlib>
 #include <stdexcept>
+#include <cstring>
+#include <thread>
 size_t GLOBAL_WORKSPACE_SIZE = 0;
 template <typename DType>
 struct ProfilerMemoryPool {
@@ -329,7 +332,7 @@ struct ProfilerMemoryPool {
     }
 
     if(is_output){
-      memset(ptr, 0, size * sizeof(DType));
+      std::memset(ptr, 0, size * sizeof(DType));
     }
     else{
       for (int64_t i = 0; i < size; ++i) {
@@ -383,6 +386,9 @@ int benchmark_{{function_name}} (
 {% endfor %}
 {% endif %}
   ) {
+  size_t num_threads = std::thread::hardware_concurrency();
+  std::unique_ptr<pthreadpool, decltype(&pthreadpool_destroy)> threadpool_(
+      pthreadpool_create(num_threads), pthreadpool_destroy);
   // warmup
   for (int i = 0; i < 5; ++i) {
     {{func_call}}

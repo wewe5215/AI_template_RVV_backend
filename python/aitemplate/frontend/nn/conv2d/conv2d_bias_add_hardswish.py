@@ -49,7 +49,7 @@ class Conv2dBiasAddHardswish(Conv2dBiasAddAct):
         padding=0,
         dilation=1,
         groups=1,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__(
             "conv2d_bias_add_hardswish",

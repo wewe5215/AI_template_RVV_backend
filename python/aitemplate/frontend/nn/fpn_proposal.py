@@ -55,7 +55,7 @@ class FPNProposal(Proposal):
         rpn_min_size=0,
         level=-1,
         batch_size=1,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__(
             im_shape,

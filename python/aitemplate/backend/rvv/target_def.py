@@ -39,7 +39,7 @@ from aitemplate.backend.target import (
 )
 
 from aitemplate.utils import environ
-from aitemplate.utils.misc import is_debug, is_linux
+from aitemplate.utils.misc import is_linux, is_windows, is_macos
 
 # pylint: disable=C0415,W0707,W0611,W0702,W1401
 
@@ -162,7 +162,10 @@ class RVV(Target):
             options.append("-I" + path)
         for path in link_path:
             options.append("-L" + path)
-        options.append("-lxnnpack -lkleidiai -lpthreadpool -lcpuinfo -lpthread -g")
+        if is_macos():
+            options.append("-lxnnpack -lkleidiai -lpthreadpool -lcpuinfo -lpthread -g")
+        else:
+            options.append("-lXNNPACK -lpthreadpool -lcpuinfo -lpthread -g")
         return " ".join(options)
 
     def src_extension(self):
@@ -207,7 +210,10 @@ class RVV(Target):
 
     def compile_cmd(self, executable=False):
         if executable:
-            cmd = self.cc() + " " + self._compile_options + " -o {target} {src}"
+            if is_macos():
+                cmd = self.cc() + " " + self._compile_options + " -o {target} {src} -Wl,-lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl"
+            else:
+                cmd = self.cc() + " " + self._compile_options + " -o {target} {src} -Wl,--start-group -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl,--end-group"
         else:
             cmd = self.cc() + " " + self._compile_options + " -c -o {target} {src}"
         return cmd

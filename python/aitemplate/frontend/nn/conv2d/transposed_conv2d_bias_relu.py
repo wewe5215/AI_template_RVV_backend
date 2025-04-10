@@ -32,7 +32,7 @@ class ConvTranspose2dBiasRelu(ConvTranspose2dBiasAct):
         padding=0,
         dilation=1,
         groups=1,
-        dtype="float16",
+        dtype="float32",
     ):
         super().__init__(
             "transposed_conv2d_bias_relu",

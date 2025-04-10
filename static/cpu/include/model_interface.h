@@ -73,6 +73,7 @@ enum class AITemplateDtype {
   kBool,
   kBFloat16,
   k_Float16,
+  k_Uint16,
 };
 
 struct AITData {
@@ -94,6 +95,7 @@ inline size_t AITemplateDtypeSizeBytes(AITemplateDtype dtype) {
     case AITemplateDtype::kHalf:
     case AITemplateDtype::kBFloat16:
     case AITemplateDtype::k_Float16:
+    case AITemplateDtype::k_Uint16:
       return 2;
     case AITemplateDtype::kFloat:
       return 4;
