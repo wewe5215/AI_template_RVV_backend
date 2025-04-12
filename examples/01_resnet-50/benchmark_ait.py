@@ -46,16 +46,13 @@ def mark_output(y):
 
 def compile_module(model_name, batch_size, **kwargs):
 
-    if model_name != "resnet50":
-        raise NotImplementedError
-
     model_name = f"{model_name}_{batch_size}"
     target = detect_target(**kwargs)
     # Create input tensor, need to specify the shape, dtype and is_input flag
     x = Tensor(
         shape=[batch_size, 224, 224, 3], dtype="float32", name="input0", is_input=True
     )
-    model = build_resnet_backbone(50, activation="ReLU")
+    model = build_resnet_backbone(18, activation="ReLU")
     # Mark all parameters with name same to PyTorch name convention
     model.name_parameter_tensor()
     # Forward the input tensor to the model, get output tensor
@@ -121,9 +118,9 @@ def main(use_fp16_acc=False, use_graph=True, batch_size=0):
     if detect_target().name() == "rocm" or detect_target().name() == "rvv":
         use_graph = False
     if batch_size < 1:
-        for bs in (1, 2, 4, 8, 16, 32, 64, 128, 256):
-            compile_module("resnet50", bs, use_fp16_acc=use_fp16_acc)
-            benchmark("resnet50", bs, graph_mode=use_graph)
+        for bs in (1, 2, 4):
+            compile_module("resnet18", bs, use_fp16_acc=use_fp16_acc)
+            # benchmark("resnet50", bs, graph_mode=use_graph)
     else:
         compile_module("resnet50", batch_size, use_fp16_acc=use_fp16_acc)
         benchmark("resnet50", batch_size, graph_mode=use_graph)

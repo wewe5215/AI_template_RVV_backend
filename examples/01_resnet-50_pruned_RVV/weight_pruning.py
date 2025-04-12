@@ -3,7 +3,25 @@ from group_op_and_lmul import fetch_lmul_for_op
 import math
 # Fetch LMUL values for each op (used later for index scaling)
 vlen = 256
+layers_not_to_prune_resnet_18_34 = [
+    'stem_conv1_weight',
+    'layer1_0_conv1_weight', 'layer1_0_conv2_weight', 'layer1_0_conv3_weight',
+    'layer1_1_conv1_weight', 'layer1_1_conv2_weight', 'layer1_1_conv3_weight',
+    'layer1_2_conv1_weight', 'layer1_2_conv2_weight', 'layer1_2_conv3_weight',
+    'layer2_0_conv1_weight', 'layer2_0_downsample_0_weight',
+    'layer1_0_downsample_0_weight',
+    'fc_weight'
+]
 
+layers_not_to_prune_resnet_50_101_152 = [
+    'stem_conv1_weight',
+    'layer1_0_conv1_weight', 'layer1_0_conv2_weight', 'layer1_0_conv3_weight',
+    'layer1_1_conv1_weight', 'layer1_1_conv2_weight', 'layer1_1_conv3_weight',
+    'layer1_2_conv1_weight', 'layer1_2_conv2_weight', 'layer1_2_conv3_weight',
+    'layer2_0_conv1_weight', 'layer2_0_conv2_weight', 'layer2_0_downsample_0_weight',
+    'layer1_0_downsample_0_weight',
+    'fc_weight'
+]
 def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
     """
     Performs column-wise pruning on a 2D weight array using a given pruning ratio.
@@ -19,6 +37,7 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
       indices: a 1D numpy array (dtype uint16) with the recorded column indices
     """
     output_channel, input_channel = weight.shape
+    in_ch_after_pruning = input_channel * (1 - pruning_ratio)
     pruned_weight = []   # List to store selected weight elements.
     indices = []         # List to store selected column indices (for the first row in each block).
     
@@ -48,13 +67,15 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
             
             # For each element in the block, select the element if its column's accumulator passes the threshold.
             for j in range(end_offset):
+                selected_in_ch = 0
                 for k in range(input_channel):
                     # Use '>=' for even number of columns, '>' for odd (following the C-code logic).
                     if input_channel % 2 == 0:
                         select = accumulator[k] >= threshold
                     else:
                         select = accumulator[k] > threshold
-                    if select:
+                    if select and selected_in_ch < in_ch_after_pruning:
+                        selected_in_ch = selected_in_ch + 1
                         pruned_weight.append(block[j, k])
                         # For the first row in the block, record the column index.
                         if j == 0:
@@ -64,7 +85,7 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
     indices = np.array(indices, dtype=np.uint16)
     return pruned_weight, indices
 
-def prune_model_weights(np_weights, pruning_ratio, batch_size):
+def prune_model_weights(np_weights, pruning_ratio, batch_size, depth=50):
     """
     Processes a dictionary of model weights (including both kernels and biases). For each weight
     kernel (key containing 'weight' and 'conv'), it prunes the weight column-wise according to the given ratio.
@@ -83,60 +104,60 @@ def prune_model_weights(np_weights, pruning_ratio, batch_size):
           - For each weight key: new entries for "layer_weight_pruned" and "layer_weight_indice"
           - For each bias key: the bias is retained unmodified.
     """
-    weight_to_lmul = fetch_lmul_for_op(batch_size)
+    if depth == 50:
+        chosen_lmul_record = 'chosen_lmul_bs'
+    else:
+        chosen_lmul_record = f'chosen_lmul_resnet{depth}_bs'
+    weight_to_lmul = fetch_lmul_for_op(batch_size, chosen_lmul_record)
     new_model = {}
     for key, value in np_weights.items():
-        if "fc" in key:
+        if (key in layers_not_to_prune_resnet_50_101_152 and depth >= 50) or (key in layers_not_to_prune_resnet_18_34 and depth < 50):
             print(f'key = {key}, value.ndim = {value.ndim} not being pruned')
             new_model[key] = value
-        else:
-            if "weight" in key and "No Pruning" not in weight_to_lmul[key]:
-                # print(f'value.ndim = {value.ndim}, key = {key}')
-                # If the weight is not 2D, reshape it appropriately.
-                if value.ndim != 2:
-                    if value.ndim == 4:
-                        # Assume weight has shape (output_channel, kernel_height, kernel_width, input_channel)
-                        output_channel, kernel_height, kernel_width, input_channel = value.shape
-                        # Reshape to 2D: each row corresponds to an output channel,
-                        # and each column is a flattened kernel.
-                        weight_2d = value.reshape(output_channel, kernel_height * kernel_width * input_channel)
-                        # print(f"Reshaped from {value.shape} to {weight_2d.shape}")
-                    else:
-                        raise ValueError(f"Unsupported weight dimension {value.ndim} for key {key}")
+            bias_key = key.replace("weight", "bias")
+            if bias_key in np_weights:
+                new_model[bias_key] = np_weights[bias_key]
+        elif "weight" in key:
+            # print(f'value.ndim = {value.ndim}, key = {key}')
+            # If the weight is not 2D, reshape it appropriately.
+            if value.ndim != 2:
+                if value.ndim == 4:
+                    # Assume weight has shape (output_channel, kernel_height, kernel_width, input_channel)
+                    output_channel, kernel_height, kernel_width, input_channel = value.shape
+                    # Reshape to 2D: each row corresponds to an output channel,
+                    # and each column is a flattened kernel.
+                    weight_2d = value.reshape(output_channel, kernel_height * kernel_width * input_channel)
+                    # print(f"Reshaped from {value.shape} to {weight_2d.shape}")
                 else:
-                    weight_2d = value
-                lmul = int(weight_to_lmul[key])
-                # Calculate nr based on your mapping (using weight_to_lmul) and vlen.
-                nr = lmul * (vlen / 32)  # 32 for float32
-                # print(f'key = {key} being pruned with lmul = {weight_to_lmul[key]}, value.ndim = {value.ndim}')
-                if lmul == 1 or lmul == 4:
-                    mr = 7
-                elif lmul == 2:
-                    mr = 8
-                else:
-                    mr = 3
-                # Apply column-wise pruning using the provided ratio.
-                pruned_weight, indices = f32_data_pruning_column_wise_with_ratio(weight_2d, nr, mr, pruning_ratio)
-                new_model[key] = pruned_weight
-                new_model[key + "_indice"] = indices
-                for indice in indices:
-                    if indice >= kernel_height * kernel_width * input_channel:
-                        print(f'{indice} out of range')
-                part1 = math.ceil((output_channel) / mr)
-                part2 = (kernel_height * kernel_width * input_channel) * (1 - pruning_ratio)
-                # print(f'pruned_weight shape = {pruned_weight.shape}')
-                print(f'{key} is pruned with mr = {mr}, lmul = {lmul}; {{{part1}, {part2}}}, indice shape = {indices.shape}')
-                # Also retain the corresponding bias if present.
-                bias_key = key.replace("weight", "bias")
-                if bias_key in np_weights:
-                    new_model[bias_key] = np_weights[bias_key]
-            elif "weight" in key:
-                print(f'key = {key} not being pruned')
-                new_model[key] = value
-                bias_key = key.replace("weight", "bias")
-                if bias_key in np_weights:
-                    print(f'key = {bias_key} not being pruned')
-                    new_model[bias_key] = np_weights[bias_key]
+                    raise ValueError(f"Unsupported weight dimension {value.ndim} for key {key}")
+            else:
+                weight_2d = value
+
+            lmul = int(weight_to_lmul[key])
+            # Calculate nr based on your mapping (using weight_to_lmul) and vlen.
+            nr = lmul * (vlen / 32)  # 32 for float32
+            # print(f'key = {key} being pruned with lmul = {weight_to_lmul[key]}, value.ndim = {value.ndim}')
+            if lmul == 1 or lmul == 4:
+                mr = 7
+            elif lmul == 2:
+                mr = 8
+            else:
+                mr = 3
+            # Apply column-wise pruning using the provided ratio.
+            pruned_weight, indices = f32_data_pruning_column_wise_with_ratio(weight_2d, nr, mr, pruning_ratio)
+            new_model[key] = pruned_weight
+            new_model[key + "_indice"] = indices
+            for indice in indices:
+                if indice >= kernel_height * kernel_width * input_channel:
+                    print(f'{indice} out of range')
+            part1 = math.ceil((output_channel) / mr)
+            part2 = (kernel_height * kernel_width * input_channel) * (1 - pruning_ratio)
+            # print(f'pruned_weight shape = {pruned_weight.shape}')
+            print(f'{key} is pruned with mr = {mr}, lmul = {lmul}; {{{part1}, {part2}}}, indice shape = {indices.shape}, pruned_weight shape = {pruned_weight.shape}')
+            # Also retain the corresponding bias if present.
+            bias_key = key.replace("weight", "bias")
+            if bias_key in np_weights:
+                new_model[bias_key] = np_weights[bias_key]
     return new_model
 
 # Example usage:
