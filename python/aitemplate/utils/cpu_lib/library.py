@@ -111,6 +111,7 @@ class LayoutType(enum.Enum):
     KYXC = auto()
     NHWK = auto()
     NCHW = auto()
+    CNHW = auto()
     KCYX = auto()
     NKWH = auto()
     NDHWC = auto()
@@ -137,7 +138,8 @@ LayoutTag = {
     LayoutType.NHWC: "nhwc",
     LayoutType.NCHW: "nchw",
     LayoutType.ColumnMajor: "column",
-    LayoutType.RowMajor: "row"
+    LayoutType.RowMajor: "row",
+    LayoutType.CNHW: "cnhw"
 }
 
 
