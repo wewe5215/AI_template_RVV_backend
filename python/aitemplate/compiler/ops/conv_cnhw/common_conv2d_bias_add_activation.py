@@ -17,11 +17,11 @@ Fused conv2d_bias_add_activation op.
 """
 
 from aitemplate.compiler.base import Tensor
-from aitemplate.compiler.ops.conv.conv2d import conv2d
+from aitemplate.compiler.ops.conv_cnhw.conv2d import conv2d
 
 
 # pylint: disable=C0103
-class conv2d_bias_add_activation(conv2d):
+class conv2d_cnhw_bias_add_activation(conv2d):
     """Base class of conv2d with bias + add + activation."""
 
     def __init__(self, activation, stride, pad, dilate=1, group=1) -> None:
@@ -42,7 +42,7 @@ class conv2d_bias_add_activation(conv2d):
             channels to output channels, by default 1
         """
         super().__init__(stride, pad, dilate=dilate, group=group)
-        self._attrs["op"] = "conv2d_bias_add_{act}".format(act=activation)
+        self._attrs["op"] = "conv2d_cnhw_bias_add_{act}".format(act=activation)
         self._attrs["epilogue"] = "LinearCombinationResidualBlock"
 
     def __call__(self, x: Tensor, w: Tensor, b: Tensor, r: Tensor):

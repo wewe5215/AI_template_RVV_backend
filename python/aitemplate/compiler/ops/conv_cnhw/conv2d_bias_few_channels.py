@@ -15,13 +15,13 @@
 """
 Fused conv2d_bias_few_channels op.
 """
-from aitemplate.compiler.ops.conv.special_conv2d_bias_activation import (
+from aitemplate.compiler.ops.conv_cnhw.special_conv2d_bias_activation import (
     special_conv2d_bias_activation,
 )
 
 
 # pylint: disable=C0103
-class conv2d_bias_few_channels(special_conv2d_bias_activation):
+class conv2d_cnhw_bias_few_channels(special_conv2d_bias_activation):
     """conv2d_bias_few_channels.
 
     This operator equals to conv2d_bias but has improved performance for in_channels < 8.
@@ -30,7 +30,7 @@ class conv2d_bias_few_channels(special_conv2d_bias_activation):
     def __init__(self, stride, pad, dilate=1, auto_padding=True) -> None:
         """Initializes conv2d_bias_few_channels"""
         super().__init__("identity", stride, pad, dilate, auto_padding)
-        self._attrs["op"] = "conv2d_bias_few_channels"
+        self._attrs["op"] = "conv2d_cnhw_bias_few_channels"
         self._attrs["epilogue"] = "LinearCombination"
 
     def _get_op_attributes(self):

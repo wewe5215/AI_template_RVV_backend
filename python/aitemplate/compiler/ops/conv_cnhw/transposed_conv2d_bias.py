@@ -20,10 +20,10 @@ from typing import Tuple
 
 from aitemplate.compiler.base import Tensor
 
-from aitemplate.compiler.ops.conv.common_conv2d_bias_activation import (
+from aitemplate.compiler.ops.conv_cnhw.common_conv2d_bias_activation import (
     conv2d_bias_activation,
 )
-from aitemplate.compiler.ops.conv.transposed_conv2d import transposed_conv2d
+from aitemplate.compiler.ops.conv_cnhw.transposed_conv2d import transposed_conv2d
 
 
 # pylint: disable=C0103

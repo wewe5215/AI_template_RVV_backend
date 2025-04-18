@@ -15,13 +15,13 @@
 """
 Conv2d with bias.
 """
-from aitemplate.compiler.ops.conv.common_conv2d_bias_activation import (
+from aitemplate.compiler.ops.conv_cnhw.common_conv2d_bias_activation import (
     conv2d_bias_activation,
 )
 
 
 # pylint: disable=C0103
-class conv2d_bias(conv2d_bias_activation):
+class conv2d_cnhw_bias(conv2d_bias_activation):
     r"""Conv2d with bias.
 
     Applies a 2D convolution on input in shape (N, H, W, C_in), adds a bias in shape (C_out) produces output in shape (N, H_out, W_out, C_out). N is batch size, H, W are the height and width of the input images in pixels, and C is the number of channels.
@@ -72,7 +72,7 @@ class conv2d_bias(conv2d_bias_activation):
             channels to output channels, by default 1
         """
         super().__init__("identity", stride, pad, dilate=dilate, group=group)
-        self._attrs["op"] = "conv2d_bias"
+        self._attrs["op"] = "conv2d_cnhw_bias"
         self._attrs["epilogue"] = "LinearCombination"
 
     def _get_op_attributes(self):

@@ -22,7 +22,7 @@ from typing import List
 import jinja2
 
 from aitemplate.compiler.base import Tensor
-from aitemplate.compiler.ops.conv.conv2d import conv2d
+from aitemplate.compiler.ops.conv_cnhw.conv2d import conv2d
 
 from aitemplate.utils import shape_utils
 

@@ -18,11 +18,11 @@ Fused conv2d_depthwise_bias_relu op.
 from typing import List, Tuple
 
 from aitemplate.compiler.base import Tensor
-from aitemplate.compiler.ops.conv.conv2d import conv2d
+from aitemplate.compiler.ops.conv_cnhw.conv2d import conv2d
 
 
 # pylint: disable=C0103
-class conv2d_depthwise_bias_relu(conv2d):
+class conv2d_cnhw_depthwise_bias_relu(conv2d):
     """Base class of conv2d with groups."""
 
     def __init__(self, stride, pad, dilate=1, group=1) -> None:
@@ -41,7 +41,7 @@ class conv2d_depthwise_bias_relu(conv2d):
             channels to output channels, by default 1
         """
         super().__init__(stride, pad, dilate=dilate, group=group)
-        self._attrs["op"] = "conv2d_depthwise_bias_relu"
+        self._attrs["op"] = "conv2d_cnhw_depthwise_bias_relu"
 
     def __call__(self, x: Tensor, w: Tensor, b: Tensor):
         """Call conv2d_depthwise with tensors x, w, b

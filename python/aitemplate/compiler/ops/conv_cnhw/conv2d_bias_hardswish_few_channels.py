@@ -15,13 +15,13 @@
 """
 Fused conv2d_bias_hardswish_few_channels op.
 """
-from aitemplate.compiler.ops.conv.special_conv2d_bias_activation import (
+from aitemplate.compiler.ops.conv_cnhw.special_conv2d_bias_activation import (
     special_conv2d_bias_activation,
 )
 
 
 # pylint: disable=C0103
-class conv2d_bias_hardswish_few_channels(special_conv2d_bias_activation):
+class conv2d_cnhw_bias_hardswish_few_channels(special_conv2d_bias_activation):
     """conv2d_bias_hardswish_few_channels.
 
     This operator equals to conv2d_bias_hardswish but has imporved performance for in_channels < 8.

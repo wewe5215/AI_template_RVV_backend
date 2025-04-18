@@ -15,13 +15,13 @@
 """
 Fused conv2d_bias_relu op.
 """
-from aitemplate.compiler.ops.conv.common_conv2d_bias_activation import (
+from aitemplate.compiler.ops.conv_cnhw.common_conv2d_bias_activation import (
     conv2d_bias_activation,
 )
 
 
 # pylint: disable=C0103
-class conv2d_bias_relu6(conv2d_bias_activation):
+class conv2d_cnhw_bias_relu6(conv2d_bias_activation):
     r"""Conv2d with bias + relu.
 
     Applies a 2D convolution on input in shape (N, H, W, C_in), adds a bias in shape (C_out), performs relu and produces output in shape (N, H_out, W_out, C_out). N is batch size, H, W are the height and width of the input images in pixels, and C is the number of channels.

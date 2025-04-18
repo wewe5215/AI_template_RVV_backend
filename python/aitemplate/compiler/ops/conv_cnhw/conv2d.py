@@ -36,8 +36,8 @@ from aitemplate.compiler.base import (
     Operator,
     Tensor,
 )
-from aitemplate.compiler.ops.conv.cache_entry import ConvQueryEntry, ConvRecordEntry
-from aitemplate.compiler.ops.conv.conv_common import (
+from aitemplate.compiler.ops.conv_cnhw.cache_entry import ConvQueryEntry, ConvRecordEntry
+from aitemplate.compiler.ops.conv_cnhw.conv_common import (
     filter_op_instances,
     generate_profiler_sources,
     get_profiler_filename,
@@ -183,12 +183,12 @@ class conv2d(Operator):
             channels to output channels, by default 1
         """
         super().__init__()
-        self._attrs["op"] = "conv2d"
+        self._attrs["op"] = "conv2d_cnhw"
         self._attrs["stride"] = stride
         self._attrs["pad"] = pad
         self._attrs["dilate"] = dilate
         self._attrs["group"] = group
-        self._attrs["has_profiler"] = True
+        self._attrs["has_profiler"] = False
         self._attrs["epilogue_alignment"] = 1
         self._attrs["epilogue"] = "LinearCombination"
         self._attrs["workspace"] = 0
@@ -443,29 +443,29 @@ class conv2d(Operator):
             A dynamic profiling strategy, used to filter generated profiles at compile time.
             See also: :func:`~aitemplate.compiler.transform.profile.profile`
         """
-        target = backend.target.Target.current()
+        # target = backend.target.Target.current()
 
-        func_key = "{target}.{op}.config".format(
-            target=target.name(), op=self._attrs["op"]
-        )
-        func = registry.get(func_key)
-        func(self._attrs, dtype=self._attrs["inputs"][0]._attrs["dtype"])
+        # func_key = "{target}.{op}.config".format(
+        #     target=target.name(), op=self._attrs["op"]
+        # )
+        # func = registry.get(func_key)
+        # func(self._attrs, dtype=self._attrs["inputs"][0]._attrs["dtype"])
 
-        if self._should_build_profiler():
-            x_shapes = [
-                self._invert_exec_key(exec_key) for exec_key in self._attrs["exec_path"]
-            ]
-            self._attrs["op_instance"] = filter_op_instances(
-                func_attrs=self._attrs,
-                x_shapes=x_shapes,
-            )
-            return generate_profiler_sources(
-                func_attrs=self._attrs,
-                op_class="conv",
-                workdir=workdir,
-                shape_template=self.shape_eval_template,
-            )
-
+        # if self._should_build_profiler():
+        #     x_shapes = [
+        #         self._invert_exec_key(exec_key) for exec_key in self._attrs["exec_path"]
+        #     ]
+        #     self._attrs["op_instance"] = filter_op_instances(
+        #         func_attrs=self._attrs,
+        #         x_shapes=x_shapes,
+        #     )
+        #     return generate_profiler_sources(
+        #         func_attrs=self._attrs,
+        #         op_class="conv",
+        #         workdir=workdir,
+        #         shape_template=self.shape_eval_template,
+        #     )
+        return
     def _gen_profile_cmd(self, profiler_prefix, cfg, x_shape):
         exe_path = os.path.join(profiler_prefix, cfg)
         if not os.access(exe_path, os.X_OK):
@@ -587,18 +587,19 @@ class conv2d(Operator):
         devices=None,
         dynamic_profiling_strategy=DynamicProfileStrategy.HINTS,
     ):
-        if devices is None:
-            devices = [0]
-        self._profile_static(workdir, devices)
+        # if devices is None:
+        #     devices = [0]
+        # self._profile_static(workdir, devices)
 
-        if self._has_dynamic_input_dims():
-            if dynamic_profiling_strategy != DynamicProfileStrategy.HINTS:
-                raise NotImplementedError(
-                    "conv2d only supports HINTS dynamic profiling strategy for now! Current strategy: {}".format(
-                        dynamic_profiling_strategy
-                    )
-                )
-            self._profile_dynamic_dim(workdir)
+        # if self._has_dynamic_input_dims():
+        #     if dynamic_profiling_strategy != DynamicProfileStrategy.HINTS:
+        #         raise NotImplementedError(
+        #             "conv2d only supports HINTS dynamic profiling strategy for now! Current strategy: {}".format(
+        #                 dynamic_profiling_strategy
+        #             )
+        #         )
+        #     self._profile_dynamic_dim(workdir)
+        return
 
     def _profile_static(self, workdir, devices):
         """Profiles with static shapes."""

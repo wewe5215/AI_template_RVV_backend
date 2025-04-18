@@ -16,7 +16,7 @@
 Fused special_conv2d_bias_activation op.
 """
 from aitemplate.compiler.base import Tensor
-from aitemplate.compiler.ops.conv.conv2d import conv2d
+from aitemplate.compiler.ops.conv_cnhw.conv2d import conv2d
 from aitemplate.compiler.ops.padding import nhwc3to4, nhwc3to8
 
 
@@ -44,7 +44,7 @@ class special_conv2d_bias_activation(conv2d):
             Number of input channels to process to compute one output channel, by default 1
         """
         super().__init__(stride, pad, dilate=dilate)
-        self._attrs["op"] = "conv2d_bias_{act}_few_channels".format(act=activation)
+        self._attrs["op"] = "conv2d_cnhw_bias_{act}_few_channels".format(act=activation)
         if activation == "relu":
             self._attrs["epilogue"] = "LinearCombinationRelu"
         elif activation == "hardswish":

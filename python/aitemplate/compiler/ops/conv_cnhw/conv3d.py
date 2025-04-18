@@ -37,8 +37,8 @@ from aitemplate.compiler.base import (
     Operator,
     Tensor,
 )
-from aitemplate.compiler.ops.conv.cache_entry import Conv3dQueryEntry, Conv3dRecordEntry
-from aitemplate.compiler.ops.conv.conv_common import (
+from aitemplate.compiler.ops.conv_cnhw.cache_entry import Conv3dQueryEntry, Conv3dRecordEntry
+from aitemplate.compiler.ops.conv_cnhw.conv_common import (
     filter_op_instances,
     generate_profiler_sources,
     get_profiler_filename,
