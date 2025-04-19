@@ -12,20 +12,14 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-from aitemplate.frontend.nn.conv2d_cnhw.transposed_conv2d_bias_act import (
-    ConvTranspose2dBiasAct,
-)
+"""
+conv2d bias module
+"""
+from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_bias_act import Conv2dCNHWBiasAct
 
 
-class ConvTranspose2dBias(ConvTranspose2dBiasAct):
-    r"""Applies a 2D transposed convolution operator over an input image
-    composed of several input planes.
-
-    This module can be seen as the gradient of Conv2d with respect to its input.
-    It is also known as a fractionally-strided convolution or
-    a deconvolution (although it is not an actual deconvolution operation as it does
-    not compute a true inverse of convolution). For more information, see the visualizations
-    `here`_ and the `Deconvolutional Networks`_ paper.
+class Conv2dCNHWBias(Conv2dCNHWBiasAct):
+    r"""Applies 2D convolution with bias.
 
     Args:
         in_channels (int): Number of channels in the input image
@@ -44,11 +38,12 @@ class ConvTranspose2dBias(ConvTranspose2dBiasAct):
         - Output: :math:`(N, H_{out}, W_{out}, C_{out})`, where
 
           .. math::
-              H_{out} = (H_{in} - 1) \times \text{stride} - 2 \times \text{padding} + \text{dilation}
-                        \times (\text{kernel_size} - 1) + \text{output_padding} + 1
+              H_{out} = \left\lfloor\frac{H_{in}  + 2 \times \text{padding} - \text{dilation}
+                        \times (\text{kernel_size} - 1) - 1}{\text{stride}} + 1\right\rfloor
+
           .. math::
-              W_{out} = (W_{in} - 1) \times \text{stride} - 2 \times \text{padding} + \text{dilation}
-                        \times (\text{kernel_size} - 1) + \text{output_padding} + 1
+              W_{out} = \left\lfloor\frac{W_{in}  + 2 \times \text{padding} - \text{dilation}
+                        \times (\text{kernel_size} - 1) - 1}{\text{stride}} + 1\right\rfloor
 
     Attributes:
         weight (Tensor): the learnable weights of the module of shape
@@ -57,11 +52,12 @@ class ConvTranspose2dBias(ConvTranspose2dBiasAct):
         bias (Tensor):   the learnable bias of the module of shape
             (out_channels).
 
-    .. _`here`:
-        https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
+    Examples::
 
-    .. _`Deconvolutional Networks`:
-        https://www.matthewzeiler.com/mattzeiler/deconvolutionalnetworks.pdf
+        >>> m = nn.Conv2d(16, 33, 3, 2)
+        >>> input = Tensor(shape=[20, 50, 100, 16])
+        >>> output = m(input)
+
     """
 
     def __init__(
@@ -69,14 +65,14 @@ class ConvTranspose2dBias(ConvTranspose2dBiasAct):
         in_channels,
         out_channels,
         kernel_size,
-        stride,
+        stride=1,
         padding=0,
         dilation=1,
         groups=1,
         dtype="float32",
     ):
         super().__init__(
-            "transposed_conv2d_bias",
+            "conv2d_cnhw_bias",
             in_channels,
             out_channels,
             kernel_size,

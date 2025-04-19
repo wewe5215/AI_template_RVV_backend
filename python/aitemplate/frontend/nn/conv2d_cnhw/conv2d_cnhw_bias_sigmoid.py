@@ -13,15 +13,13 @@
 #  limitations under the License.
 #
 """
-conv2d bias relu module
+conv2d bias sigmoid module
 """
-from aitemplate.frontend.nn.conv2d_cnhw.transposed_conv2d_bias_act import (
-    ConvTranspose2dBiasAct,
-)
+from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_bias_act import Conv2dCNHWBiasAct
 
 
-class ConvTranspose2dBiasRelu(ConvTranspose2dBiasAct):
-    r"""Applies a 2D transposed convolution with bias + relu."""
+class Conv2dCNHWBiasSigmoid(Conv2dCNHWBiasAct):
+    r"""Applies 2D convolution with bias + sigmoid."""
 
     def __init__(
         self,
@@ -35,7 +33,7 @@ class ConvTranspose2dBiasRelu(ConvTranspose2dBiasAct):
         dtype="float32",
     ):
         super().__init__(
-            "transposed_conv2d_bias_relu",
+            "conv2d_cnhw_bias_sigmoid",
             in_channels,
             out_channels,
             kernel_size,

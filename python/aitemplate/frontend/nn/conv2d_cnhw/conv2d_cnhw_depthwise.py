@@ -13,16 +13,13 @@
 #  limitations under the License.
 #
 """
-conv2d bias relu module
+conv2d depthwise module
 """
-from aitemplate.frontend.nn.conv2d_cnhw.transposed_conv2d_bias_act import (
-    ConvTranspose2dBiasAct,
-)
+from aitemplate.compiler.ops import conv2d_cnhw_depthwise
+from aitemplate.frontend.nn.conv2d_cnhw.conv2d import Conv2dCNHW
 
 
-class ConvTranspose2dBiasRelu(ConvTranspose2dBiasAct):
-    r"""Applies a 2D transposed convolution with bias + relu."""
-
+class Conv2dCNHWDepthwise(Conv2dCNHW):
     def __init__(
         self,
         in_channels,
@@ -35,7 +32,6 @@ class ConvTranspose2dBiasRelu(ConvTranspose2dBiasAct):
         dtype="float32",
     ):
         super().__init__(
-            "transposed_conv2d_bias_relu",
             in_channels,
             out_channels,
             kernel_size,
@@ -44,4 +40,7 @@ class ConvTranspose2dBiasRelu(ConvTranspose2dBiasAct):
             dilation,
             groups,
             dtype,
+        )
+        self.op = conv2d_cnhw_depthwise(
+            stride=stride, pad=padding, dilate=dilation, group=groups
         )

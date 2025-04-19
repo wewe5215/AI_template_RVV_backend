@@ -13,15 +13,16 @@
 #  limitations under the License.
 #
 """
-conv2d bias relu module
+conv2d bias for few channels
 """
-from aitemplate.frontend.nn.conv2d_cnhw.transposed_conv2d_bias_act import (
-    ConvTranspose2dBiasAct,
-)
+from aitemplate.frontend.nn.conv2d_cnhw.special_conv2d_bias_act import SpecialConv2dBiasAct
 
 
-class ConvTranspose2dBiasRelu(ConvTranspose2dBiasAct):
-    r"""Applies a 2D transposed convolution with bias + relu."""
+class Conv2dCNHWBiasFewChannels(SpecialConv2dBiasAct):
+    r"""Applies 2D convolution with bias for few channels.
+
+    This layer equals to Conv2dBias but has improved performance for in_channels < 8.
+    """
 
     def __init__(
         self,
@@ -31,17 +32,17 @@ class ConvTranspose2dBiasRelu(ConvTranspose2dBiasAct):
         stride,
         padding=0,
         dilation=1,
-        groups=1,
+        auto_padding=True,
         dtype="float32",
     ):
         super().__init__(
-            "transposed_conv2d_bias_relu",
+            "conv2d_cnhw_bias_few_channels",
             in_channels,
             out_channels,
             kernel_size,
             stride,
             padding,
             dilation,
-            groups,
+            auto_padding,
             dtype,
         )

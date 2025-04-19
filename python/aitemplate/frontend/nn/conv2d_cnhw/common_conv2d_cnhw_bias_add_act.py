@@ -13,18 +13,19 @@
 #  limitations under the License.
 #
 """
-conv2d bias relu module
+common module for conv2d bias act residual add
 """
-from aitemplate.frontend.nn.conv2d_cnhw.transposed_conv2d_bias_act import (
-    ConvTranspose2dBiasAct,
-)
+from aitemplate.compiler import ops
+from aitemplate.frontend.nn.module import Module
+from aitemplate.frontend.nn.parameter import Parameter
+
+# pylint: disable=C0103
 
 
-class ConvTranspose2dBiasRelu(ConvTranspose2dBiasAct):
-    r"""Applies a 2D transposed convolution with bias + relu."""
-
+class Conv2dCNHWBiasAddAct(Module):
     def __init__(
         self,
+        op_name,
         in_channels,
         out_channels,
         kernel_size,
@@ -34,14 +35,17 @@ class ConvTranspose2dBiasRelu(ConvTranspose2dBiasAct):
         groups=1,
         dtype="float32",
     ):
-        super().__init__(
-            "transposed_conv2d_bias_relu",
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            padding,
-            dilation,
-            groups,
-            dtype,
+        super().__init__()
+        self.weight = Parameter(
+            shape=[out_channels, kernel_size, kernel_size, in_channels // groups],
+            dtype=dtype,
         )
+        self.bias = Parameter(shape=[out_channels], dtype=dtype)
+        op_func = getattr(ops, op_name)
+        self.op = op_func(stride=stride, pad=padding, dilate=dilation, group=groups)
+
+    def forward(self, *args):
+        assert len(args) == 2
+        x = args[0]
+        r = args[1]
+        return self.op(x, self.weight.tensor(), self.bias.tensor(), r)
