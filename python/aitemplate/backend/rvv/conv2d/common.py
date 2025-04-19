@@ -415,7 +415,7 @@ def extract_config(
     dtype="float16",
     op_kind=None,
     extra_kind=None,
-    conv2d_specialization=None
+    Layout=None
 ):
     """Extracts config for conv kernels."""
     import copy
@@ -425,7 +425,7 @@ def extract_config(
     lib_dtype = spec.dtype_to_lib_type(dtype)
     conv2d_ops = OrderedDict()
     _LOGGER.debug(f"_operators =  {Target.current()._operators}")
-    extract_ops = list(Target.current()._operators[op_kind][extra_kind].items())
+    extract_ops = list(Target.current()._operators[op_kind][extra_kind][Layout].items())
     for key, value in extract_ops:
         for op in value:
             if lib_dtype == cpu_lib.library.DataTypeNames[op.A.element]:

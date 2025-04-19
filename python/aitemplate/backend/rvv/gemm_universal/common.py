@@ -457,12 +457,13 @@ def extract_config(
     layout=RCR,
     op_kind=None,
     extra_kind=None,
+    Layout=None
 ):
     import cpu_lib
     spec = RVVSpec()
     lib_dtype = spec.dtype_to_lib_type(dtype)
     gemm_ops = OrderedDict()
-    extract_ops = list(Target.current()._operators[op_kind][extra_kind].items())
+    extract_ops = list(Target.current()._operators[op_kind][extra_kind][Layout].items())
     for key, value in extract_ops:
         for op in value:
             if layout == RCR:

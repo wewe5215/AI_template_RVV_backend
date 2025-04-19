@@ -13,110 +13,91 @@
 #  limitations under the License.
 #
 """
-Codegen for conv2d.
+common functions for conv2d bias act residual add
 """
-from aitemplate.backend import registry
-from aitemplate.backend.rvv.conv2d import common
 
-# pylint: disable=C0103,C0415,W0613,C0301
+from aitemplate.backend.rvv.conv2d_cnhw import common
+
+# pylint: disable=C0301,C0103
+
+EXTRA_HEADER = """
+#include <functional>
+#include <random>
+#include <cstddef> // For size_t
+#include <cstring> // For memcpy
+"""
 
 
-@registry.reg("rvv.conv2d.config")
-def conv2d_config(
+def extract_config(
     func_attrs,
-    dtype="float16",
+    dtype="float32",
+    activation_op_name="Identity",
+    binary_op_name="Plus",
+    unary_op_name="Identity",
 ):
-    """Populates conv2d cutlass configs into 'op_instance' field."""
     import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2d
-    extra_kind = cpu_lib.library.TensorOperation.PassThrough
+    if unary_op_name == "ReLu":
+        op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasAddRelu
+    elif unary_op_name == "Identity":
+        op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasAdd
+    extra_kind = cpu_lib.library.TensorOperation.Add
     # if dtype == "float32": --> TODO: uncomment later
-    Layout = cpu_lib.library.LayoutType.NHWC
-    func_attrs["op_instance"] = common.extract_config(
+    Layout = cpu_lib.library.LayoutType.CNHW
+    return common.extract_config(
         dtype = dtype,
         op_kind = op_kind,
         extra_kind = extra_kind,
         Layout = Layout)
 
 
-@registry.reg("rvv.conv2d.gen_profiler")
-def conv2d_gen_profiler(
+
+def gen_profiler(
     func_attrs,
     workdir,
     profiler_filename,
     shape_template,
 ):
-    """Codegen for conv2d profiler."""
     return common.gen_profiler(
         func_attrs=func_attrs,
         workdir=workdir,
         profiler_filename=profiler_filename,
         shape_template=shape_template,
+        is_bias_add=True,
+        extra_header=EXTRA_HEADER,
     )
 
 
-@registry.reg("rvv.conv2d.gen_function")
-def conv2d_gen_function(
+def gen_function(
     func_attrs,
     exec_cond_template,
     shape_eval_template,
     shape_save_template,
 ):
-    """Codegen for conv2d function."""
     return common.gen_function(
         func_attrs=func_attrs,
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
+        is_bias_add=True,
+        extra_header=EXTRA_HEADER,
     )
 
 
-@registry.reg("rvv.conv2d.func_decl")
-def conv2d_func_decl(
+def gen_function_decl(
     func_attrs,
 ):
-    """Codegen for conv2d function declaration."""
     return common.gen_function_decl(
         func_attrs=func_attrs,
+        is_bias_add=True,
     )
 
 
-@registry.reg("rvv.conv2d.func_call")
-def conv2d_func_call(
+def gen_function_call(
     func_attrs,
     indent="  ",
 ):
-    """Codegen for conv2d function call."""
     return common.gen_function_call(
         func_attrs=func_attrs,
         indent=indent,
-    )
-
-
-@registry.reg("rvv.conv2d.filter")
-def conv2d_filter(
-    cfg,
-    func_attrs,
-    x_shape,
-):
-    """Generates function filter.
-
-    Parameters
-    ----------
-    cfg: str
-        The filename generated for profiler.
-    func_attrs : Dict
-        Stores the operation attributes.
-    x_shape:
-        Input shapes.
-
-    Returns
-    -------
-    bool
-        If input cfg should be filtered.
-    """
-    return common.function_filter(
-        cfg=cfg,
-        func_attrs=func_attrs,
-        x_shape=x_shape,
+        is_bias_add=True,
     )

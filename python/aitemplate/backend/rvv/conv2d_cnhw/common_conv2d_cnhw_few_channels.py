@@ -16,7 +16,7 @@
 common functions for conv2d op with few channels(< 8)
 """
 
-from aitemplate.backend.rvv.conv2d import common
+from aitemplate.backend.rvv.conv2d_cnhw import common
 from aitemplate.utils import alignment
 
 
@@ -28,7 +28,7 @@ def extract_config(func_attrs, dtype="float16", unary_op_name="Identity"):
         op_kind = cpu_lib.library.Conv2dKind.Conv2dBias
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
-    Layout = cpu_lib.library.LayoutType.NHWC
+    Layout = cpu_lib.library.LayoutType.CNHW
     return common.extract_config(
         dtype = dtype,
         op_kind = op_kind,

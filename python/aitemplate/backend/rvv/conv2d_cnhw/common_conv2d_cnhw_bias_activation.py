@@ -13,12 +13,12 @@
 #  limitations under the License.
 #
 """
-common functions for conv2d bias act residual add
+common functions for conv_bias_activation subgraph
 """
 
-from aitemplate.backend.rvv.conv2d import common
+from aitemplate.backend.rvv.conv2d_cnhw import common
 
-# pylint: disable=C0301,C0103
+# pylint: disable=C0103,C0301
 
 EXTRA_HEADER = """
 #include <functional>
@@ -26,29 +26,6 @@ EXTRA_HEADER = """
 #include <cstddef> // For size_t
 #include <cstring> // For memcpy
 """
-
-
-def extract_config(
-    func_attrs,
-    dtype="float32",
-    activation_op_name="Identity",
-    binary_op_name="Plus",
-    unary_op_name="Identity",
-):
-    import cpu_lib
-    if unary_op_name == "ReLu":
-        op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasAddRelu
-    elif unary_op_name == "Identity":
-        op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasAdd
-    extra_kind = cpu_lib.library.TensorOperation.Add
-    # if dtype == "float32": --> TODO: uncomment later
-    Layout = cpu_lib.library.LayoutType.NHWC
-    return common.extract_config(
-        dtype = dtype,
-        op_kind = op_kind,
-        extra_kind = extra_kind,
-        Layout = Layout)
-
 
 
 def gen_profiler(
@@ -62,7 +39,7 @@ def gen_profiler(
         workdir=workdir,
         profiler_filename=profiler_filename,
         shape_template=shape_template,
-        is_bias_add=True,
+        is_bias=True,
         extra_header=EXTRA_HEADER,
     )
 
@@ -78,7 +55,7 @@ def gen_function(
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
-        is_bias_add=True,
+        is_bias=True,
         extra_header=EXTRA_HEADER,
     )
 
@@ -88,7 +65,7 @@ def gen_function_decl(
 ):
     return common.gen_function_decl(
         func_attrs=func_attrs,
-        is_bias_add=True,
+        is_bias=True,
     )
 
 
@@ -99,5 +76,5 @@ def gen_function_call(
     return common.gen_function_call(
         func_attrs=func_attrs,
         indent=indent,
-        is_bias_add=True,
+        is_bias=True,
     )

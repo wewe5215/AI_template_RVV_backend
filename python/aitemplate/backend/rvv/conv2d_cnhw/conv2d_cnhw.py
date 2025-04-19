@@ -13,25 +13,25 @@
 #  limitations under the License.
 #
 """
-Codegen for conv2d.
+Codegen for conv2d_cnhw.
 """
 from aitemplate.backend import registry
-from aitemplate.backend.rvv.conv2d import common
+from aitemplate.backend.rvv.conv2d_cnhw import common
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
-@registry.reg("rvv.conv2d.config")
-def conv2d_config(
+@registry.reg("rvv.conv2d_cnhw.config")
+def conv2d_cnhw_config(
     func_attrs,
     dtype="float16",
 ):
-    """Populates conv2d cutlass configs into 'op_instance' field."""
+    """Populates conv2d_cnhw cutlass configs into 'op_instance' field."""
     import cpu_lib
     op_kind = cpu_lib.library.Conv2dKind.Conv2d
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
-    Layout = cpu_lib.library.LayoutType.NHWC
+    Layout = cpu_lib.library.LayoutType.CNHW
     func_attrs["op_instance"] = common.extract_config(
         dtype = dtype,
         op_kind = op_kind,
@@ -39,14 +39,14 @@ def conv2d_config(
         Layout = Layout)
 
 
-@registry.reg("rvv.conv2d.gen_profiler")
-def conv2d_gen_profiler(
+@registry.reg("rvv.conv2d_cnhw.gen_profiler")
+def conv2d_cnhw_gen_profiler(
     func_attrs,
     workdir,
     profiler_filename,
     shape_template,
 ):
-    """Codegen for conv2d profiler."""
+    """Codegen for conv2d_cnhw profiler."""
     return common.gen_profiler(
         func_attrs=func_attrs,
         workdir=workdir,
@@ -55,14 +55,14 @@ def conv2d_gen_profiler(
     )
 
 
-@registry.reg("rvv.conv2d.gen_function")
-def conv2d_gen_function(
+@registry.reg("rvv.conv2d_cnhw.gen_function")
+def conv2d_cnhw_gen_function(
     func_attrs,
     exec_cond_template,
     shape_eval_template,
     shape_save_template,
 ):
-    """Codegen for conv2d function."""
+    """Codegen for conv2d_cnhw function."""
     return common.gen_function(
         func_attrs=func_attrs,
         exec_cond_template=exec_cond_template,
@@ -71,30 +71,30 @@ def conv2d_gen_function(
     )
 
 
-@registry.reg("rvv.conv2d.func_decl")
-def conv2d_func_decl(
+@registry.reg("rvv.conv2d_cnhw.func_decl")
+def conv2d_cnhw_func_decl(
     func_attrs,
 ):
-    """Codegen for conv2d function declaration."""
+    """Codegen for conv2d_cnhw function declaration."""
     return common.gen_function_decl(
         func_attrs=func_attrs,
     )
 
 
-@registry.reg("rvv.conv2d.func_call")
-def conv2d_func_call(
+@registry.reg("rvv.conv2d_cnhw.func_call")
+def conv2d_cnhw_func_call(
     func_attrs,
     indent="  ",
 ):
-    """Codegen for conv2d function call."""
+    """Codegen for conv2d_cnhw function call."""
     return common.gen_function_call(
         func_attrs=func_attrs,
         indent=indent,
     )
 
 
-@registry.reg("rvv.conv2d.filter")
-def conv2d_filter(
+@registry.reg("rvv.conv2d_cnhw.filter")
+def conv2d_cnhw_filter(
     cfg,
     func_attrs,
     x_shape,

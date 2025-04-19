@@ -13,88 +13,93 @@
 #  limitations under the License.
 #
 """
-Codegen for conv2d.
+transposed conv2d + bias + (relu) codegen
 """
 from aitemplate.backend import registry
-from aitemplate.backend.rvv.conv2d import common
+from aitemplate.backend.rvv.conv2d_cnhw import common, common_transposed_conv2d as ctc
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
-@registry.reg("rvv.conv2d.config")
-def conv2d_config(
+@registry.reg("rvv.transposed_conv2d_cnhw_bias.config")
+@registry.reg("rvv.transposed_conv2d_cnhw_bias_relu.config")
+def transposed_conv2d_bias_config(
     func_attrs,
     dtype="float16",
 ):
-    """Populates conv2d cutlass configs into 'op_instance' field."""
-    import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2d
-    extra_kind = cpu_lib.library.TensorOperation.PassThrough
-    # if dtype == "float32": --> TODO: uncomment later
-    Layout = cpu_lib.library.LayoutType.NHWC
-    func_attrs["op_instance"] = common.extract_config(
-        dtype = dtype,
-        op_kind = op_kind,
-        extra_kind = extra_kind,
-        Layout = Layout)
+    func_attrs["op_instance"] = ctc.extract_config(
+        func_attrs=func_attrs,
+        dtype=dtype,
+    )
 
 
-@registry.reg("rvv.conv2d.gen_profiler")
-def conv2d_gen_profiler(
+@registry.reg("rvv.transposed_conv2d_cnhw_bias.gen_profiler")
+@registry.reg("rvv.transposed_conv2d_cnhw_bias_relu.gen_profiler")
+def transposed_conv2d_bias_gen_profiler(
     func_attrs,
     workdir,
     profiler_filename,
     shape_template,
 ):
-    """Codegen for conv2d profiler."""
     return common.gen_profiler(
         func_attrs=func_attrs,
         workdir=workdir,
         profiler_filename=profiler_filename,
         shape_template=shape_template,
+        f_emit_instance=ctc.emit_instance,
+        is_bias=True,
+        is_transpose=True,
+        instance_name_base="DeviceConvBwdInstance",
     )
 
 
-@registry.reg("rvv.conv2d.gen_function")
-def conv2d_gen_function(
+@registry.reg("rvv.transposed_conv2d_cnhw_bias.gen_function")
+@registry.reg("rvv.transposed_conv2d_cnhw_bias_relu.gen_function")
+def transposed_conv2d_bias_gen_function(
     func_attrs,
     exec_cond_template,
     shape_eval_template,
     shape_save_template,
 ):
-    """Codegen for conv2d function."""
     return common.gen_function(
         func_attrs=func_attrs,
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
+        f_emit_instance=ctc.emit_instance,
+        is_bias=True,
+        is_transpose=True,
     )
 
 
-@registry.reg("rvv.conv2d.func_decl")
-def conv2d_func_decl(
+@registry.reg("rvv.transposed_conv2d_cnhw_bias.func_decl")
+@registry.reg("rvv.transposed_conv2d_cnhw_bias_relu.func_decl")
+def transposed_conv2d_bias_func_decl(
     func_attrs,
 ):
-    """Codegen for conv2d function declaration."""
     return common.gen_function_decl(
         func_attrs=func_attrs,
+        is_bias=True,
     )
 
 
-@registry.reg("rvv.conv2d.func_call")
-def conv2d_func_call(
+@registry.reg("rvv.transposed_conv2d_cnhw_bias.func_call")
+@registry.reg("rvv.transposed_conv2d_cnhw_bias_relu.func_call")
+def transposed_conv2d_bias_func_call(
     func_attrs,
     indent="  ",
 ):
-    """Codegen for conv2d function call."""
     return common.gen_function_call(
         func_attrs=func_attrs,
         indent=indent,
+        is_bias=True,
+        is_transpose=True,
     )
 
 
-@registry.reg("rvv.conv2d.filter")
-def conv2d_filter(
+@registry.reg("rvv.transposed_conv2d_cnhw_bias.filter")
+@registry.reg("rvv.transposed_conv2d_cnhw_bias_relu.filter")
+def transposed_conv2d_bias_filter(
     cfg,
     func_attrs,
     x_shape,

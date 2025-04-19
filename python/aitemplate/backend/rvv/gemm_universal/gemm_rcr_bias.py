@@ -37,10 +37,12 @@ def gemm_rcr_config(func_attrs, dtype="float16"):
     import cpu_lib
     op_kind = cpu_lib.library.GemmKind.GemmBias
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
+    Layout = cpu_lib.library.LayoutType.RowMajor
     func_attrs["op_instance"] = common.extract_config(
         dtype=func_attrs["inputs"][0].dtype(),
         op_kind=op_kind,
         extra_kind=extra_kind,
+        Layout=Layout,
     )
 
 
