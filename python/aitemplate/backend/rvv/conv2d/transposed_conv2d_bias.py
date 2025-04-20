@@ -22,7 +22,6 @@ from aitemplate.backend.rvv.conv2d import common, common_transposed_conv2d as ct
 
 
 @registry.reg("rvv.transposed_conv2d_bias.config")
-@registry.reg("rvv.transposed_conv2d_bias_relu.config")
 def transposed_conv2d_bias_config(
     func_attrs,
     dtype="float16",
@@ -34,7 +33,6 @@ def transposed_conv2d_bias_config(
 
 
 @registry.reg("rvv.transposed_conv2d_bias.gen_profiler")
-@registry.reg("rvv.transposed_conv2d_bias_relu.gen_profiler")
 def transposed_conv2d_bias_gen_profiler(
     func_attrs,
     workdir,
@@ -46,7 +44,7 @@ def transposed_conv2d_bias_gen_profiler(
         workdir=workdir,
         profiler_filename=profiler_filename,
         shape_template=shape_template,
-        f_emit_instance=ctc.emit_instance,
+        f_emit_instance="",
         is_bias=True,
         is_transpose=True,
         instance_name_base="DeviceConvBwdInstance",
@@ -54,7 +52,6 @@ def transposed_conv2d_bias_gen_profiler(
 
 
 @registry.reg("rvv.transposed_conv2d_bias.gen_function")
-@registry.reg("rvv.transposed_conv2d_bias_relu.gen_function")
 def transposed_conv2d_bias_gen_function(
     func_attrs,
     exec_cond_template,
@@ -66,14 +63,13 @@ def transposed_conv2d_bias_gen_function(
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
-        f_emit_instance=ctc.emit_instance,
+        f_emit_instance="",
         is_bias=True,
         is_transpose=True,
     )
 
 
 @registry.reg("rvv.transposed_conv2d_bias.func_decl")
-@registry.reg("rvv.transposed_conv2d_bias_relu.func_decl")
 def transposed_conv2d_bias_func_decl(
     func_attrs,
 ):
@@ -84,7 +80,6 @@ def transposed_conv2d_bias_func_decl(
 
 
 @registry.reg("rvv.transposed_conv2d_bias.func_call")
-@registry.reg("rvv.transposed_conv2d_bias_relu.func_call")
 def transposed_conv2d_bias_func_call(
     func_attrs,
     indent="  ",
@@ -98,7 +93,6 @@ def transposed_conv2d_bias_func_call(
 
 
 @registry.reg("rvv.transposed_conv2d_bias.filter")
-@registry.reg("rvv.transposed_conv2d_bias_relu.filter")
 def transposed_conv2d_bias_filter(
     cfg,
     func_attrs,

@@ -46,7 +46,7 @@ def transposed_conv2d_bias_gen_profiler(
         workdir=workdir,
         profiler_filename=profiler_filename,
         shape_template=shape_template,
-        f_emit_instance=ctc.emit_instance,
+        f_emit_instance="",
         is_bias=True,
         is_transpose=True,
         instance_name_base="DeviceConvBwdInstance",
@@ -66,7 +66,7 @@ def transposed_conv2d_bias_gen_function(
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
-        f_emit_instance=ctc.emit_instance,
+        f_emit_instance="",
         is_bias=True,
         is_transpose=True,
     )

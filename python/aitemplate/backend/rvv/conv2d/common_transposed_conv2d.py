@@ -20,44 +20,24 @@ import re
 
 from aitemplate.backend.rvv.conv2d import common
 
-
-def _conv_transpose_instance(op_def):
-    tmp = op_def.replace("DefaultConv2dFprop", "DefaultConv2dDgrad")
-    tmp = re.sub(
-        r"cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<\d>",
-        "cutlass::conv::threadblock::StridedDgradIdentityThreadblockSwizzle<1>",
-        tmp,
-    )
-    return tmp
-
-
-def emit_instance(op, f_instance_convertor=_conv_transpose_instance):
-    import cutlass_lib
-
-    emiter = cutlass_lib.conv2d_operation.EmitConv2dInstance()
-    op_def = emiter.emit(op)
-    op_def = f_instance_convertor(op_def)
-    return op_def
-
-
 def extract_config(
-    func_attrs,
     dtype="float16",
-    skip_simt_kernels=False,
-    op_kind=None,
-    op_layout=None,
+    is_bias=False,
+    is_relu=False,
 ):
-    def apply_special_config(func_attrs, op):
-        import cutlass_lib
-
-        op.group_mode = cutlass_lib.library.GroupMode.NoneGroup
-        return op
-
+    """Populates all available conv2d configs into the op_instance field."""
+    import cpu_lib
+    if is_bias and is_relu:
+        op_kind = cpu_lib.library.Conv2dKind.TransposedConv2dBiasRelu
+    elif is_bias:
+        op_kind = cpu_lib.library.Conv2dKind.Conv2dBias
+    else:
+        op_kind = cpu_lib.library.Conv2dKind.TransposedConv2d
+    extra_kind = cpu_lib.library.TensorOperation.PassThrough
+    # if dtype == "float32": --> TODO: uncomment later
+    Layout = cpu_lib.library.LayoutType.NHWC
     return common.extract_config(
-        func_attrs,
-        dtype,
-        skip_simt_kernels,
-        f_apply_special_config=apply_special_config,
-        op_kind=op_kind,
-        op_layout=op_layout,
-    )
+        dtype = dtype,
+        op_kind = op_kind,
+        extra_kind = extra_kind,
+        Layout = Layout)
