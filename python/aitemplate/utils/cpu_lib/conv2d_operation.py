@@ -22,7 +22,7 @@ import jinja2
 
 # import library
 from aitemplate.utils.cpu_lib import library
-from aitemplate.utils.cpu_lib.conv2d_nhwc_template import template, template_depthwise, code_snippet, binary_func_minmax_flag_op, binary_func_flag_op
+from aitemplate.utils.cpu_lib.conv2d_template import template, template_depthwise, code_snippet, binary_func_minmax_flag_op, binary_func_flag_op
 from aitemplate.utils.cpu_lib.conv2d_common import Conv2DSpecialization, Conv2DSpecializationTag, \
                         BIAS_KINDS, DEPTHWISE_KINDS, RELU_KINDS, RELU6_KINDS, BINARY_OP_KIND, BINARY_FLAG_OP_KIND, \
                         NHWC_KINDS, CNHW_KINDS
