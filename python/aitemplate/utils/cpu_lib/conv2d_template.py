@@ -3,6 +3,9 @@ import jinja2
 template = jinja2.Template(
             """
 {{indent}}//{{name}}
+{% if is_transpose %}
+{{indent}}{{DataName}}* tmp_out = ({{DataName}}*)malloc(NI * HO * WO * CO * sizeof({{DataName}}));
+{% endif %}
 {{indent}}xnn_operator_t op_conv = nullptr;
 {{indent}}const xnn_status status = xnn_create_{{Conv2DSpecialization}}(
 {{indent}}  PH, PW, PH, PW, i32_kernel_h, i32_kernel_w,
@@ -33,13 +36,20 @@ template = jinja2.Template(
 {{indent}}    op_conv, 
 {{indent}}    /*workspace=*/nullptr, 
 {{indent}}    ({{DataName}}*)(in_ptr), 
+{% if is_transpose %}
+{{indent}}    ({{DataName}}*)(tmp_out)), xnn_status_success);
+{% else %}
 {{indent}}    ({{DataName}}*)(out_ptr)), xnn_status_success);
+{% endif %}
 {{indent}}CHECK_EQ(xnn_run_operator(op_conv, /*threadpool=*/pthreadpool_), xnn_status_success);
             """
         )
 template_depthwise = jinja2.Template(
             """
 {{indent}}//{{name}}
+{% if is_transpose %}
+{{indent}}{{DataName}}* tmp_out = ({{DataName}}*)malloc(NI * HO * WO * CO * sizeof({{DataName}}));
+{% endif %}
 {{indent}}xnn_operator_t op_conv = nullptr;
 {{indent}}const xnn_status status = xnn_create_{{Conv2DSpecialization}}(
 {{indent}}  PH, PW, PH, PW, i32_kernel_h, i32_kernel_w,
@@ -70,14 +80,18 @@ template_depthwise = jinja2.Template(
 {{indent}}    op_conv, 
 {{indent}}    /*workspace=*/nullptr, 
 {{indent}}    ({{DataName}}*)(in_ptr), 
+{% if is_transpose %}
+{{indent}}    ({{DataName}}*)(tmp_out)), xnn_status_success);
+{% else %}
 {{indent}}    ({{DataName}}*)(out_ptr)), xnn_status_success);
+{% endif %}
 {{indent}}CHECK_EQ(xnn_run_operator(op_conv, /*threadpool=*/pthreadpool_), xnn_status_success);
             """
         )
 code_snippet = jinja2.Template(
 """
 {% if not is_bias %}
-{{indent}}void* bias_ptr = ({{DataName}}*)malloc(i32_out_ch * sizeof({{DataName}}));
+{{indent}}{{DataName}}* bias_ptr = ({{DataName}}*)malloc(i32_out_ch * sizeof({{DataName}}));
 {{indent}}std::memset(bias_ptr, 0, i32_out_ch * sizeof({{DataName}}));
 {% endif %}
 {{conv2d}}
@@ -126,5 +140,21 @@ binary_func_flag_op = jinja2.Template(
 {{indent}}CHECK_EQ(
 {{indent}}xnn_status_success, xnn_setup_{{operation}}_{{DataType}}(binary_func_flag_op, ({{DataName}}*)(res_ptr), ({{DataName}}*)(out_ptr), ({{DataName}}*)(out_ptr)));
 {{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(binary_func_flag_op, /*threadpool=*/pthreadpool_));
+"""
+)
+transpose_func = jinja2.Template(
+"""
+{{indent}}xnn_operator_t transpose_op = nullptr;
+{{indent}}std::vector<size_t> shape = { (size_t)(NI * HO * WO), (size_t)CO};
+{{indent}}std::vector<size_t> perm = {1, 0};
+{{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{operation}}_{{DataType}}(0, &transpose_op));
+{{indent}}CHECK_NE(nullptr, transpose_op);
+{{indent}}CHECK_EQ(
+{{indent}}xnn_status_success, xnn_reshape_{{operation}}_{{DataType}}(
+{{indent}} transpose_op, shape.size(), shape.data(), perm.data(), pthreadpool_));
+{{indent}}CHECK_EQ(
+{{indent}}xnn_status_success, xnn_setup_{{operation}}_{{DataType}}(transpose_op, tmp_out, ({{DataName}}*)(out_ptr)));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(transpose_op, /*threadpool=*/pthreadpool_));
+{{indent}}free(tmp_out);
 """
 )

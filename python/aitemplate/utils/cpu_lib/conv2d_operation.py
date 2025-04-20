@@ -22,10 +22,10 @@ import jinja2
 
 # import library
 from aitemplate.utils.cpu_lib import library
-from aitemplate.utils.cpu_lib.conv2d_template import template, template_depthwise, code_snippet, binary_func_minmax_flag_op, binary_func_flag_op
+from aitemplate.utils.cpu_lib.conv2d_template import template, template_depthwise, code_snippet, binary_func_minmax_flag_op, binary_func_flag_op, transpose_func
 from aitemplate.utils.cpu_lib.conv2d_common import Conv2DSpecialization, Conv2DSpecializationTag, \
                         BIAS_KINDS, DEPTHWISE_KINDS, RELU_KINDS, RELU6_KINDS, BINARY_OP_KIND, BINARY_FLAG_OP_KIND, \
-                        NHWC_KINDS, CNHW_KINDS
+                        NHWC_KINDS, CNHW_KINDS, TRANSPOSE_AFTER_CONV_KINDS
 
 # TODO : revise min/max for relu
 
@@ -90,6 +90,17 @@ class Conv2DOperation:
             elif (operation_type == library.TensorOperation.Copysign and library.DataTypeNames[element] == 'f32') or \
                  (operation_type in BINARY_FLAG_OP_KIND):
                 code_gen = generate_binary_func_flag_op(operation_kind, operation_type, element, binary_func_flag_op)
+            elif (operation_type == library.TensorOperation.Transpose):
+                if library.DataTypeNames[element] == 'f32':
+                    DataType = "x32"
+                elif library.DataTypeNames[element] == 'f16':
+                    DataType = "x16"
+                code_gen = transpose_func.render(
+                indent="  ",
+                operation = library.TensorOperationTag[operation_type],
+                DataType = DataType,
+                DataName = library.DataTypeTag[element],
+            )
             return code_gen
         def generate_conv2d(template_kind):
             return template_kind.render(
@@ -98,6 +109,7 @@ class Conv2DOperation:
                 DataName = library.DataTypeTag[self.A.element],
                 is_relu = (self.operation_kind in RELU_KINDS),
                 is_relu6 = (self.operation_kind in RELU6_KINDS),
+                is_transpose = (self.operation_kind in TRANSPOSE_AFTER_CONV_KINDS),
                 ADType=library.DataTypeTag[self.A.element],
                 BDType=library.DataTypeTag[self.B.element],
                 CDType=library.DataTypeTag[self.C.element],

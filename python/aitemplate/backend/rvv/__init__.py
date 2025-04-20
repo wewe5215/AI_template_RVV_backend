@@ -24,6 +24,7 @@ from aitemplate.backend.rvv import (
 )
 # from aitemplate.backend.rvv.common import *
 from aitemplate.backend.rvv.conv2d import *
+from aitemplate.backend.rvv.conv2d_cnhw import *
 # from aitemplate.backend.rvv.conv3d import *
 from aitemplate.backend.rvv.elementwise import *
 # from aitemplate.backend.rvv.embedding import *

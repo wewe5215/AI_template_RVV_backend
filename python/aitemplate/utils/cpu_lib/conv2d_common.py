@@ -44,6 +44,21 @@ BIAS_KINDS = {
     library.Conv2dKind.Conv2dDepthwiseBiasRelu6,
     library.Conv2dKind.Conv2dDepthwiseBiasAddRelu,
     library.Conv2dKind.Conv2dDepthwiseBiasAddRelu6,
+    library.Conv2dKind.Conv2dBiasTranspose,
+    library.Conv2dKind.Conv2dBiasReluTranspose,
+    library.Conv2dKind.Conv2dBiasRelu6Transpose,
+    library.Conv2dKind.Conv2dDepthwiseBiasTranspose,
+    library.Conv2dKind.Conv2dDepthwiseBiasReluTranspose,
+    library.Conv2dKind.Conv2dDepthwiseBiasRelu6Transpose,
+}
+
+TRANSPOSE_AFTER_CONV_KINDS = {
+    library.Conv2dKind.Conv2dBiasTranspose,
+    library.Conv2dKind.Conv2dBiasReluTranspose,
+    library.Conv2dKind.Conv2dBiasRelu6Transpose,
+    library.Conv2dKind.Conv2dDepthwiseBiasTranspose,
+    library.Conv2dKind.Conv2dDepthwiseBiasReluTranspose,
+    library.Conv2dKind.Conv2dDepthwiseBiasRelu6Transpose,
 }
 
 DEPTHWISE_KINDS = {
@@ -54,6 +69,9 @@ DEPTHWISE_KINDS = {
     library.Conv2dKind.Conv2dDepthwiseBiasRelu6,
     library.Conv2dKind.Conv2dDepthwiseBiasAddRelu,
     library.Conv2dKind.Conv2dDepthwiseBiasAddRelu6,
+    library.Conv2dKind.Conv2dDepthwiseBiasTranspose,
+    library.Conv2dKind.Conv2dDepthwiseBiasReluTranspose,
+    library.Conv2dKind.Conv2dDepthwiseBiasRelu6Transpose,
 }
 
 RELU_KINDS = {
@@ -61,7 +79,9 @@ RELU_KINDS = {
     library.Conv2dKind.Conv2dBiasAddRelu,
     library.Conv2dKind.Conv2dBiasReluAdd,
     library.Conv2dKind.Conv2dDepthwiseBiasRelu,
-    library.Conv2dKind.Conv2dDepthwiseBiasAddRelu
+    library.Conv2dKind.Conv2dDepthwiseBiasAddRelu,
+    library.Conv2dKind.Conv2dBiasReluTranspose,
+    library.Conv2dKind.Conv2dDepthwiseBiasReluTranspose,
 }
 
 RELU6_KINDS = {
@@ -69,7 +89,9 @@ RELU6_KINDS = {
     library.Conv2dKind.Conv2dBiasAddRelu6,
     library.Conv2dKind.Conv2dBiasRelu6Add,
     library.Conv2dKind.Conv2dDepthwiseBiasRelu6,
-    library.Conv2dKind.Conv2dDepthwiseBiasAddRelu6
+    library.Conv2dKind.Conv2dDepthwiseBiasAddRelu6,
+    library.Conv2dKind.Conv2dBiasRelu6Transpose,
+    library.Conv2dKind.Conv2dDepthwiseBiasRelu6Transpose,
 }
 
 BINARY_OP_KIND = {
