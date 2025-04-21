@@ -15,7 +15,7 @@
 """
 General template module for conv2e + bias + residual
 """
-from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_bias_add_act import Conv2dCNHWBiasAddAct
+from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_cnhw_bias_add_act import Conv2dCNHWBiasAddAct
 
 
 class Conv2dCNHWBiasAdd(Conv2dCNHWBiasAddAct):

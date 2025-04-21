@@ -15,7 +15,7 @@
 """
 conv bias hardswish module
 """
-from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_bias_act import Conv2dCNHWBiasAct
+from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_cnhw_bias_act import Conv2dCNHWBiasAct
 
 
 class Conv2dCNHWBiasHardswish(Conv2dCNHWBiasAct):

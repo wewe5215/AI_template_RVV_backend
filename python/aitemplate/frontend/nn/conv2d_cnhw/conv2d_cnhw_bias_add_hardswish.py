@@ -15,7 +15,7 @@
 """
 conv2d + bias + residual + hardswish
 """
-from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_bias_add_act import Conv2dCNHWBiasAddAct
+from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_cnhw_bias_add_act import Conv2dCNHWBiasAddAct
 
 
 class Conv2dCNHWBiasAddHardswish(Conv2dCNHWBiasAddAct):
