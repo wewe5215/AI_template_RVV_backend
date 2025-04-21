@@ -97,9 +97,6 @@ void {{function_name}} (
   int i32_out_batch = *out_batch;
   int i32_out_h = *out_h;
   int i32_out_w = *out_w;
-  {% if is_first_op %}
-    const xnn_status status_init = xnn_initialize(nullptr);
-  {% endif %}
   {{exec_paths}}
   return;
   throw std::runtime_error(
@@ -499,7 +496,6 @@ def gen_profiler(
             is_depthwise=is_depthwise,
             function_name=function_name,
             shape_function=shape_func,
-            is_first_op = True,
             exec_paths=exec_program,
         )
 
@@ -617,7 +613,7 @@ def gen_function(
     exec_cond_template,
     shape_eval_template,
     shape_save_template,
-    f_emit_instance="",
+    op_instance="",
     is_bias=False,
     is_bias_add=False,
     is_transpose=False,
@@ -627,7 +623,8 @@ def gen_function(
     """Function definition codegen."""
     func_name = func_attrs["name"]
     exec_path = func_attrs["exec_path"]
-    op_instance = func_attrs["op_instance"]
+    if func_attrs["has_profiler"]:
+        op_instance = func_attrs["op_instance"]
 
     backend_spec = RVVSpec()
     dtype = backend_spec.dtype_to_lib_type(func_attrs["inputs"][0]._attrs["dtype"])
@@ -667,7 +664,6 @@ def gen_function(
         is_transpose=is_transpose,
         is_depthwise=is_depthwise,
         function_name=func_name,
-        is_first_op = (match.group(1) == '0' or match.group(1) == '1' or match.group(1) == '2'),
         shape_function=shape_func,
         exec_paths=program,
     )

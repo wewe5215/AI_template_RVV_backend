@@ -16,7 +16,7 @@
 conv2d bias relu codegen
 """
 from aitemplate.backend import registry
-from aitemplate.backend.rvv.conv2d_cnhw import common, common_conv2d_bias_activation as cba
+from aitemplate.backend.rvv.conv2d_cnhw import common, common_conv2d_cnhw_bias_activation as cba
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
@@ -60,11 +60,22 @@ def conv2d_bias_relu_gen_function(
     shape_eval_template,
     shape_save_template,
 ):
+    import cpu_lib
+    op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasRelu6
+    extra_kind = cpu_lib.library.TensorOperation.PassThrough
+    # if dtype == "float32": --> TODO: uncomment later
+    Layout = cpu_lib.library.LayoutType.CNHW
+    op_instance = common.extract_config(
+        dtype = func_attrs["inputs"][0]._attrs["dtype"],
+        op_kind = op_kind,
+        extra_kind = extra_kind,
+        Layout = Layout)
     return cba.gen_function(
         func_attrs=func_attrs,
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
+        op_instance=op_instance,
     )
 
 

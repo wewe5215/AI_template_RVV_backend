@@ -16,7 +16,7 @@
 conv2d bias hardswish codegen
 """
 from aitemplate.backend import registry
-from aitemplate.backend.rvv.conv2d_cnhw import common, common_conv2d_bias_activation as cba
+from aitemplate.backend.rvv.conv2d_cnhw import common, common_conv2d_cnhw_bias_activation as cba
 
 # pylint: disable=C0103,C0415,W0613,C0301
 

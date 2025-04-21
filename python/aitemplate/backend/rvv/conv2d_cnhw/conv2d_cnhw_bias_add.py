@@ -18,7 +18,7 @@ conv2d bias add codegen
 from aitemplate.backend import registry
 from aitemplate.backend.rvv.conv2d_cnhw import (
     common,
-    common_conv2d_bias_add_activation as cbaa,
+    common_conv2d_cnhw_bias_add_activation as cbaa,
 )
 
 # pylint: disable=C0103,C0415,W0613,C0301
@@ -60,11 +60,19 @@ def conv2d_bias_add_identity_gen_function(
     shape_eval_template,
     shape_save_template,
 ):
+    op_instance = cbaa.extract_config(
+        func_attrs=func_attrs,
+        dtype=func_attrs["inputs"][0]._attrs["dtype"],
+        activation_op_name="Identity",
+        binary_op_name="Plus",
+        unary_op_name="Identity",
+    )
     return cbaa.gen_function(
         func_attrs=func_attrs,
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
+        op_instance=op_instance,
     )
 
 

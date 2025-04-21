@@ -443,28 +443,28 @@ class conv2d_cnhw(Operator):
             A dynamic profiling strategy, used to filter generated profiles at compile time.
             See also: :func:`~aitemplate.compiler.transform.profile.profile`
         """
-        # target = backend.target.Target.current()
+        target = backend.target.Target.current()
 
-        # func_key = "{target}.{op}.config".format(
-        #     target=target.name(), op=self._attrs["op"]
-        # )
-        # func = registry.get(func_key)
-        # func(self._attrs, dtype=self._attrs["inputs"][0]._attrs["dtype"])
+        func_key = "{target}.{op}.config".format(
+            target=target.name(), op=self._attrs["op"]
+        )
+        func = registry.get(func_key)
+        func(self._attrs, dtype=self._attrs["inputs"][0]._attrs["dtype"])
 
-        # if self._should_build_profiler():
-        #     x_shapes = [
-        #         self._invert_exec_key(exec_key) for exec_key in self._attrs["exec_path"]
-        #     ]
-        #     self._attrs["op_instance"] = filter_op_instances(
-        #         func_attrs=self._attrs,
-        #         x_shapes=x_shapes,
-        #     )
-        #     return generate_profiler_sources(
-        #         func_attrs=self._attrs,
-        #         op_class="conv",
-        #         workdir=workdir,
-        #         shape_template=self.shape_eval_template,
-        #     )
+        if self._should_build_profiler():
+            x_shapes = [
+                self._invert_exec_key(exec_key) for exec_key in self._attrs["exec_path"]
+            ]
+            self._attrs["op_instance"] = filter_op_instances(
+                func_attrs=self._attrs,
+                x_shapes=x_shapes,
+            )
+            return generate_profiler_sources(
+                func_attrs=self._attrs,
+                op_class="conv",
+                workdir=workdir,
+                shape_template=self.shape_eval_template,
+            )
         return
     def _gen_profile_cmd(self, profiler_prefix, cfg, x_shape):
         exe_path = os.path.join(profiler_prefix, cfg)

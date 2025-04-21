@@ -46,6 +46,7 @@ def gen_profiler(
 
 def gen_function(
     func_attrs,
+    op_instance,
     exec_cond_template,
     shape_eval_template,
     shape_save_template,
@@ -55,6 +56,7 @@ def gen_function(
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
+        op_instance=op_instance,
         is_bias=True,
         extra_header=EXTRA_HEADER,
     )

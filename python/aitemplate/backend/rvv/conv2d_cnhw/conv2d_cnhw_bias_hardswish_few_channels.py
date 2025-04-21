@@ -19,7 +19,7 @@ specialize conv2d op with few channels(< 8)
 from aitemplate.backend import registry
 from aitemplate.backend.rvv.conv2d_cnhw import (
     common,
-    common_conv2d_bias_activation as cba,
+    common_conv2d_cnhw_bias_activation as cba,
     common_conv2d_few_channels as cfc,
 )
 

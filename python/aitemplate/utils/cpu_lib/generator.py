@@ -32,42 +32,31 @@ def CreateConv2dFwdOperator(manifest, operation_kind, out_element_op, out_data_o
     conv2d_specialization = [
         conv.Conv2DSpecialization.ConvNhwcF32,
         conv.Conv2DSpecialization.ConvNhwcF16,
+        conv.Conv2DSpecialization.ConvCNHWF32,
     ]
 
     operations = []
     for conv2d_spec in conv2d_specialization:
         if conv2d_spec == conv.Conv2DSpecialization.ConvNhwcF32:
-            a_element_desc = library.TensorDesc(
-                library.DataType.f32, library.LayoutType.NHWC
-            )
-            b_element_desc = library.TensorDesc(
-                library.DataType.f32, library.LayoutType.NHWC
-            )
-            c_element_desc = library.TensorDesc(
-                library.DataType.f32, library.LayoutType.NHWC
-            )
-            new_operation = conv.Conv2DOperation(
-                operation_kind=operation_kind,
-                extra_kind=out_element_op,
-                A=a_element_desc,
-                B=b_element_desc,
-                C=c_element_desc,
-                a_elem_op=in_element_op,
-                b_elem_op=in_element_op,
-                epilogue_functor=out_element_op,
-                conv2d_specialization=conv2d_spec,
-            )
-        else:
-            a_element_desc = library.TensorDesc(
-                library.DataType.f16, library.LayoutType.NHWC
-            )
-            b_element_desc = library.TensorDesc(
-                library.DataType.f16, library.LayoutType.NHWC
-            )
-            c_element_desc = library.TensorDesc(
-                library.DataType.f16, library.LayoutType.NHWC
-            )
-            new_operation = conv.Conv2DOperation(
+            data_type = library.DataType.f32
+            layout_type = library.LayoutType.NHWC
+        elif conv2d_spec == conv.Conv2DSpecialization.ConvNhwcF16:
+            data_type = library.DataType.f16
+            layout_type = library.LayoutType.NHWC
+        elif conv2d_spec == conv.Conv2DSpecialization.ConvCNHWF32:
+            data_type = library.DataType.f32
+            layout_type = library.LayoutType.CNHW
+
+        a_element_desc = library.TensorDesc(
+            data_type, layout_type
+        )
+        b_element_desc = library.TensorDesc(
+            data_type, layout_type
+        )
+        c_element_desc = library.TensorDesc(
+            data_type, layout_type
+        )
+        new_operation = conv.Conv2DOperation(
             operation_kind=operation_kind,
             extra_kind=out_element_op,
             A=a_element_desc,
