@@ -68,9 +68,6 @@ void {{function_name}} (
   if (!bias_ptr) {
     throw std::runtime_error("bias_ptr is null!");
   }
-  {% if is_first_op %}
-    const xnn_status status_init = xnn_initialize(nullptr);
-  {% endif %}
   {{exec_paths}}
   return;
   throw std::runtime_error(
