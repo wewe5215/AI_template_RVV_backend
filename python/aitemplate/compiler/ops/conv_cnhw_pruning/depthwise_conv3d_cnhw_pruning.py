@@ -13,7 +13,7 @@
 #  limitations under the License.
 #
 """
-Base class for depthwise_conv3d_cnhw.
+Base class for depthwise_conv3d_cnhw_pruning.
 """
 import itertools
 import re
@@ -91,11 +91,11 @@ EXEC_COND_TEMPLATE = jinja2.Template(
 )
 
 
-class depthwise_conv3d_cnhw(Operator):
-    r"""depthwise_conv3d_cnhw"""
+class depthwise_conv3d_cnhw_pruning(Operator):
+    r"""depthwise_conv3d_cnhw_pruning"""
 
     def __init__(self, stride, pad, dilate=1, group=1, bias=False) -> None:
-        """conv3d_cnhw constructor.
+        """conv3d_cnhw_pruning constructor.
 
         Parameters
         ----------
@@ -110,7 +110,7 @@ class depthwise_conv3d_cnhw(Operator):
             channels to output channels, by default 1
         """
         super().__init__()
-        self._attrs["op"] = "depthwise_conv3d_bias" if bias else "depthwise_conv3d_cnhw"
+        self._attrs["op"] = "depthwise_conv3d_bias" if bias else "depthwise_conv3d_cnhw_pruning"
         self._attrs["stride"] = stride
         if isinstance(stride, int):
             self._attrs["stride"] = (stride, stride, stride)
@@ -135,7 +135,7 @@ class depthwise_conv3d_cnhw(Operator):
 
     def _infer_shape(self, x: List[int], w: List[int]) -> List[int]:
         if x[4] != w[0] or x[4] != self._attrs["group"]:
-            raise RuntimeError("Wrong inputs for depthwise_conv3d_cnhw")
+            raise RuntimeError("Wrong inputs for depthwise_conv3d_cnhw_pruning")
         eval_func = self.shape_eval_template.render(
             indent="",
             dtype="",
@@ -222,7 +222,7 @@ class depthwise_conv3d_cnhw(Operator):
             self._attrs["exec_path"][key] = ""
 
     def _signature(self):
-        signature = "depthwise_conv3d_cnhw: K=[{kt}, {kh}, {kw}], S=[{st}, {sh}, {sw}], P=[{pt}, {ph}, {pw}], CO=[{co}]".format(
+        signature = "depthwise_conv3d_cnhw_pruning: K=[{kt}, {kh}, {kw}], S=[{st}, {sh}, {sw}], P=[{pt}, {ph}, {pw}], CO=[{co}]".format(
             kt=self._attrs["KT"],
             kh=self._attrs["KH"],
             kw=self._attrs["KW"],
@@ -248,8 +248,8 @@ class depthwise_conv3d_cnhw(Operator):
         elif shape % 2 == 0:
             self._attrs["epilogue_alignment"] = 2
 
-    def __call__(self, x: Tensor, w: Tensor, bias: Tensor = None) -> List[Tensor]:
-        """Call depthwise_conv3d_cnhw with tensors x, w
+    def __call__(self, x: Tensor, w: Tensor, w_idx: Tensor, bias: Tensor = None) -> List[Tensor]:
+        """Call depthwise_conv3d_cnhw_pruning with tensors x, w
 
         Parameters
         ----------
@@ -266,6 +266,7 @@ class depthwise_conv3d_cnhw(Operator):
         self._attrs["inputs"] = [x, w]
         if bias:
             self._attrs["inputs"].append(bias)
+        self._attrs["inputs"].append(w_idx)
         self._set_depth()
         output_shape = self._infer_shapes(x, w)
         self._extract_exec_path(x)

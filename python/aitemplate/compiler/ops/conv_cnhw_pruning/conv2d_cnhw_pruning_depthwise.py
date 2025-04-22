@@ -13,19 +13,19 @@
 #  limitations under the License.
 #
 """
-Fused conv2d_depthwise_bias_relu op.
+Fused conv2d_depthwise op.
 """
 from typing import List, Tuple
 
 from aitemplate.compiler.base import Tensor
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw import conv2d_cnhw
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning import conv2d_cnhw_pruning
 
 
 # pylint: disable=C0103
-class conv2d_cnhw_depthwise_bias_relu(conv2d_cnhw):
+class conv2d_cnhw_pruning_depthwise(conv2d_cnhw_pruning):
     """Base class of conv2d with groups."""
 
-    def __init__(self, stride, pad, dilate=1, group=1) -> None:
+    def __init__(self, stride, pad, dilate=1, group=1, pruning_ratio=0.5) -> None:
         """conv2d_depthwise constructor.
 
         Parameters
@@ -40,11 +40,11 @@ class conv2d_cnhw_depthwise_bias_relu(conv2d_cnhw):
            Number of blocked connections from input
             channels to output channels, by default 1
         """
-        super().__init__(stride, pad, dilate=dilate, group=group)
-        self._attrs["op"] = "conv2d_cnhw_depthwise_bias_relu"
+        super().__init__(stride, pad, dilate=dilate, group=group, pruning_ratio=pruning_ratio)
+        self._attrs["op"] = "conv2d_cnhw_pruning_depthwise"
 
-    def __call__(self, x: Tensor, w: Tensor, b: Tensor):
-        """Call conv2d_depthwise with tensors x, w, b
+    def __call__(self, x: Tensor, w: Tensor, w_idx: Tensor):
+        """Call conv2d_depthwise with tensors x, w
 
         Parameters
         ----------
@@ -52,15 +52,13 @@ class conv2d_cnhw_depthwise_bias_relu(conv2d_cnhw):
             in shape (N, H, W, C_in)
         w : Tensor
             in shape (C_out, K_h, K_w, 1)
-        b : Tensor
-            in shape (C_out)
 
         Returns
         -------
         List[Tensor]
             includes the output tensor in shape (N, H_out, W_out, C_out)
         """
-        self._attrs["inputs"] = [x, w, b]
+        self._attrs["inputs"] = [x, w, w_idx]
         self._set_depth()
         output_shape = self._infer_shapes(x, w)
         output = Tensor(output_shape, src_ops={self}, dtype=x._attrs["dtype"])
@@ -75,7 +73,7 @@ class conv2d_cnhw_depthwise_bias_relu(conv2d_cnhw):
         return super()._infer_shape(x, w)
 
     @staticmethod
-    def is_valid_inputs(x: Tensor, w: Tensor, b: Tensor) -> Tuple[bool, str]:
+    def is_valid_inputs(x: Tensor, w: Tensor) -> Tuple[bool, str]:
         x_shape = x._attrs["shape"]
         if len(x_shape) != 4:
             return False, f"x should be 4D: {x_shape=}"
@@ -83,16 +81,6 @@ class conv2d_cnhw_depthwise_bias_relu(conv2d_cnhw):
         w_shape = w._attrs["shape"]
         if len(w_shape) != 4:
             return False, f"w should be 4D: {w_shape=}"
-
-        b_shape = b._attrs["shape"]
-        if len(b_shape) != 1:
-            return False, f"b should be 1D: {b_shape=}"
-
-        if b_shape[0] != w_shape[0]:
-            return (
-                False,
-                f"out channels in bias does not match: {b_shape[0]=} != {w_shape[0]=}",
-            )
 
         # No need to check compatibility of x/w. This function is only used
         # for fusing conv/elementwise into conv_bias. If x and w were not compatible,

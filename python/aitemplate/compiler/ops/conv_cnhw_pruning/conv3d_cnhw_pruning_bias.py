@@ -14,20 +14,20 @@
 #
 
 """
-conv3d_cnhw with bias.
+conv3d_cnhw_pruning with bias.
 """
 from typing import List
 
 from aitemplate.compiler.base import Tensor
 
-from aitemplate.compiler.ops.conv_cnhw.conv3d_cnhw import conv3d_cnhw
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv3d_cnhw_pruning import conv3d_cnhw_pruning
 
 
-class conv3d_cnhw_bias(conv3d_cnhw):
-    r"""conv3d_cnhw_bias"""
+class conv3d_cnhw_pruning_bias(conv3d_cnhw_pruning):
+    r"""conv3d_cnhw_pruning_bias"""
 
-    def __init__(self, stride, pad, dilate=1, group=1) -> None:
-        """conv3d_cnhw constructor.
+    def __init__(self, stride, pad, dilate=1, group=1, pruning_ratio=0.5) -> None:
+        """conv3d_cnhw_pruning constructor.
 
         Parameters
         ----------
@@ -41,11 +41,11 @@ class conv3d_cnhw_bias(conv3d_cnhw):
            Number of blocked connections from input
             channels to output channels, by default 1
         """
-        super().__init__(stride, pad, dilate=dilate, group=group)
-        self._attrs["op"] = "conv3d_cnhw_bias"
+        super().__init__(stride, pad, dilate=dilate, group=group, pruning_ratio=pruning_ratio)
+        self._attrs["op"] = "conv3d_cnhw_pruning_bias"
 
-    def __call__(self, x: Tensor, w: Tensor, b: Tensor) -> List[Tensor]:
-        """Call conv3d_cnhw_bias with tensors x, w, b
+    def __call__(self, x: Tensor, w: Tensor, b: Tensor, w_idx: Tensor) -> List[Tensor]:
+        """Call conv3d_cnhw_pruning_bias with tensors x, w, b
 
         Parameters
         ----------
@@ -61,7 +61,7 @@ class conv3d_cnhw_bias(conv3d_cnhw):
         List[Tensor]
             includes the output tensor in shape (N, D_out, H_out, W_out, C_out)
         """
-        self._attrs["inputs"] = [x, w, b]
+        self._attrs["inputs"] = [x, w, b, w_idx]
         self._set_depth()
         output_shape = self._infer_shapes(x, w)
         self._extract_exec_path(x)

@@ -15,13 +15,13 @@
 """
 Fused conv2d_bias_relu op.
 """
-from aitemplate.compiler.ops.conv_cnhw.common_conv2d_cnhw_bias_activation import (
-    conv2d_cnhw_bias_activation,
+from aitemplate.compiler.ops.conv_cnhw_pruning.common_conv2d_cnhw_pruning_bias_activation import (
+    conv2d_cnhw_pruning_bias_activation,
 )
 
 
 # pylint: disable=C0103
-class conv2d_cnhw_bias_relu6(conv2d_cnhw_bias_activation):
+class conv2d_cnhw_pruning_bias_relu(conv2d_cnhw_pruning_bias_activation):
     r"""Conv2d with bias + relu.
 
     Applies a 2D convolution on input in shape (N, H, W, C_in), adds a bias in shape (C_out), performs relu and produces output in shape (N, H_out, W_out, C_out). N is batch size, H, W are the height and width of the input images in pixels, and C is the number of channels.
@@ -56,7 +56,7 @@ class conv2d_cnhw_bias_relu6(conv2d_cnhw_bias_activation):
         Result_ait = NCHW2NHWC(Result_pt)
     """
 
-    def __init__(self, stride, pad, dilate=1, group=1) -> None:
+    def __init__(self, stride, pad, dilate=1, group=1, pruning_ratio=0.5) -> None:
         """Conv2d_bias_relu constructor.
 
         Parameters
@@ -70,7 +70,7 @@ class conv2d_cnhw_bias_relu6(conv2d_cnhw_bias_activation):
         group : int, optional
             Number of input channels to process to compute one output channel, by default 1
         """
-        super().__init__("relu6", stride, pad, dilate=dilate, group=group)
+        super().__init__("relu", stride, pad, dilate=dilate, group=group, pruning_ratio=pruning_ratio)
 
     def _get_op_attributes(self):
         attr = super()._get_op_attributes()

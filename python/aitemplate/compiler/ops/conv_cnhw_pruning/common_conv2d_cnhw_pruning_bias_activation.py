@@ -13,20 +13,20 @@
 #  limitations under the License.
 #
 """
-Fused conv2d_cnhw_bias_activation op.
+Fused conv2d_cnhw_pruning_bias_activation op.
 """
 from typing import Tuple
 
 from aitemplate.compiler.base import Tensor
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw import conv2d_cnhw
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning import conv2d_cnhw_pruning
 
 
 # pylint: disable=C0103
-class conv2d_cnhw_bias_activation(conv2d_cnhw):
+class conv2d_cnhw_pruning_bias_activation(conv2d_cnhw_pruning):
     """Base class of conv2d with bias + activation."""
 
-    def __init__(self, activation, stride, pad, dilate=1, group=1) -> None:
-        """conv2d_cnhw_bias_activation constructor.
+    def __init__(self, activation, stride, pad, dilate=1, group=1, pruning_ratio=0.5) -> None:
+        """conv2d_cnhw_pruning_bias_activation constructor.
 
         Parameters
         ----------
@@ -42,12 +42,12 @@ class conv2d_cnhw_bias_activation(conv2d_cnhw):
            Number of blocked connections from input
             channels to output channels, by default 1
         """
-        super().__init__(stride, pad, dilate=dilate, group=group)
-        self._attrs["op"] = "conv2d_cnhw_bias_{act}".format(act=activation)
+        super().__init__(stride, pad, dilate=dilate, group=group, pruning_ratio=pruning_ratio)
+        self._attrs["op"] = "conv2d_cnhw_pruning_bias_{act}".format(act=activation)
         self._attrs["epilogue"] = "LinearCombinationRelu"
 
-    def __call__(self, x: Tensor, w: Tensor, b: Tensor):
-        """Call conv2d_cnhw_bias_activation with tensors x, w, b
+    def __call__(self, x: Tensor, w: Tensor, b: Tensor, w_idx: Tensor):
+        """Call conv2d_cnhw_pruning_bias_activation with tensors x, w, b
 
         Parameters
         ----------
@@ -63,7 +63,7 @@ class conv2d_cnhw_bias_activation(conv2d_cnhw):
         List[Tensor]
             includes the output tensor in shape (N, H_out, W_out, C_out)
         """
-        self._attrs["inputs"] = [x, w, b]
+        self._attrs["inputs"] = [x, w, b, w_idx]
         self._set_depth()
         output_shape = self._infer_shapes(x, w)
         output = Tensor(output_shape, src_ops={self}, dtype=x._attrs["dtype"])

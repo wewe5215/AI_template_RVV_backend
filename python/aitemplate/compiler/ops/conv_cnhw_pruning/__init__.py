@@ -16,35 +16,35 @@
 """
 Conv2d family operators.
 """
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw import conv2d_cnhw
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_bias import conv2d_cnhw_bias
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_bias_add import conv2d_cnhw_bias_add
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_bias_add_hardswish import (
-    conv2d_cnhw_bias_add_hardswish,
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning import conv2d_cnhw_pruning
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_bias import conv2d_cnhw_pruning_bias
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_bias_add import conv2d_cnhw_pruning_bias_add
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_bias_add_hardswish import (
+    conv2d_cnhw_pruning_bias_add_hardswish,
 )
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_bias_add_relu import conv2d_cnhw_bias_add_relu
-# from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_bias_few_channels import (
-#     conv2d_cnhw_bias_few_channels,
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_bias_add_relu import conv2d_cnhw_pruning_bias_add_relu
+# from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_bias_few_channels import (
+#     conv2d_cnhw_pruning_bias_few_channels,
 # )
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_bias_hardswish import conv2d_cnhw_bias_hardswish
-# from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_bias_hardswish_few_channels import (
-#     conv2d_cnhw_bias_hardswish_few_channels,
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_bias_hardswish import conv2d_cnhw_pruning_bias_hardswish
+# from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_bias_hardswish_few_channels import (
+#     conv2d_cnhw_pruning_bias_hardswish_few_channels,
 # )
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_bias_relu import conv2d_cnhw_bias_relu
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_bias_relu6 import conv2d_cnhw_bias_relu6
-# from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_bias_relu_few_channels import (
-#     conv2d_cnhw_bias_relu_few_channels,
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_bias_relu import conv2d_cnhw_pruning_bias_relu
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_bias_relu6 import conv2d_cnhw_pruning_bias_relu6
+# from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_bias_relu_few_channels import (
+#     conv2d_cnhw_pruning_bias_relu_few_channels,
 # )
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_bias_sigmoid import conv2d_cnhw_bias_sigmoid
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_depthwise import conv2d_cnhw_depthwise
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_depthwise_bias import conv2d_cnhw_depthwise_bias
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_depthwise_bias_relu import conv2d_cnhw_depthwise_bias_relu
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw_depthwise_bias_relu6 import conv2d_cnhw_depthwise_bias_relu6
-# from aitemplate.compiler.ops.conv_cnhw.conv3d_cnhw import conv3d_cnhw
-# from aitemplate.compiler.ops.conv_cnhw.conv3d_cnhw_bias import conv3d_cnhw_bias
-# from aitemplate.compiler.ops.conv_cnhw.depthwise_conv3d_cnhw import depthwise_conv3d_cnhw
-# from aitemplate.compiler.ops.conv_cnhw.transposed_conv2d_cnhw import transposed_conv2d_cnhw
-# from aitemplate.compiler.ops.conv_cnhw.transposed_conv2d_cnhw_bias import transposed_conv2d_cnhw_bias
-# from aitemplate.compiler.ops.conv_cnhw.transposed_conv2d_cnhw_bias_relu import (
-#     transposed_conv2d_cnhw_bias_relu,
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_bias_sigmoid import conv2d_cnhw_pruning_bias_sigmoid
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_depthwise import conv2d_cnhw_pruning_depthwise
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias import conv2d_cnhw_pruning_depthwise_bias
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias_relu import conv2d_cnhw_pruning_depthwise_bias_relu
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias_relu6 import conv2d_cnhw_pruning_depthwise_bias_relu6
+# from aitemplate.compiler.ops.conv_cnhw_pruning.conv3d_cnhw_pruning import conv3d_cnhw_pruning
+# from aitemplate.compiler.ops.conv_cnhw_pruning.conv3d_cnhw_pruning_bias import conv3d_cnhw_pruning_bias
+# from aitemplate.compiler.ops.conv_cnhw_pruning.depthwise_conv3d_cnhw_pruning import depthwise_conv3d_cnhw_pruning
+# from aitemplate.compiler.ops.conv_cnhw_pruning.transposed_conv2d_cnhw_pruning import transposed_conv2d_cnhw_pruning
+# from aitemplate.compiler.ops.conv_cnhw_pruning.transposed_conv2d_cnhw_pruning_bias import transposed_conv2d_cnhw_pruning_bias
+# from aitemplate.compiler.ops.conv_cnhw_pruning.transposed_conv2d_cnhw_pruning_bias_relu import (
+#     transposed_conv2d_cnhw_pruning_bias_relu,
 # )

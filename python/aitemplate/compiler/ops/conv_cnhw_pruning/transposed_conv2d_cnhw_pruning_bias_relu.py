@@ -13,13 +13,13 @@
 #  limitations under the License.
 #
 """
-Fused transposed_conv2d_cnhw_bias_relu op.
+Fused transposed_conv2d_cnhw_pruning_bias_relu op.
 """
-from aitemplate.compiler.ops.conv_cnhw.transposed_conv2d_cnhw_bias import transposed_conv2d_cnhw_bias
+from aitemplate.compiler.ops.conv_cnhw_pruning.transposed_conv2d_cnhw_pruning_bias import transposed_conv2d_cnhw_pruning_bias
 
 
 # pylint: disable=C0103
-class transposed_conv2d_cnhw_bias_relu(transposed_conv2d_cnhw_bias):
+class transposed_conv2d_cnhw_pruning_bias_relu(transposed_conv2d_cnhw_pruning_bias):
     r"""Transposed conv2d with bias + relu.
 
     Applies a 2D transposed convolution on input in shape (N, H, W, C_in), adds a bias in shape (C_out), performs relu and produces output in shape (N, H_out, W_out, C_out). N is batch size, H, W are the height and width of the input images in pixels, and C is the number of channels.
@@ -39,7 +39,7 @@ class transposed_conv2d_cnhw_bias_relu(transposed_conv2d_cnhw_bias):
         X = Tensor(shape=[N, H, W, C_in], dtype="float16", name="images", is_input=True)
         W = Tensor(shape=[C_out, K_h, K_w, C_in], dtype="float16", name="weight", is_input=True)
         B = Tensor(shape=[C_out], dtype="float16", name="bias", is_input=True)
-        OP = aitemplate.compiler.ops.transposed_conv2d_cnhw_bias_relu(stride=1, pad=1, dilate=1)
+        OP = aitemplate.compiler.ops.transposed_conv2d_cnhw_pruning_bias_relu(stride=1, pad=1, dilate=1)
         Y = OP(X, W, B)
 
 
@@ -54,8 +54,8 @@ class transposed_conv2d_cnhw_bias_relu(transposed_conv2d_cnhw_bias):
         Result = NCHW2NHWC(Result_pt)
     """
 
-    def __init__(self, stride, pad, dilate=1, group=1) -> None:
-        """transposed_conv2d_cnhw_bias_relu constructor.
+    def __init__(self, stride, pad, dilate=1, group=1, pruning_ratio=0.5) -> None:
+        """transposed_conv2d_cnhw_pruning_bias_relu constructor.
 
         Parameters
         ----------
@@ -69,6 +69,6 @@ class transposed_conv2d_cnhw_bias_relu(transposed_conv2d_cnhw_bias):
            Number of blocked connections from input
             channels to output channels, by default 1
         """
-        super().__init__(stride, pad, dilate=dilate, group=group)
-        self._attrs["op"] = "transposed_conv2d_cnhw_bias_relu"
+        super().__init__(stride, pad, dilate=dilate, group=group, pruning_ratio=pruning_ratio)
+        self._attrs["op"] = "transposed_conv2d_cnhw_pruning_bias_relu"
         self._attrs["epilogue"] = "LinearCombinationRelu"

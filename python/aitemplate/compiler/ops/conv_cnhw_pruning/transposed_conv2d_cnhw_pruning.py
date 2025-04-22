@@ -22,7 +22,7 @@ from typing import List
 import jinja2
 
 from aitemplate.compiler.base import Tensor
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw import conv2d_cnhw
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning import conv2d_cnhw_pruning
 
 from aitemplate.utils import shape_utils
 
@@ -51,7 +51,7 @@ SHAPE_FUNC_TEMPLATE = jinja2.Template(
 
 
 # pylint: disable=C0103
-class transposed_conv2d_cnhw(conv2d_cnhw):
+class transposed_conv2d_cnhw_pruning(conv2d_cnhw_pruning):
     r"""Transposed conv2d.
 
     Applies a 2D transposed convolution on input in shape (N, H, W, C_in) and produces output in shape (N, H_out, W_out, C_out). N is batch size, H, W are the height and width of the input images in pixels, and C is the number of channels.
@@ -81,7 +81,7 @@ class transposed_conv2d_cnhw(conv2d_cnhw):
 
         X = Tensor(shape=[N, H, W, C_in], dtype="float16", name="images", is_input=True)
         W = Tensor(shape=[C_out, K_h, K_w, C_in], dtype="float16", name="weight", is_input=True)
-        OP = aitemplate.compiler.ops.transposed_conv2d_cnhw(stride=1, pad=1, dilate=1)
+        OP = aitemplate.compiler.ops.transposed_conv2d_cnhw_pruning(stride=1, pad=1, dilate=1)
         Y = OP(X, W)
 
     .. highlight:: python
@@ -99,8 +99,8 @@ class transposed_conv2d_cnhw(conv2d_cnhw):
         https://www.matthewzeiler.com/mattzeiler/deconvolutionalnetworks.pdf
     """
 
-    def __init__(self, stride, pad, dilate=1, group=1) -> None:
-        """transposed_conv2d_cnhw constructor.
+    def __init__(self, stride, pad, dilate=1, group=1, pruning_ratio=0.5) -> None:
+        """transposed_conv2d_cnhw_pruning constructor.
 
         Parameters
         ----------
@@ -113,8 +113,8 @@ class transposed_conv2d_cnhw(conv2d_cnhw):
         group : int, optional
             Number of input channels to process to compute one output channel, by default 1
         """
-        super().__init__(stride, pad, dilate=dilate, group=group)
-        self._attrs["op"] = "transposed_conv2d_cnhw"
+        super().__init__(stride, pad, dilate=dilate, group=group, pruning_ratio=pruning_ratio)
+        self._attrs["op"] = "transposed_conv2d_cnhw_pruning"
         self._attrs["epilogue"] = "LinearCombination"
         self.shape_eval_template = SHAPE_FUNC_TEMPLATE
 

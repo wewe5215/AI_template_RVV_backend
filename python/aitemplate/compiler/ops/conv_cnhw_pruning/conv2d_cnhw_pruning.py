@@ -36,8 +36,8 @@ from aitemplate.compiler.base import (
     Operator,
     Tensor,
 )
-from aitemplate.compiler.ops.conv_cnhw.cache_entry import ConvQueryEntry, ConvRecordEntry
-from aitemplate.compiler.ops.conv_cnhw.conv_cnhw_common import (
+from aitemplate.compiler.ops.conv_cnhw_pruning.cache_entry import ConvQueryEntry, ConvRecordEntry
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv_cnhw_pruning_common import (
     filter_op_instances,
     generate_profiler_sources,
     get_profiler_filename,
@@ -105,7 +105,7 @@ EXEC_COND_TEMPLATE = jinja2.Template(
 )
 
 
-class conv2d_cnhw(Operator):
+class conv2d_cnhw_pruning(Operator):
     r"""
     Applies a 2D convolution on input with size (N, H, W, C_in), and produces output with size (N, H_out, W_out, C_out) where N is batch size, H, W are the height and width of the image in pixels, and C is the number of channels.
 
@@ -161,7 +161,7 @@ class conv2d_cnhw(Operator):
         https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
     """
 
-    def __init__(self, stride, pad, dilate=1, group=1) -> None:
+    def __init__(self, stride, pad, dilate=1, group=1, pruning_ratio=0.5) -> None:
         """Conv2d constructor.
 
         Parameters
@@ -183,7 +183,7 @@ class conv2d_cnhw(Operator):
             channels to output channels, by default 1
         """
         super().__init__()
-        self._attrs["op"] = "conv2d_cnhw"
+        self._attrs["op"] = "conv2d_cnhw_pruning"
         self._attrs["stride"] = stride
         self._attrs["pad"] = pad
         self._attrs["dilate"] = dilate
@@ -193,6 +193,7 @@ class conv2d_cnhw(Operator):
         self._attrs["epilogue"] = "LinearCombination"
         self._attrs["workspace"] = 0
         self._attrs["split_k"] = None
+        self._attrs["pruning_ratio"] = pruning_ratio
         self.shape_eval_template = SHAPE_FUNC_TEMPLATE
         self.shape_save_template = SHAPE_ASSIGNMENT_TEMPLATE
         self.exec_key_template = EXEC_KEY_TEMPLATE
@@ -328,7 +329,7 @@ class conv2d_cnhw(Operator):
             dtype=self._attrs["inputs"][0]._attrs["dtype"],
         )
 
-    def __call__(self, x: Tensor, w: Tensor) -> List[Tensor]:
+    def __call__(self, x: Tensor, w: Tensor, w_idx: Tensor) -> List[Tensor]:
         """Call conv2d with tensors x, w
 
         Parameters
@@ -343,7 +344,7 @@ class conv2d_cnhw(Operator):
         List[Tensor]
             includes the output tensor in shape (N, H_out, W_out, C_out)
         """
-        self._attrs["inputs"] = [x, w]
+        self._attrs["inputs"] = [x, w, w_idx]
         self._set_depth()
         output_shape = self._infer_shapes(x, w)
         self._extract_exec_path(x)

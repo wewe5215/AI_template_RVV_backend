@@ -13,18 +13,18 @@
 #  limitations under the License.
 #
 """
-Fused conv2d_bias_hardswish op.
+Fused conv2d_bias_sigmoid op.
 """
-from aitemplate.compiler.ops.conv_cnhw.common_conv2d_cnhw_bias_activation import (
-    conv2d_cnhw_bias_activation,
+from aitemplate.compiler.ops.conv_cnhw_pruning.common_conv2d_cnhw_pruning_bias_activation import (
+    conv2d_cnhw_pruning_bias_activation,
 )
 
 
 # pylint: disable=C0103
-class conv2d_cnhw_bias_hardswish(conv2d_cnhw_bias_activation):
-    r"""Conv2d with bias + hardswish.
+class conv2d_cnhw_pruning_bias_sigmoid(conv2d_cnhw_pruning_bias_activation):
+    r"""Conv2d with bias + sigmoid.
 
-    Applies a 2D convolution on input in shape (N, H, W, C_in), adds a bias in shape (C_out), performs hardswish and produces output in shape (N, H_out, W_out, C_out). N is batch size, H, W are the height and width of the input images in pixels, and C is the number of channels.
+    Applies a 2D convolution on input in shape (N, H, W, C_in), adds a bias in shape (C_out), performs sigmoid and produces output in shape (N, H_out, W_out, C_out). N is batch size, H, W are the height and width of the input images in pixels, and C is the number of channels.
 
     Args:
         input: input tensor of shape :math:`(N , H , W, \text{in\_channels})`
@@ -41,7 +41,7 @@ class conv2d_cnhw_bias_hardswish(conv2d_cnhw_bias_activation):
         X = Tensor(shape=[N, H, W, C_in], dtype="float16", name="images", is_input=True)
         W = Tensor(shape=[C_out, K_h, K_w, C_in], dtype="float16", name="weight", is_input=True)
         B = Tensor(shape=[C_out], dtype="float16", name="weight", is_input=True)
-        OP = aitemplate.compiler.ops.conv2d_bias_hardswish(stride=1, pad=1, dilate=1)
+        OP = aitemplate.compiler.ops.conv2d_bias_sigmoid(stride=1, pad=1, dilate=1)
         Result_ait = OP(X, W, B)
 
     .. highlight:: python
@@ -52,12 +52,12 @@ class conv2d_cnhw_bias_hardswish(conv2d_cnhw_bias_activation):
         B_pt = NHWC2NCHW(B_ait)
 
         Y = torch.nn.functional.conv2d(X_pt, W_pt, bias=B_pt)
-        Result_pt = torch.nn.functional.hardswish(Y)
+        Result_pt = torch.sigmoid(Y)
         Result_ait = NCHW2NHWC(Result_pt)
     """
 
-    def __init__(self, stride, pad, dilate=1, group=1) -> None:
-        """Conv2d_bias_hardswish constructor.
+    def __init__(self, stride, pad, dilate=1, group=1, pruning_ratio=0.5) -> None:
+        """Conv2d_bias_sigmoid constructor.
 
         Parameters
         ----------
@@ -70,8 +70,8 @@ class conv2d_cnhw_bias_hardswish(conv2d_cnhw_bias_activation):
         group : int, optional
             Number of input channels to process to compute one output channel, by default 1
         """
-        super().__init__("hardswish", stride, pad, dilate=dilate, group=group)
-        self._attrs["epilogue"] = "LinearCombinationHardSwish"
+        super().__init__("sigmoid", stride, pad, dilate=dilate, group=group)
+        self._attrs["epilogue"] = "LinearCombinationSigmoid"
 
     def _get_op_attributes(self):
         attr = super()._get_op_attributes()

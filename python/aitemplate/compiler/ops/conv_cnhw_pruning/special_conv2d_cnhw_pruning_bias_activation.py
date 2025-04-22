@@ -13,22 +13,22 @@
 #  limitations under the License.
 #
 """
-Fused special_conv2d_cnhw_bias_activation op.
+Fused special_conv2d_cnhw_pruning_bias_activation op.
 """
 from aitemplate.compiler.base import Tensor
-from aitemplate.compiler.ops.conv_cnhw.conv2d_cnhw import conv2d_cnhw
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning import conv2d_cnhw_pruning
 from aitemplate.compiler.ops.padding import nhwc3to4, nhwc3to8
 
 
 # pylint: disable=C0103
-class special_conv2d_cnhw_bias_activation(conv2d_cnhw):
-    """Special_conv2d_cnhw_bias_activation.
+class special_conv2d_cnhw_pruning_bias_activation(conv2d_cnhw_pruning):
+    """Special_conv2d_cnhw_pruning_bias_activation.
 
-    This operator equals to conv2d_cnhw_bias_activation but has improved performance for in_channels < 8.
+    This operator equals to conv2d_cnhw_pruning_bias_activation but has improved performance for in_channels < 8.
     """
 
     def __init__(self, activation, stride, pad, dilate=1, auto_padding=True) -> None:
-        """Special_conv2d_cnhw_bias_activation constructor.
+        """Special_conv2d_cnhw_pruning_bias_activation constructor.
 
         Parameters
         ----------
@@ -44,7 +44,7 @@ class special_conv2d_cnhw_bias_activation(conv2d_cnhw):
             Number of input channels to process to compute one output channel, by default 1
         """
         super().__init__(stride, pad, dilate=dilate)
-        self._attrs["op"] = "conv2d_cnhw_bias_{act}_few_channels".format(act=activation)
+        self._attrs["op"] = "conv2d_cnhw_pruning_bias_{act}_few_channels".format(act=activation)
         if activation == "relu":
             self._attrs["epilogue"] = "LinearCombinationRelu"
         elif activation == "hardswish":
@@ -55,8 +55,8 @@ class special_conv2d_cnhw_bias_activation(conv2d_cnhw):
             raise NotImplementedError
         self._auto_padding = auto_padding
 
-    def __call__(self, x: Tensor, w: Tensor, b: Tensor):
-        """Call special_conv2d_cnhw_bias_activation with tensors x, w, b.
+    def __call__(self, x: Tensor, w: Tensor, b: Tensor, w_idx: Tensor):
+        """Call special_conv2d_cnhw_pruning_bias_activation with tensors x, w, b.
 
         Parameters
         ----------
@@ -78,7 +78,7 @@ class special_conv2d_cnhw_bias_activation(conv2d_cnhw):
                 x = nhwc3to4()(x)
             elif last_dim in range(5, 8):
                 x = nhwc3to8()(x)
-        self._attrs["inputs"] = [x, w, b]
+        self._attrs["inputs"] = [x, w, b, w_idx]
         self._set_depth()
         output_shape = self._infer_shapes(x, w)
         output = Tensor(output_shape, src_ops={self}, dtype=x._attrs["dtype"])

@@ -13,21 +13,21 @@
 #  limitations under the License.
 #
 """
-Fused transposed_conv2d_cnhw_bias op.
+Fused transposed_conv2d_cnhw_pruning_bias op.
 """
 
 from typing import Tuple
 
 from aitemplate.compiler.base import Tensor
 
-from aitemplate.compiler.ops.conv_cnhw.common_conv2d_cnhw_bias_activation import (
-    conv2d_cnhw_bias_activation,
+from aitemplate.compiler.ops.conv_cnhw_pruning.common_conv2d_cnhw_pruning_bias_activation import (
+    conv2d_cnhw_pruning_bias_activation,
 )
-from aitemplate.compiler.ops.conv_cnhw.transposed_conv2d_cnhw import transposed_conv2d_cnhw
+from aitemplate.compiler.ops.conv_cnhw_pruning.transposed_conv2d_cnhw_pruning import transposed_conv2d_cnhw_pruning
 
 
 # pylint: disable=C0103
-class transposed_conv2d_cnhw_bias(transposed_conv2d_cnhw):
+class transposed_conv2d_cnhw_pruning_bias(transposed_conv2d_cnhw_pruning):
     r"""Transposed conv2d with bias.
 
     Applies a 2D transposed convolution on input in shape (N, H, W, C_in), adds a bias in shape (C_out) and produces output in shape (N, H_out, W_out, C_out). N is batch size, H, W are the height and width of the input images in pixels, and C is the number of channels.
@@ -47,7 +47,7 @@ class transposed_conv2d_cnhw_bias(transposed_conv2d_cnhw):
         X = Tensor(shape=[N, H, W, C_in], dtype="float16", name="images", is_input=True)
         W = Tensor(shape=[C_out, K_h, K_w, C_in], dtype="float16", name="weight", is_input=True)
         B = Tensor(shape=[C_out], dtype="float16", name="bias", is_input=True)
-        OP = aitemplate.compiler.ops.transposed_conv2d_cnhw_bias(stride=1, pad=1, dilate=1)
+        OP = aitemplate.compiler.ops.transposed_conv2d_cnhw_pruning_bias(stride=1, pad=1, dilate=1)
         Y = OP(X, W, B)
 
 
@@ -61,8 +61,8 @@ class transposed_conv2d_cnhw_bias(transposed_conv2d_cnhw):
         Y = nchw2nhwc(Y_pt)
     """
 
-    def __init__(self, stride, pad, dilate=1, group=1) -> None:
-        """transposed_conv2d_cnhw_bias constructor.
+    def __init__(self, stride, pad, dilate=1, group=1, pruning_ratio=0.5) -> None:
+        """transposed_conv2d_cnhw_pruning_bias constructor.
 
         Parameters
         ----------
@@ -76,12 +76,12 @@ class transposed_conv2d_cnhw_bias(transposed_conv2d_cnhw):
            Number of blocked connections from input
             channels to output channels, by default 1
         """
-        super().__init__(stride, pad, dilate=dilate, group=group)
-        self._attrs["op"] = "transposed_conv2d_cnhw_bias"
+        super().__init__(stride, pad, dilate=dilate, group=group, pruning_ratio=pruning_ratio)
+        self._attrs["op"] = "transposed_conv2d_cnhw_pruning_bias"
         self._attrs["epilogue"] = "LinearCombination"
 
-    def __call__(self, x: Tensor, w: Tensor, b: Tensor):
-        """Call transposed_conv2d_cnhw_bias with tensors x, w, b.
+    def __call__(self, x: Tensor, w: Tensor, b: Tensor, w_idx: Tensor):
+        """Call transposed_conv2d_cnhw_pruning_bias with tensors x, w, b.
 
         Parameters
         ----------
@@ -97,7 +97,7 @@ class transposed_conv2d_cnhw_bias(transposed_conv2d_cnhw):
         List[Tensor]
             includes the output tensor in shape (N, H_out, W_out, C_out)
         """
-        self._attrs["inputs"] = [x, w, b]
+        self._attrs["inputs"] = [x, w, b, w_idx]
         self._set_depth()
         output_shape = self._infer_shapes(x, w)
         output = Tensor(output_shape, src_ops={self}, dtype=x._attrs["dtype"])
@@ -108,4 +108,4 @@ class transposed_conv2d_cnhw_bias(transposed_conv2d_cnhw):
 
     @staticmethod
     def is_valid_inputs(x: Tensor, w: Tensor, b: Tensor) -> Tuple[bool, str]:
-        return conv2d_cnhw_bias_activation.is_valid_inputs(x, w, b)
+        return conv2d_cnhw_pruning_bias_activation.is_valid_inputs(x, w, b)

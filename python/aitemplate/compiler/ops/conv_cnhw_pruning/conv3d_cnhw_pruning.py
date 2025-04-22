@@ -14,7 +14,7 @@
 #
 
 """
-Base class for conv3d_cnhw.
+Base class for conv3d_cnhw_pruning.
 """
 import itertools
 import logging
@@ -37,8 +37,8 @@ from aitemplate.compiler.base import (
     Operator,
     Tensor,
 )
-from aitemplate.compiler.ops.conv_cnhw.cache_entry import Conv3dQueryEntry, Conv3dRecordEntry
-from aitemplate.compiler.ops.conv_cnhw.conv_cnhw_common import (
+from aitemplate.compiler.ops.conv_cnhw_pruning.cache_entry import Conv3dQueryEntry, Conv3dRecordEntry
+from aitemplate.compiler.ops.conv_cnhw_pruning.conv_cnhw_pruning_common import (
     filter_op_instances,
     generate_profiler_sources,
     get_profiler_filename,
@@ -115,11 +115,11 @@ EXEC_COND_TEMPLATE = jinja2.Template(
 )
 
 
-class conv3d_cnhw(Operator):
-    r"""conv3d_cnhw"""
+class conv3d_cnhw_pruning(Operator):
+    r"""conv3d_cnhw_pruning"""
 
-    def __init__(self, stride, pad, dilate=1, group=1) -> None:
-        """conv3d_cnhw constructor.
+    def __init__(self, stride, pad, dilate=1, group=1, pruning_ratio=0.5) -> None:
+        """conv3d_cnhw_pruning constructor.
 
         Parameters
         ----------
@@ -134,7 +134,7 @@ class conv3d_cnhw(Operator):
             channels to output channels, by default 1
         """
         super().__init__()
-        self._attrs["op"] = "conv3d_cnhw"
+        self._attrs["op"] = "conv3d_cnhw_pruning"
         self._attrs["stride"] = stride
         if isinstance(stride, int):
             self._attrs["stride"] = (stride, stride, stride)
@@ -158,7 +158,7 @@ class conv3d_cnhw(Operator):
 
     def _infer_shape(self, x: List[int], w: List[int]) -> List[int]:
         if x[4] != w[4] * self._attrs["group"]:
-            raise RuntimeError("X/W Shape mismatch for conv3d_cnhw")
+            raise RuntimeError("X/W Shape mismatch for conv3d_cnhw_pruning")
         eval_func = self.shape_eval_template.render(
             indent="",
             dtype="",
@@ -272,7 +272,7 @@ class conv3d_cnhw(Operator):
             self._attrs["exec_path"][key] = ""
 
     def _signature(self):
-        signature = "conv3d_cnhw: K=[{kd}, {kh}, {kw}], S=[{sd}, {sh}, {sw}], P=[{pd}, {ph}, {pw}], CO=[{co}]".format(
+        signature = "conv3d_cnhw_pruning: K=[{kd}, {kh}, {kw}], S=[{sd}, {sh}, {sw}], P=[{pd}, {ph}, {pw}], CO=[{co}]".format(
             kd=self._attrs["KD"],
             kh=self._attrs["KH"],
             kw=self._attrs["KW"],
@@ -295,8 +295,8 @@ class conv3d_cnhw(Operator):
             dtype=self._attrs["inputs"][0]._attrs["dtype"],
         )
 
-    def __call__(self, x: Tensor, w: Tensor) -> List[Tensor]:
-        """Call conv3d_cnhw with tensors x, w
+    def __call__(self, x: Tensor, w: Tensor, w_idx: Tensor) -> List[Tensor]:
+        """Call conv3d_cnhw_pruning with tensors x, w
 
         Parameters
         ----------
@@ -310,7 +310,7 @@ class conv3d_cnhw(Operator):
         List[Tensor]
             includes the output tensor in shape (N, D_out, H_out, W_out, C_out)
         """
-        self._attrs["inputs"] = [x, w]
+        self._attrs["inputs"] = [x, w, w_idx]
         self._set_depth()
         output_shape = self._infer_shapes(x, w)
         self._extract_exec_path(x)
@@ -392,7 +392,7 @@ class conv3d_cnhw(Operator):
                     split_k=split_k,
                     exec_entry_sha1=exec_entry_sha1,
                 )
-                cache_value = target.query_profile_cache("conv3d_cnhw", query.__dict__)
+                cache_value = target.query_profile_cache("conv3d_cnhw_pruning", query.__dict__)
                 if cache_value is not None and not target.force_profile():
                     _LOGGER.info(
                         f'Load profiling result for {self._attrs["name"]} '
@@ -438,7 +438,7 @@ class conv3d_cnhw(Operator):
             )
             return generate_profiler_sources(
                 func_attrs=self._attrs,
-                op_class="conv3d_cnhw",
+                op_class="conv3d_cnhw_pruning",
                 workdir=workdir,
                 shape_template=self.shape_eval_template,
             )
@@ -505,7 +505,7 @@ class conv3d_cnhw(Operator):
             split_k=split_k,
             exec_entry_sha1=exec_entry_sha1,
         )
-        cache_value = target.query_profile_cache("conv3d_cnhw", query.__dict__)
+        cache_value = target.query_profile_cache("conv3d_cnhw_pruning", query.__dict__)
         if cache_value is not None and not target.force_profile():
             _LOGGER.info("Load profiling result from cache.")
             return cache_value
@@ -524,7 +524,7 @@ class conv3d_cnhw(Operator):
                 "To bypass, you need to make it available in the db table.",
             )
 
-        profiler_filename = get_profiler_filename(self._attrs, "conv3d_cnhw")
+        profiler_filename = get_profiler_filename(self._attrs, "conv3d_cnhw_pruning")
         runner = backend.profiler_runner.Runner(devices, self._attrs["name"])
         x_shape = self._invert_exec_key(exec_key)
         command = self._gen_profile_cmd(profiler_prefix, profiler_filename, x_shape)
@@ -571,7 +571,7 @@ class conv3d_cnhw(Operator):
             workspace=workspace,
             split_k=split_k,  # todo add into profile
         )
-        Target.current().insert_profile_cache("conv3d_cnhw", cache_record.__dict__)
+        Target.current().insert_profile_cache("conv3d_cnhw_pruning", cache_record.__dict__)
         return (best_algo, workspace)
 
     def _has_dynamic_input_dims(self):
@@ -594,7 +594,7 @@ class conv3d_cnhw(Operator):
         if self._has_dynamic_input_dims():
             if dynamic_profiling_strategy != DynamicProfileStrategy.HINTS:
                 raise NotImplementedError(
-                    "conv3d_cnhw only supports HINTS dynamic profiling strategy for now! Current strategy: {}".format(
+                    "conv3d_cnhw_pruning only supports HINTS dynamic profiling strategy for now! Current strategy: {}".format(
                         dynamic_profiling_strategy
                     )
                 )
@@ -719,7 +719,7 @@ class conv3d_cnhw(Operator):
 
                 # run the profiler binary with all ops on the mid_shape
                 # and fetch the results only for the lb_algo and ub_algo
-                profiler_filename = get_profiler_filename(self._attrs, "conv3d_cnhw")
+                profiler_filename = get_profiler_filename(self._attrs, "conv3d_cnhw_pruning")
                 profiler_cmd = self._gen_profile_cmd(
                     profiler_prefix, profiler_filename, mid_shape
                 )

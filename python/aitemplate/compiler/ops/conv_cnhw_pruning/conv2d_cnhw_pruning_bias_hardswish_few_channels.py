@@ -13,23 +13,23 @@
 #  limitations under the License.
 #
 """
-Fused conv2d_bias_relu_few_channels op.
+Fused conv2d_bias_hardswish_few_channels op.
 """
-from aitemplate.compiler.ops.conv_cnhw.special_conv2d_cnhw_bias_activation import (
-    special_conv2d_cnhw_bias_activation,
+from aitemplate.compiler.ops.conv_cnhw_pruning.special_conv2d_cnhw_pruning_bias_activation import (
+    special_conv2d_cnhw_pruning_bias_activation,
 )
 
 
 # pylint: disable=C0103
-class conv2d_cnhw_bias_relu_few_channels(special_conv2d_cnhw_bias_activation):
-    """conv2d_bias_relu_few_channels.
+class conv2d_cnhw_pruning_bias_hardswish_few_channels(special_conv2d_cnhw_pruning_bias_activation):
+    """conv2d_bias_hardswish_few_channels.
 
-    This operator equals to conv2d_bias_relu but has imporved performance for in_channels < 8.
+    This operator equals to conv2d_bias_hardswish but has imporved performance for in_channels < 8.
     """
 
     def __init__(self, stride, pad, dilate=1, auto_padding=True) -> None:
         """Initializes conv2d_bias_relu_few_channels"""
-        super().__init__("relu", stride, pad, dilate, auto_padding)
+        super().__init__("hardswish", stride, pad, dilate, auto_padding)
 
     def _get_op_attributes(self):
         attr = super()._get_op_attributes()
