@@ -179,6 +179,18 @@ class Conv2dKind(enum.Enum):
     Conv2dBiasReluAdd = auto()
     Conv2dBiasRelu6Add = auto()
     Conv2dBiasSigmoid = auto()
+
+    Conv2dPruning = auto()
+    Conv2dPruningBias = auto()
+    Conv2dPruningBiasAdd = auto()
+    Conv2dPruningBiasRelu = auto()
+    Conv2dPruningBiasRelu6 = auto()
+    Conv2dPruningBiasAddRelu = auto()
+    Conv2dPruningBiasAddRelu6 = auto()
+    Conv2dPruningBiasReluAdd = auto()
+    Conv2dPruningBiasRelu6Add = auto()
+    Conv2dPruningBiasSigmoid = auto()
+
     GroupConv2dBiasRelu = auto()
     GroupConv2dBiasRelu6 = auto()
     TransposedConv2d = auto()
@@ -210,6 +222,18 @@ Conv2dKindNames = {
     Conv2dKind.Conv2dBiasReluAdd: "conv2d_bias_relu_add",
     Conv2dKind.Conv2dBiasRelu6Add: "conv2d_bias_relu6_add",
     Conv2dKind.Conv2dBiasSigmoid: "conv2d_bias_sigmoid",
+
+    Conv2dKind.Conv2dPruning: "conv2d_pruning",
+    Conv2dKind.Conv2dPruningBias: "conv2d_pruning_bias",
+    Conv2dKind.Conv2dPruningBiasAdd: "conv2d_pruning_bias_add",
+    Conv2dKind.Conv2dPruningBiasRelu: "conv2d_pruning_bias_relu",
+    Conv2dKind.Conv2dPruningBiasRelu6: "conv2d_pruning_bias_relu6",
+    Conv2dKind.Conv2dPruningBiasAddRelu: "conv2d_pruning_bias_add_relu",
+    Conv2dKind.Conv2dPruningBiasAddRelu6: "conv2d_pruning_bias_add_relu6",
+    Conv2dKind.Conv2dPruningBiasReluAdd: "conv2d_pruning_bias_relu_add",
+    Conv2dKind.Conv2dPruningBiasRelu6Add: "conv2d_pruning_bias_relu6_add",
+    Conv2dKind.Conv2dPruningBiasSigmoid: "conv2d_pruning_bias_sigmoid",
+
     Conv2dKind.GroupConv2dBiasRelu: "group_conv2d_bias_relu",
     Conv2dKind.GroupConv2dBiasRelu6: "group_conv2d_bias_relu6",
     Conv2dKind.TransposedConv2d: "transposed_conv2d",

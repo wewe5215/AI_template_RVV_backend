@@ -16,23 +16,24 @@
 """
 rvv conv2d module init
 """
-from aitemplate.backend.rvv.conv2d_cnhw import (
-    conv2d_cnhw,
-    conv2d_cnhw_bias,
-    conv2d_cnhw_bias_add,
-    conv2d_cnhw_bias_add_hardswish,
-    conv2d_cnhw_bias_add_relu,
-    # conv2d_cnhw_bias_few_channels,
-    conv2d_cnhw_bias_hardswish,
-    # conv2d_cnhw_bias_hardswish_few_channels,
-    conv2d_cnhw_bias_relu,
-    conv2d_cnhw_bias_relu6,
-    # conv2d_cnhw_bias_relu_few_channels,
-    conv2d_cnhw_bias_sigmoid,
-    conv2d_cnhw_depthwise,
-    conv2d_cnhw_depthwise_bias,
-    conv2d_cnhw_depthwise_bias_relu,
-    conv2d_cnhw_depthwise_bias_relu6,
-    # transposed_conv2d_cnhw,
-    # transposed_conv2d_cnhw_bias,
+from aitemplate.backend.rvv.conv2d_cnhw_pruning import (
+    conv2d_cnhw_pruning,
+    conv2d_cnhw_pruning_bias,
+    conv2d_cnhw_pruning_bias_add,
+    conv2d_cnhw_pruning_bias_add_hardswish,
+    conv2d_cnhw_pruning_bias_add_relu,
+    # conv2d_cnhw_pruning_bias_few_channels,
+    conv2d_cnhw_pruning_bias_hardswish,
+    # conv2d_cnhw_pruning_bias_hardswish_few_channels,
+    conv2d_cnhw_pruning_bias_relu,
+    conv2d_cnhw_pruning_bias_relu6,
+    # conv2d_cnhw_pruning_bias_relu_few_channels,
+    conv2d_cnhw_pruning_bias_sigmoid,
+    # depthwise convolution with pruning is not supported
+    # conv2d_cnhw_pruning_depthwise,
+    # conv2d_cnhw_pruning_depthwise_bias,
+    # conv2d_cnhw_pruning_depthwise_bias_relu,
+    # conv2d_cnhw_pruning_depthwise_bias_relu6,
+    # transposed_conv2d_cnhw_pruning,
+    # transposed_conv2d_cnhw_pruning_bias,
 )

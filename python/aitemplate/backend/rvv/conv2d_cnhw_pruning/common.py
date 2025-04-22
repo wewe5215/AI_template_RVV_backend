@@ -61,9 +61,13 @@ void {{function_name}} (
     void* out_ptr,
 {% if is_bias %}
     void* bias_ptr,
+    void* weight_indice_ptr,
 {% elif is_bias_add %}
     void* bias_ptr,
+    void* weight_indice_ptr,
     void* res_ptr,
+{% else %}
+    void* weight_indice_ptr,
 {% endif %}
     uint8_t* workspace,
     int64_t* batch,
@@ -82,6 +86,7 @@ void {{function_name}} (
     int stridew,
     int dilationw,
     int padw,
+    float* pruning_ratio,
     pthreadpool* pthreadpool_
   ) {
 
@@ -210,10 +215,12 @@ int benchmark_{{function_name}} (
   int stridew,
   int dilationw,
   int padw,
+  float pruning_ratio,
   uint8_t* global_workspace_
 ) {
   Ptr in_data = RAII_DeviceMalloc(NI*HI*WI*CI*2);
   Ptr weight_data = RAII_DeviceMalloc(CO*KH*KW*CI*2);
+  Ptr weight_indice_data = RAII_DeviceMalloc((CO >> 3)*KH*KW*CI*pruning_ratio*2);
 {% if is_bias %}
   Ptr bias_data = RAII_DeviceMalloc(CO*2);
 {% elif is_bias_add %}
@@ -234,6 +241,7 @@ int benchmark_{{function_name}} (
 {% elif is_f32 %}
   auto* input = static_cast<float*>(in_data.get());
   auto* weight = static_cast<float*>(weight_data.get());
+  auto* weight_indice = static_cast<uint16_t*>(weight_indice_data.get());
   auto* output = static_cast<float*>(out_data.get());
     {% if is_bias %}
   auto* bias = static_cast<float*>(bias_data.get());
@@ -341,8 +349,12 @@ void {{func_name}}(
   void*,
 {% if is_bias %}
   void*,
+  void*,
 {% elif is_bias_add %}
   void*,
+  void*,
+  void*,
+{% else %}
   void*,
 {% endif %}
   uint8_t*,
@@ -362,6 +374,7 @@ void {{func_name}}(
   int,
   int,
   int,
+  float,
   pthreadpool*
 );
 """
@@ -375,9 +388,13 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}    {{out_ptr}},
 {% if is_bias %}
 {{indent}}    {{bias_ptr}},
+{{indent}}    {{weight_indice_ptr}},
 {% elif is_bias_add %}
 {{indent}}    {{bias_ptr}},
+{{indent}}    {{weight_indice_ptr}},
 {{indent}}    {{res_ptr}},
+{% else %}
+{{indent}}    {{weight_indice_ptr}},
 {% endif %}
 {{indent}}    global_workspace_,
 {{indent}}    {{p_batch}},
@@ -396,6 +413,7 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}    {{stridew}},
 {{indent}}    {{dilationw}},
 {{indent}}    {{padw}},
+{{indent}}    {{pruning_ratio}},
 {{indent}}    threadpool_.get()
 {{indent}});
 """
@@ -456,11 +474,17 @@ def gen_profiler(
     if is_bias:
         func_call_extra_args = {
             "bias_ptr": "(void*)bias",
+            "weight_indice_ptr": "(void*)weight_indice",
         }
     elif is_bias_add:
         func_call_extra_args = {
             "bias_ptr": "(void*)bias",
+            "weight_indice_ptr": "(void*)weight_indice",
             "res_ptr": "(void*)res",
+        }
+    else:
+        func_call_extra_args = {
+            "weight_indice_ptr": "(void*)weight_indice",
         }
     benchmark_decls = []
     benchmark_instances = []
@@ -705,15 +729,24 @@ def gen_function_call(
     func_call_extra_args = {}
     if is_bias:
         b = func_attrs["inputs"][2]
+        w_idx = func_attrs["inputs"][3]
         func_call_extra_args = {
             "bias_ptr": b._attrs["name"],
+            "weight_indice_ptr": w_idx._attrs["name"],
         }
     elif is_bias_add:
         b = func_attrs["inputs"][2]
-        r = func_attrs["inputs"][3]
+        w_idx = func_attrs["inputs"][3]
+        r = func_attrs["inputs"][4]
         func_call_extra_args = {
             "bias_ptr": b._attrs["name"],
+            "weight_indice_ptr": w_idx._attrs["name"],
             "res_ptr": r._attrs["name"],
+        }
+    else:
+        w_idx = func_attrs["inputs"][2]
+        func_call_extra_args = {
+            "weight_indice_ptr": w_idx._attrs["name"],
         }
 
     out_ch = wshape[-1]._attrs["name"] if is_transpose else wshape[0]._attrs["name"]
@@ -765,6 +798,7 @@ def gen_function_call(
             if isinstance(func_attrs["pad"], int)
             else func_attrs["pad"][1]
         ),
+        pruning_ratio=func_attrs["pruning_ratio"],
         indent=indent,
     )
 

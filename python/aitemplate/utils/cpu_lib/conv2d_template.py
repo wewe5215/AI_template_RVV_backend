@@ -44,6 +44,45 @@ template = jinja2.Template(
 {{indent}}CHECK_EQ(xnn_run_operator(op_conv, /*threadpool=*/pthreadpool_), xnn_status_success);
             """
         )
+template_with_pruning = jinja2.Template(
+            """
+{{indent}}//{{name}}
+{{indent}}xnn_operator_t op_conv = nullptr;
+{{indent}}const xnn_status status = xnn_create_xnn_create_input_T_pruned_convolution2d_nhwc_f32_x2v(
+{{indent}}  PH, PW, PH, PW, i32_kernel_h, i32_kernel_w,
+{{indent}}  SH, SW, DH, DW, 1, CI,
+{{indent}}  CO, 1 * CI, 1 * CO, ({{DataName}}*)(weight_ptr), ({{DataName}}*)(bias_ptr),
+{% if is_relu %}
+{{indent}}  0, std::numeric_limits<{{DataName}}>::infinity(),
+{% elif is_relu6 %}
+{{indent}}  0, 6,
+{% else %}
+{{indent}}  -std::numeric_limits<{{DataName}}>::infinity(), std::numeric_limits<{{DataName}}>::infinity(),
+{% endif %}
+{{indent}}  /*flags=*/0, nullptr, nullptr, &op_conv);
+{{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op_conv(op_conv, xnn_delete_operator);
+{{indent}}CHECK_EQ(status, xnn_status_success);
+{{indent}}CHECK_NE(op_conv, nullptr);
+{{indent}}size_t workspace_size = SIZE_MAX;
+{{indent}}size_t workspace_alignment = SIZE_MAX;
+{{indent}}CHECK_EQ(
+{{indent}}  xnn_reshape_input_T_pruned_convolution2d_nhwc_f32(
+{{indent}}    op_conv, i32_batch, i32_in_h, i32_in_w,
+{{indent}}    &workspace_size, &workspace_alignment,
+{{indent}}    /*output_height_out=*/nullptr, /*output_width_out=*/nullptr,
+{{indent}}    /*threadpool=*/pthreadpool_, pruning_ratio), xnn_status_success);
+{{indent}}CHECK_EQ(workspace_size, 0);
+{{indent}}CHECK_EQ(workspace_alignment, 1);
+{{indent}}CHECK_EQ(xnn_setup_{{Conv2DSpecialization}}(
+{{indent}}    op_conv, 
+{{indent}}    /*workspace=*/nullptr, 
+{{indent}}    ({{DataName}}*)(in_ptr), 
+{{indent}}    ({{DataName}}*)(out_ptr), 
+{{indent}}    (uint16_t*)(pruned_weight_indice),
+{{indent}}    /*lmul=*/2), xnn_status_success);
+{{indent}}CHECK_EQ(xnn_run_operator(op_conv, /*threadpool=*/pthreadpool_), xnn_status_success);
+            """
+        )
 template_depthwise = jinja2.Template(
             """
 {{indent}}//{{name}}

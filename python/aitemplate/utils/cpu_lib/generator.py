@@ -71,8 +71,38 @@ def CreateConv2dFwdOperator(manifest, operation_kind, out_element_op, out_data_o
         operations.append(new_operation)
 
     return operations
+def CreateConv2dPruningFwdOperator(manifest, operation_kind, out_element_op, out_data_op=""):
+    in_element_op = library.TensorOperation.PassThrough
+    conv2d_spec = conv.Conv2DSpecialization.ConvCNHWF32,
 
+    operations = []
+    data_type = library.DataType.f32
+    layout_type = library.LayoutType.CNHW
 
+    a_element_desc = library.TensorDesc(
+        data_type, layout_type
+    )
+    b_element_desc = library.TensorDesc(
+        data_type, layout_type
+    )
+    c_element_desc = library.TensorDesc(
+        data_type, layout_type
+    )
+    new_operation = conv.Conv2DOperation(
+        operation_kind=operation_kind,
+        extra_kind=out_element_op,
+        A=a_element_desc,
+        B=b_element_desc,
+        C=c_element_desc,
+        a_elem_op=in_element_op,
+        b_elem_op=in_element_op,
+        epilogue_functor=out_element_op,
+        conv2d_specialization=conv2d_spec,
+    )
+    manifest.append(new_operation)
+    operations.append(new_operation)
+
+    return operations
 # Gemm Fwd operations (Layout : RCR)
 def CreateGemmFwdOperator(manifest, operation_kind, out_element_op, out_data_op=""):
     in_element_op = library.TensorOperation.PassThrough
@@ -267,6 +297,60 @@ def GenerateTensorOp(manifest):
         manifest,
         library.Conv2dKind.Conv2dDepthwiseBiasRelu6Transpose,
         library.TensorOperation.Transpose,
+    )
+
+    CreateConv2dPruningFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dPruning,
+        library.TensorOperation.PassThrough,
+    )
+
+    CreateConv2dPruningFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dPruningBias,
+        library.TensorOperation.PassThrough,
+    )
+
+    CreateConv2dPruningFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dPruningBiasAdd,
+        library.TensorOperation.Add,
+    )
+
+    CreateConv2dPruningFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dPruningBiasRelu,
+        library.TensorOperation.PassThrough,
+    )
+
+    CreateConv2dPruningFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dPruningBiasRelu6,
+        library.TensorOperation.PassThrough,
+    )
+
+    CreateConv2dPruningFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dPruningBiasAddRelu,
+        library.TensorOperation.Add,
+    )
+
+    CreateConv2dPruningFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dPruningBiasAddRelu6,
+        library.TensorOperation.Add,
+    )
+
+    CreateConv2dPruningFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dPruningBiasReluAdd,
+        library.TensorOperation.Add,
+    )
+
+    CreateConv2dPruningFwdOperator(
+        manifest,
+        library.Conv2dKind.Conv2dPruningBiasRelu6Add,
+        library.TensorOperation.Add,
     )
     # # Conv2dBiasSigmoid
     # CreateConv2dFwdOperator(

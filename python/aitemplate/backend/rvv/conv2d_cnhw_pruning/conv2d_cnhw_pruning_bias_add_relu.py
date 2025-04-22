@@ -13,83 +13,91 @@
 #  limitations under the License.
 #
 """
-transposed conv2d op codegen
+conv2d bias add relu codegen
 """
 from aitemplate.backend import registry
-from aitemplate.backend.rvv.conv2d_cnhw import common, common_transposed_conv2d as ctc
+from aitemplate.backend.rvv.conv2d_cnhw_pruning import (
+    common,
+    common_conv2d_cnhw_pruning_bias_add_activation as cbaa,
+)
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
-@registry.reg("rvv.transposed_conv2d_cnhw.config")
-def transposed_conv2d_config(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_relu.config")
+def conv2d_bias_add_relu_config(
     func_attrs,
     dtype="float16",
 ):
-    func_attrs["op_instance"] = ctc.extract_config(
+    func_attrs["op_instance"] = cbaa.extract_config(
         func_attrs=func_attrs,
         dtype=dtype,
+        activation_op_name="Identity",
+        binary_op_name="Plus",
+        unary_op_name="ReLu",
     )
 
 
-@registry.reg("rvv.transposed_conv2d_cnhw.gen_profiler")
-def transposed_conv2d_gen_profiler(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_relu.gen_profiler")
+def conv2d_bias_add_relu_gen_profiler(
     func_attrs,
     workdir,
     profiler_filename,
     shape_template,
 ):
-    return common.gen_profiler(
+    return cbaa.gen_profiler(
         func_attrs=func_attrs,
         workdir=workdir,
         profiler_filename=profiler_filename,
         shape_template=shape_template,
-        f_emit_instance="",
-        is_transpose=True,
-        instance_name_base="DeviceConvBwdInstance",
     )
 
 
-@registry.reg("rvv.transposed_conv2d_cnhw.gen_function")
-def transposed_conv2d_gen_function(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_relu.gen_function")
+def conv2d_bias_add_relu_gen_function(
     func_attrs,
     exec_cond_template,
     shape_eval_template,
     shape_save_template,
 ):
-    return common.gen_function(
+    op_instance = cbaa.extract_config(
+        func_attrs=func_attrs,
+        dtype=func_attrs["inputs"][0]._attrs["dtype"],
+        activation_op_name="Identity",
+        binary_op_name="Plus",
+        unary_op_name="ReLu",
+    )
+    return cbaa.gen_function(
         func_attrs=func_attrs,
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
-        f_emit_instance="",
-        is_transpose=True,
+        op_instance=op_instance,
     )
 
 
-@registry.reg("rvv.transposed_conv2d_cnhw.func_decl")
-def transposed_conv2d_func_decl(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_relu.func_decl")
+def conv2d_bias_add_relu_func_decl(
     func_attrs,
 ):
-    return common.gen_function_decl(
+    return cbaa.gen_function_decl(
         func_attrs=func_attrs,
     )
 
 
-@registry.reg("rvv.transposed_conv2d_cnhw.func_call")
-def transposed_conv2d_func_call(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_relu.func_call")
+def conv2d_bias_add_relu_func_call(
     func_attrs,
     indent="  ",
 ):
-    return common.gen_function_call(
+    return cbaa.gen_function_call(
         func_attrs=func_attrs,
         indent=indent,
-        is_transpose=True,
     )
 
 
-@registry.reg("rvv.transposed_conv2d_cnhw.filter")
-def transposed_conv2d_filter(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_relu.filter")
+def conv2d_bias_add_relu_filter(
     cfg,
     func_attrs,
     x_shape,

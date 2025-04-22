@@ -22,10 +22,10 @@ import jinja2
 
 # import library
 from aitemplate.utils.cpu_lib import library
-from aitemplate.utils.cpu_lib.conv2d_template import template, template_depthwise, code_snippet, binary_func_minmax_flag_op, binary_func_flag_op, transpose_func
+from aitemplate.utils.cpu_lib.conv2d_template import template, template_depthwise, code_snippet, binary_func_minmax_flag_op, binary_func_flag_op, transpose_func, template_with_pruning
 from aitemplate.utils.cpu_lib.conv2d_common import Conv2DSpecialization, Conv2DSpecializationTag, \
                         BIAS_KINDS, DEPTHWISE_KINDS, RELU_KINDS, RELU6_KINDS, BINARY_OP_KIND, BINARY_FLAG_OP_KIND, \
-                        NHWC_KINDS, CNHW_KINDS, TRANSPOSE_AFTER_CONV_KINDS
+                        NHWC_KINDS, CNHW_KINDS, TRANSPOSE_AFTER_CONV_KINDS, PRUNING_KINDS
 
 # TODO : revise min/max for relu
 
@@ -121,10 +121,29 @@ class Conv2DOperation:
         # `is_bias` is handled in `code_snippet template`, if !is_bias, create a dummy bias
         is_bias      = self.operation_kind in BIAS_KINDS
         is_depthwise = self.operation_kind in DEPTHWISE_KINDS
-        if is_depthwise:
-            conv2d = generate_conv2d(template_depthwise)
+        if self.operation_kind in PRUNING_KINDS:
+            if is_depthwise:
+                conv2d = generate_conv2d(template_depthwise)
+            else:
+                conv2d = template_with_pruning.render(
+                    indent="  ",
+                    name=self.__str__(),
+                    DataName = library.DataTypeTag[self.A.element],
+                    is_relu = (self.operation_kind in RELU_KINDS),
+                    is_relu6 = (self.operation_kind in RELU6_KINDS),
+                    ADType=library.DataTypeTag[self.A.element],
+                    BDType=library.DataTypeTag[self.B.element],
+                    CDType=library.DataTypeTag[self.C.element],
+                    AccDType=library.DataTypeTag[library.DataType.f32],
+                    CShuffleDType=library.DataTypeTag[self.C.element],
+                    epilogue_functor=library.TensorOperationTag[self.epilogue_functor],
+                    Conv2DSpecialization=Conv2DSpecializationTag[self.conv2d_specialization],
+                )
         else:
-            conv2d = generate_conv2d(template)
+            if is_depthwise:
+                conv2d = generate_conv2d(template_depthwise)
+            else:
+                conv2d = generate_conv2d(template)
         extra_kind_code = generate_tensorOP(self.operation_kind, self.extra_kind, self.A.element)
         program = code_snippet.render(
             is_bias = is_bias,

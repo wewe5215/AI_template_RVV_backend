@@ -13,94 +13,93 @@
 #  limitations under the License.
 #
 """
-conv2d bias relu codegen
+transposed conv2d + bias + (relu) codegen
 """
 from aitemplate.backend import registry
-from aitemplate.backend.rvv.conv2d_cnhw import common, common_conv2d_cnhw_bias_activation as cba
+from aitemplate.backend.rvv.conv2d_cnhw_pruning import common, common_transposed_conv2d as ctc
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_relu.config")
-def conv2d_bias_relu_config(
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias.config")
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias_relu.config")
+def transposed_conv2d_bias_config(
     func_attrs,
     dtype="float16",
 ):
-    import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasRelu
-    extra_kind = cpu_lib.library.TensorOperation.PassThrough
-    # if dtype == "float32": --> TODO: uncomment later
-    Layout = cpu_lib.library.LayoutType.CNHW
-    func_attrs["op_instance"] = common.extract_config(
-        dtype = dtype,
-        op_kind = op_kind,
-        extra_kind = extra_kind,
-        Layout = Layout)
+    func_attrs["op_instance"] = ctc.extract_config(
+        func_attrs=func_attrs,
+        dtype=dtype,
+    )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_relu.gen_profiler")
-def conv2d_bias_relu_gen_profiler(
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias.gen_profiler")
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias_relu.gen_profiler")
+def transposed_conv2d_bias_gen_profiler(
     func_attrs,
     workdir,
     profiler_filename,
     shape_template,
 ):
-    return cba.gen_profiler(
+    return common.gen_profiler(
         func_attrs=func_attrs,
         workdir=workdir,
         profiler_filename=profiler_filename,
         shape_template=shape_template,
+        f_emit_instance="",
+        is_bias=True,
+        is_transpose=True,
+        instance_name_base="DeviceConvBwdInstance",
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_relu.gen_function")
-def conv2d_bias_relu_gen_function(
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias.gen_function")
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias_relu.gen_function")
+def transposed_conv2d_bias_gen_function(
     func_attrs,
     exec_cond_template,
     shape_eval_template,
     shape_save_template,
 ):
-    import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2dBiasRelu
-    extra_kind = cpu_lib.library.TensorOperation.PassThrough
-    # if dtype == "float32": --> TODO: uncomment later
-    Layout = cpu_lib.library.LayoutType.CNHW
-    op_instance = common.extract_config(
-        dtype = func_attrs["inputs"][0]._attrs["dtype"],
-        op_kind = op_kind,
-        extra_kind = extra_kind,
-        Layout = Layout)
-    return cba.gen_function(
+    return common.gen_function(
         func_attrs=func_attrs,
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
-        op_instance=op_instance,
+        f_emit_instance="",
+        is_bias=True,
+        is_transpose=True,
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_relu.func_decl")
-def conv2d_bias_relu_func_decl(
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias.func_decl")
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias_relu.func_decl")
+def transposed_conv2d_bias_func_decl(
     func_attrs,
 ):
-    return cba.gen_function_decl(
+    return common.gen_function_decl(
         func_attrs=func_attrs,
+        is_bias=True,
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_relu.func_call")
-def conv2d_bias_relu_func_call(
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias.func_call")
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias_relu.func_call")
+def transposed_conv2d_bias_func_call(
     func_attrs,
     indent="  ",
 ):
-    return cba.gen_function_call(
+    return common.gen_function_call(
         func_attrs=func_attrs,
         indent=indent,
+        is_bias=True,
+        is_transpose=True,
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_relu.filter")
-def conv2d_bias_relu_filter(
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias.filter")
+@registry.reg("rvv.transposed_conv2d_cnhw_pruning_bias_relu.filter")
+def transposed_conv2d_bias_filter(
     cfg,
     func_attrs,
     x_shape,

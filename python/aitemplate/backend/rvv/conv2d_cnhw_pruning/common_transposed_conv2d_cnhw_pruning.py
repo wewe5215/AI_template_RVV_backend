@@ -18,7 +18,7 @@ common functions for transposed conv2d
 
 import re
 
-from aitemplate.backend.rvv.conv2d_cnhw import common
+from aitemplate.backend.rvv.conv2d_cnhw_pruning import common
 
 
 def _conv_transpose_instance(op_def):

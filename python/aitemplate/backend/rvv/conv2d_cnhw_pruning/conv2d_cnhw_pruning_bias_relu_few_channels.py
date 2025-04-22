@@ -17,17 +17,17 @@ specialize conv2d op with few channels(< 8)
 """
 
 from aitemplate.backend import registry
-from aitemplate.backend.rvv.conv2d_cnhw import (
+from aitemplate.backend.rvv.conv2d_cnhw_pruning import (
     common,
-    common_conv2d_cnhw_bias_activation as cba,
+    common_conv2d_cnhw_pruning_bias_activation as cba,
     common_conv2d_few_channels as cfc,
 )
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_few_channels.config")
-def conv2d_bias_few_channels_config(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_relu_few_channels.config")
+def conv2d_bias_relu_few_channels_config(
     func_attrs,
     dtype="float16",
 ):
@@ -47,11 +47,12 @@ def conv2d_bias_few_channels_config(
     func_attrs["op_instance"] = cfc.extract_config(
         func_attrs=func_attrs,
         dtype=dtype,
+        unary_op_name="ReLu",
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_few_channels.gen_profiler")
-def conv2d_bias_few_channels_gen_profiler(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_relu_few_channels.gen_profiler")
+def conv2d_bias_relu_few_channels_gen_profiler(
     func_attrs,
     workdir,
     profiler_filename,
@@ -66,8 +67,8 @@ def conv2d_bias_few_channels_gen_profiler(
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_few_channels.gen_function")
-def conv2d_bias_few_channels_gen_function(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_relu_few_channels.gen_function")
+def conv2d_bias_relu_few_channels_gen_function(
     func_attrs,
     exec_cond_template,
     shape_eval_template,
@@ -99,8 +100,8 @@ def conv2d_bias_few_channels_gen_function(
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_few_channels.func_decl")
-def conv2d_bias_few_channels_func_decl(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_relu_few_channels.func_decl")
+def conv2d_bias_relu_few_channels_func_decl(
     func_attrs,
 ):
     return cba.gen_function_decl(
@@ -108,8 +109,8 @@ def conv2d_bias_few_channels_func_decl(
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_few_channels.func_call")
-def conv2d_bias_few_channels_func_call(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_relu_few_channels.func_call")
+def conv2d_bias_relu_few_channels_func_call(
     func_attrs,
     indent="  ",
 ):
@@ -119,8 +120,8 @@ def conv2d_bias_few_channels_func_call(
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_few_channels.filter")
-def conv2d_bias_few_channels_filter(
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_relu_few_channels.filter")
+def conv2d_bias_relu_few_channels_filter(
     cfg,
     func_attrs,
     x_shape,

@@ -16,15 +16,15 @@
 conv2d bias add hardswish codegen
 """
 from aitemplate.backend import registry
-from aitemplate.backend.rvv.conv2d_cnhw import (
+from aitemplate.backend.rvv.conv2d_cnhw_pruning import (
     common,
-    common_conv2d_cnhw_bias_add_activation as cbaa,
+    common_conv2d_cnhw_pruning_bias_add_activation as cbaa,
 )
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_add_hardswish.config")
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_hardswish.config")
 def conv2d_bias_add_hardswish_config(
     func_attrs,
     dtype="float16",
@@ -38,7 +38,7 @@ def conv2d_bias_add_hardswish_config(
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_add_hardswish.gen_profiler")
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_hardswish.gen_profiler")
 def conv2d_bias_add_hardswish_gen_profiler(
     func_attrs,
     workdir,
@@ -53,7 +53,7 @@ def conv2d_bias_add_hardswish_gen_profiler(
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_add_hardswish.gen_function")
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_hardswish.gen_function")
 def conv2d_bias_add_hardswish_gen_function(
     func_attrs,
     exec_cond_template,
@@ -68,7 +68,7 @@ def conv2d_bias_add_hardswish_gen_function(
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_add_hardswish.func_decl")
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_hardswish.func_decl")
 def conv2d_bias_add_hardswish_func_decl(
     func_attrs,
 ):
@@ -77,7 +77,7 @@ def conv2d_bias_add_hardswish_func_decl(
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_add_hardswish.func_call")
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_hardswish.func_call")
 def conv2d_bias_add_hardswish_func_call(
     func_attrs,
     indent="  ",
@@ -88,7 +88,7 @@ def conv2d_bias_add_hardswish_func_call(
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_bias_add_hardswish.filter")
+@registry.reg("rvv.conv2d_cnhw_pruning_bias_add_hardswish.filter")
 def conv2d_bias_add_hardswish_filter(
     cfg,
     func_attrs,

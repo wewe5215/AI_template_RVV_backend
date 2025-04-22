@@ -13,20 +13,22 @@
 #  limitations under the License.
 #
 """
-Codegen for conv2d_depthwise_bias_relu6.
+Codegen for conv2d_cnhw_pruning.
 """
-
 from aitemplate.backend import registry
-from aitemplate.backend.rvv.conv2d_cnhw import common
+from aitemplate.backend.rvv.conv2d_cnhw_pruning import common
 
 # pylint: disable=C0103,C0415,W0613,C0301
 
 
-@registry.reg("rvv.conv2d_cnhw_depthwise_bias_relu6.config")
-def conv2d_depthwise_config(func_attrs, dtype="float16"):
-    """Populates conv2d_depthwise configs into 'op_instance' field."""
+@registry.reg("rvv.conv2d_cnhw_pruning.config")
+def conv2d_cnhw_pruning_config(
+    func_attrs,
+    dtype="float16",
+):
+    """Populates conv2d_cnhw_pruning cutlass configs into 'op_instance' field."""
     import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2dDepthwiseBiasRelu6
+    op_kind = cpu_lib.library.Conv2dKind.Conv2dPruning
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
     Layout = cpu_lib.library.LayoutType.CNHW
@@ -37,28 +39,32 @@ def conv2d_depthwise_config(func_attrs, dtype="float16"):
         Layout = Layout)
 
 
-@registry.reg("rvv.conv2d_cnhw_depthwise_bias_relu6.gen_profiler")
-def gen_profiler(func_attrs, workdir, profiler_filename, shape_template):
-    """Codegen for conv2d_depthwise_bias_relu6 profiler."""
+@registry.reg("rvv.conv2d_cnhw_pruning.gen_profiler")
+def conv2d_cnhw_pruning_gen_profiler(
+    func_attrs,
+    workdir,
+    profiler_filename,
+    shape_template,
+):
+    """Codegen for conv2d_cnhw_pruning profiler."""
     return common.gen_profiler(
         func_attrs=func_attrs,
         workdir=workdir,
         profiler_filename=profiler_filename,
         shape_template=shape_template,
-        is_bias=True,
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_depthwise_bias_relu6.gen_function")
-def gen_function(
+@registry.reg("rvv.conv2d_cnhw_pruning.gen_function")
+def conv2d_cnhw_pruning_gen_function(
     func_attrs,
     exec_cond_template,
     shape_eval_template,
     shape_save_template,
 ):
-    """Codegen for conv2d_depthwise_bias_relu6 function."""
+    """Codegen for conv2d_cnhw_pruning function."""
     import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2dDepthwiseBiasRelu6
+    op_kind = cpu_lib.library.Conv2dKind.Conv2dPruning
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
     Layout = cpu_lib.library.LayoutType.CNHW
@@ -73,31 +79,37 @@ def gen_function(
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
         op_instance=op_instance,
-        is_bias=True,
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_depthwise_bias_relu6.func_decl")
-def conv2d_depthwise_gen_function_decl(func_attrs):
-    """Codegen for conv2d_depthwise_bias_relu6 function declaration."""
+@registry.reg("rvv.conv2d_cnhw_pruning.func_decl")
+def conv2d_cnhw_pruning_func_decl(
+    func_attrs,
+):
+    """Codegen for conv2d_cnhw_pruning function declaration."""
     return common.gen_function_decl(
         func_attrs=func_attrs,
-        is_bias=True,
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_depthwise_bias_relu6.func_call")
-def conv2d_depthwise_gen_function_call(func_attrs, indent="  "):
-    """Codegen for conv2d_depthwise_bias_relu6 function call."""
+@registry.reg("rvv.conv2d_cnhw_pruning.func_call")
+def conv2d_cnhw_pruning_func_call(
+    func_attrs,
+    indent="  ",
+):
+    """Codegen for conv2d_cnhw_pruning function call."""
     return common.gen_function_call(
         func_attrs=func_attrs,
         indent=indent,
-        is_bias=True,
     )
 
 
-@registry.reg("rvv.conv2d_cnhw_depthwise_bias_relu6.filter")
-def conv2d_depthwise_bias_function_filter(cfg, func_attrs, x_shape):
+@registry.reg("rvv.conv2d_cnhw_pruning.filter")
+def conv2d_cnhw_pruning_filter(
+    cfg,
+    func_attrs,
+    x_shape,
+):
     """Generates function filter.
 
     Parameters
@@ -114,4 +126,8 @@ def conv2d_depthwise_bias_function_filter(cfg, func_attrs, x_shape):
     bool
         If input cfg should be filtered.
     """
-    return True
+    return common.function_filter(
+        cfg=cfg,
+        func_attrs=func_attrs,
+        x_shape=x_shape,
+    )
