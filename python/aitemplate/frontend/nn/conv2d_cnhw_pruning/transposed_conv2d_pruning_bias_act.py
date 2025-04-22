@@ -13,7 +13,7 @@
 #  limitations under the License.
 #
 """
-common module for conv_bias_act subgraph
+common module for ConvTranspose2d_bias_act subgraph
 """
 from aitemplate.compiler import ops
 from aitemplate.frontend.nn.module import Module
@@ -22,8 +22,8 @@ from aitemplate.frontend.nn.parameter import Parameter
 # pylint: disable=C0103
 
 
-class SpecialConv2dBiasAct(Module):
-    """common functions for conv2d_bias_act op with few channel input"""
+class ConvTranspose2dBiasAct(Module):
+    """common functions for ConvTranspose2d_bias_act"""
 
     def __init__(
         self,
@@ -34,22 +34,42 @@ class SpecialConv2dBiasAct(Module):
         stride,
         padding=0,
         dilation=1,
-        auto_padding=True,
+        groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
+        """Initialize the ConvTranspose2dBiasAct class
+
+        Parameters
+        ----------
+        in_channel : [type]
+            [description]
+        out_channel : [type]
+            [description]
+        kernel_size : [type]
+            [description]
+        stride : [type]
+            [description]
+        pad : str, optional
+            [description], by default 'SAME'
+        dilate : int, optional
+            [description], by default 1
+        dtype : str, optional
+            [description], by default "float16"
+
+        Raises
+        ------
+        NotImplementedError
+            [description]
+        """
         super().__init__()
-        if auto_padding and in_channels < 4:
-            in_channels = 4
-        elif auto_padding and in_channels > 4 and in_channels < 8:
-            in_channels = 8
         self.weight = Parameter(
-            shape=[out_channels, kernel_size, kernel_size, in_channels], dtype=dtype
+            shape=[in_channels, kernel_size, kernel_size, out_channels // groups],
+            dtype=dtype,
         )
         self.bias = Parameter(shape=[out_channels], dtype=dtype)
         op_func = getattr(ops, op_name)
-        self.op = op_func(
-            stride=stride, pad=padding, dilate=dilation, auto_padding=auto_padding
-        )
+        self.op = op_func(stride=stride, pad=padding, dilate=dilation, group=groups, pruning_ratio=pruning_ratio)
 
     def forward(self, *args):
         assert len(args) == 1

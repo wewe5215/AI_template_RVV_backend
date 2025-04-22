@@ -16,29 +16,29 @@
 """
 modules for conv2d
 """
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw import Conv2dCNHW
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_bias import Conv2dCNHWBias
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_bias_add_hardswish import (
-    Conv2dCNHWBiasAddHardswish,
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning import Conv2dCNHWPruning
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias import Conv2dCNHWPruningBias
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_add_hardswish import (
+    Conv2dCNHWPruningBiasAddHardswish,
 )
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_bias_add_relu import Conv2dCNHWBiasAddRelu
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_bias_add import Conv2dCNHWBiasAdd
-# from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_bias_few_channels import Conv2dCNHWBiasFewChannels
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_bias_hardswish import Conv2dCNHWBiasHardswish
-# from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_bias_hardswish_few_channels import (
-#     Conv2dCNHWBiasHardswishFewChannels,
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_add_relu import Conv2dCNHWPruningBiasAddRelu
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_add import Conv2dCNHWPruningBiasAdd
+# from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_few_channels import Conv2dCNHWPruningBiasFewChannels
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_hardswish import Conv2dCNHWPruningBiasHardswish
+# from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_hardswish_few_channels import (
+#     Conv2dCNHWPruningBiasHardswishFewChannels,
 # )
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_bias_relu import Conv2dCNHWBiasRelu
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_bias_relu6 import Conv2dCNHWBiasRelu6
-# from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_bias_relu_few_channels import (
-#     Conv2dCNHWBiasReluFewChannels,
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_relu import Conv2dCNHWPruningBiasRelu
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_relu6 import Conv2dCNHWPruningBiasRelu6
+# from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_relu_few_channels import (
+#     Conv2dCNHWPruningBiasReluFewChannels,
 # )
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_bias_sigmoid import Conv2dCNHWBiasSigmoid
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_depthwise import Conv2dCNHWDepthwise
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_depthwise_bias import Conv2dCNHWDepthwiseBias
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_depthwise_bias_relu import Conv2dCNHWDepthwiseBiasRelu
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d_cnhw_depthwise_bias_relu6 import Conv2dCNHWDepthwiseBiasRelu6
-# from aitemplate.frontend.nn.conv2d_cnhw.transposed_conv2d_cnhw_bias import ConvTranspose2dBias
-# from aitemplate.frontend.nn.conv2d_cnhw.transposed_conv2d_cnhw_bias_relu import (
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_sigmoid import Conv2dCNHWPruningBiasSigmoid
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise import Conv2dCNHWPruningDepthwise
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias import Conv2dCNHWPruningDepthwiseBias
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias_relu import Conv2dCNHWPruningDepthwiseBiasRelu
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias_relu6 import Conv2dCNHWPruningDepthwiseBiasRelu6
+# from aitemplate.frontend.nn.conv2d_cnhw_pruning.transposed_conv2d_cnhw_pruning_bias import ConvTranspose2dBias
+# from aitemplate.frontend.nn.conv2d_cnhw_pruning.transposed_conv2d_cnhw_pruning_bias_relu import (
 #     ConvTranspose2dBiasRelu,
 # )

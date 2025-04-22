@@ -13,14 +13,13 @@
 #  limitations under the License.
 #
 """
-conv2d bias sigmoid module
+conv2d depthwise module
 """
-from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_cnhw_bias_act import Conv2dCNHWBiasAct
+from aitemplate.compiler.ops import conv2d_cnhw_pruning_depthwise
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning import Conv2dCNHWPruning
 
 
-class Conv2dCNHWBiasSigmoid(Conv2dCNHWBiasAct):
-    r"""Applies 2D convolution with bias + sigmoid."""
-
+class Conv2dCNHWPruningDepthwise(Conv2dCNHWPruning):
     def __init__(
         self,
         in_channels,
@@ -31,9 +30,9 @@ class Conv2dCNHWBiasSigmoid(Conv2dCNHWBiasAct):
         dilation=1,
         groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
         super().__init__(
-            "conv2d_cnhw_bias_sigmoid",
             in_channels,
             out_channels,
             kernel_size,
@@ -42,4 +41,8 @@ class Conv2dCNHWBiasSigmoid(Conv2dCNHWBiasAct):
             dilation,
             groups,
             dtype,
+            pruning_ratio,
+        )
+        self.op = conv2d_cnhw_pruning_depthwise(
+            stride=stride, pad=padding, dilate=dilation, group=groups, pruning_ratio=pruning_ratio
         )

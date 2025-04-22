@@ -13,14 +13,12 @@
 #  limitations under the License.
 #
 """
-conv2d bias relu module
+conv2d depthwise bias relu module
 """
-from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_cnhw_bias_act import Conv2dCNHWBiasAct
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.common_conv2d_cnhw_pruning_bias_act import Conv2dCNHWPruningBiasAct
 
 
-class Conv2dCNHWBiasRelu(Conv2dCNHWBiasAct):
-    r"""Applies 2D convolution with bias + relu."""
-
+class Conv2dCNHWPruningDepthwiseBiasRelu(Conv2dCNHWPruningBiasAct):
     def __init__(
         self,
         in_channels,
@@ -31,9 +29,10 @@ class Conv2dCNHWBiasRelu(Conv2dCNHWBiasAct):
         dilation=1,
         groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
         super().__init__(
-            "conv2d_cnhw_bias_relu",
+            "conv2d_cnhw_pruning_depthwise_bias_relu",
             in_channels,
             out_channels,
             kernel_size,
@@ -42,4 +41,5 @@ class Conv2dCNHWBiasRelu(Conv2dCNHWBiasAct):
             dilation,
             groups,
             dtype,
+            pruning_ratio,
         )

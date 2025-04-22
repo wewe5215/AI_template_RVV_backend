@@ -13,13 +13,14 @@
 #  limitations under the License.
 #
 """
-conv2d depthwise module
+conv bias hardswish module
 """
-from aitemplate.compiler.ops import conv2d_cnhw_depthwise
-from aitemplate.frontend.nn.conv2d_cnhw.conv2d import Conv2dCNHW
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.common_conv2d_cnhw_pruning_bias_act import Conv2dCNHWPruningBiasAct
 
 
-class Conv2dCNHWDepthwise(Conv2dCNHW):
+class Conv2dCNHWPruningBiasHardswish(Conv2dCNHWPruningBiasAct):
+    r"""Applies 2D convolution with bias + hardswish."""
+
     def __init__(
         self,
         in_channels,
@@ -30,8 +31,10 @@ class Conv2dCNHWDepthwise(Conv2dCNHW):
         dilation=1,
         groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
         super().__init__(
+            "conv2d_cnhw_pruning_bias_hardswish",
             in_channels,
             out_channels,
             kernel_size,
@@ -40,7 +43,5 @@ class Conv2dCNHWDepthwise(Conv2dCNHW):
             dilation,
             groups,
             dtype,
-        )
-        self.op = conv2d_cnhw_depthwise(
-            stride=stride, pad=padding, dilate=dilation, group=groups
+            pruning_ratio,
         )

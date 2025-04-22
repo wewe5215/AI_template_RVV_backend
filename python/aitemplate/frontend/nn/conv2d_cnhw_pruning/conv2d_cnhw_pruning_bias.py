@@ -13,40 +13,13 @@
 #  limitations under the License.
 #
 """
-conv2d Module.
+conv2d bias module
 """
-from aitemplate.compiler.ops import conv2d_cnhw
-from aitemplate.frontend.nn.module import Module
-from aitemplate.frontend.nn.parameter import Parameter
-
-# pylint: disable=C0103
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.common_conv2d_cnhw_pruning_bias_act import Conv2dCNHWPruningBiasAct
 
 
-class Conv2dCNHW(Module):
-    r"""Applies a 2D convolution over an input signal composed of several input
-    planes.
-
-    In the simplest case, the output value of the layer with input size
-    :math:`(N, H, W, C_{\text{in}})` and output :math:`(N, H_{\text{out}}, W_{\text{out}}, C_{\text{out}})`
-    can be precisely described as:
-
-    .. math::
-        \text{out}(N_i, C_{\text{out}_j}) = \text{bias}(C_{\text{out}_j}) +
-        \sum_{k = 0}^{C_{\text{in}} - 1} \text{weight}(C_{\text{out}_j}, k) \star \text{input}(N_i, k)
-
-
-    where :math:`\star` is the valid 2D `cross-correlation`_ operator,
-    :math:`N` is a batch size, :math:`H` is a height of input planes in pixels, :math:`W` is
-    width in pixels, and :math:`C` denotes a number of channels.
-
-
-    * :attr:`stride` controls the stride for the cross-correlation.
-
-    * :attr:`padding` controls the amount of padding applied to the input.
-
-    * :attr:`dilation` controls the spacing between the kernel points; also
-      known as the à trous algorithm. It is harder to describe, but this `link`_
-      has a nice visualization of what :attr:`dilation` does.
+class Conv2dCNHWPruningBias(Conv2dCNHWPruningBiasAct):
+    r"""Applies 2D convolution with bias.
 
     Args:
         in_channels (int): Number of channels in the input image
@@ -76,6 +49,8 @@ class Conv2dCNHW(Module):
         weight (Tensor): the learnable weights of the module of shape
             :math:`(\text{out_channels}, \text{kernel_size}, \text{kernel_size}, `
             :math:`\frac{\text{in_channels}}{\text{groups}})`.
+        bias (Tensor):   the learnable bias of the module of shape
+            (out_channels).
 
     Examples::
 
@@ -83,11 +58,6 @@ class Conv2dCNHW(Module):
         >>> input = Tensor(shape=[20, 50, 100, 16])
         >>> output = m(input)
 
-    .. _cross-correlation:
-        https://en.wikipedia.org/wiki/Cross-correlation
-
-    .. _link:
-        https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
     """
 
     def __init__(
@@ -95,21 +65,22 @@ class Conv2dCNHW(Module):
         in_channels,
         out_channels,
         kernel_size,
-        stride,
+        stride=1,
         padding=0,
         dilation=1,
         groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
-        super().__init__()
-        self.weight = Parameter(
-            shape=[out_channels, kernel_size, kernel_size, in_channels // groups],
-            dtype=dtype,
+        super().__init__(
+            "conv2d_cnhw_pruning_bias",
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding,
+            dilation,
+            groups,
+            dtype,
+            pruning_ratio,
         )
-        self.op = conv2d_cnhw(stride=stride, pad=padding, dilate=dilation, group=groups)
-
-    def forward(self, *args):
-        """Applies Conv2d on the input tensor."""
-        assert len(args) == 1
-        x = args[0]
-        return self.op(x, self.weight.tensor())

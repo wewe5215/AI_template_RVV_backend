@@ -22,7 +22,7 @@ from aitemplate.frontend.nn.parameter import Parameter
 # pylint: disable=C0103
 
 
-class Conv2dCNHWBiasAct(Module):
+class Conv2dCNHWPruningBiasAct(Module):
     """common functions for conv2d_bias_act"""
 
     def __init__(
@@ -36,8 +36,9 @@ class Conv2dCNHWBiasAct(Module):
         dilation=1,
         groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
-        """Initialize the Conv2dCNHWBiasAct class
+        """Initialize the Conv2dCNHWPruningBiasAct class
 
         Parameters
         ----------
@@ -63,14 +64,18 @@ class Conv2dCNHWBiasAct(Module):
         """
         super().__init__()
         self.weight = Parameter(
-            shape=[out_channels, kernel_size, kernel_size, in_channels // groups],
+            shape=[out_channels, kernel_size, kernel_size, int((in_channels // groups) * (1 - pruning_ratio))],
             dtype=dtype,
         )
         self.bias = Parameter(shape=[out_channels], dtype=dtype)
+        self.weight_indice = Parameter( # out_channels / 8 stands for each tile is with 8 rows
+            shape=[int(out_channels / 8), (kernel_size * kernel_size * int((in_channels // groups) * (1 - pruning_ratio)))],
+            dtype="uint16_t"
+        )
         op_func = getattr(ops, op_name)
-        self.op = op_func(stride=stride, pad=padding, dilate=dilation, group=groups)
+        self.op = op_func(stride=stride, pad=padding, dilate=dilation, group=groups, pruning_ratio=pruning_ratio)
 
     def forward(self, *args):
         assert len(args) == 1
         x = args[0]
-        return self.op(x, self.weight.tensor(), self.bias.tensor())
+        return self.op(x, self.weight.tensor(), self.bias.tensor(), self.weight_indice.tensor())

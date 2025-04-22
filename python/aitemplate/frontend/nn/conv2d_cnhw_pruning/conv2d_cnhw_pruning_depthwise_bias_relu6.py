@@ -13,17 +13,12 @@
 #  limitations under the License.
 #
 """
-conv2d bias for few channels
+conv2d depthwise bias relu module
 """
-from aitemplate.frontend.nn.conv2d_cnhw.special_conv2d_bias_act import SpecialConv2dBiasAct
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.common_conv2d_cnhw_pruning_bias_act import Conv2dCNHWPruningBiasAct
 
 
-class Conv2dCNHWBiasFewChannels(SpecialConv2dBiasAct):
-    r"""Applies 2D convolution with bias for few channels.
-
-    This layer equals to Conv2dBias but has improved performance for in_channels < 8.
-    """
-
+class Conv2dCNHWPruningDepthwiseBiasRelu6(Conv2dCNHWPruningBiasAct):
     def __init__(
         self,
         in_channels,
@@ -32,17 +27,19 @@ class Conv2dCNHWBiasFewChannels(SpecialConv2dBiasAct):
         stride,
         padding=0,
         dilation=1,
-        auto_padding=True,
+        groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
         super().__init__(
-            "conv2d_cnhw_bias_few_channels",
+            "conv2d_cnhw_pruning_depthwise_bias_relu6",
             in_channels,
             out_channels,
             kernel_size,
             stride,
             padding,
             dilation,
-            auto_padding,
+            groups,
             dtype,
+            pruning_ratio,
         )

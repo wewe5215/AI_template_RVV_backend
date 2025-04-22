@@ -13,13 +13,15 @@
 #  limitations under the License.
 #
 """
-conv bias hardswish module
+conv2d bias relu module
 """
-from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_cnhw_bias_act import Conv2dCNHWBiasAct
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.transposed_conv2d_bias_act import (
+    ConvTranspose2dBiasAct,
+)
 
 
-class Conv2dCNHWBiasHardswish(Conv2dCNHWBiasAct):
-    r"""Applies 2D convolution with bias + hardswish."""
+class ConvTranspose2dBiasRelu(ConvTranspose2dBiasAct):
+    r"""Applies a 2D transposed convolution with bias + relu."""
 
     def __init__(
         self,
@@ -31,9 +33,10 @@ class Conv2dCNHWBiasHardswish(Conv2dCNHWBiasAct):
         dilation=1,
         groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
         super().__init__(
-            "conv2d_cnhw_bias_hardswish",
+            "transposed_conv2d_bias_relu",
             in_channels,
             out_channels,
             kernel_size,
@@ -42,4 +45,5 @@ class Conv2dCNHWBiasHardswish(Conv2dCNHWBiasAct):
             dilation,
             groups,
             dtype,
+            pruning_ratio,
         )

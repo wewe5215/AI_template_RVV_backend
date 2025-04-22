@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-from aitemplate.frontend.nn.conv2d_cnhw.transposed_conv2d_bias_act import (
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.transposed_conv2d_bias_act import (
     ConvTranspose2dBiasAct,
 )
 
@@ -74,6 +74,7 @@ class ConvTranspose2dBias(ConvTranspose2dBiasAct):
         dilation=1,
         groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
         super().__init__(
             "transposed_conv2d_bias",
@@ -85,4 +86,5 @@ class ConvTranspose2dBias(ConvTranspose2dBiasAct):
             dilation,
             groups,
             dtype,
+            pruning_ratio,
         )

@@ -13,39 +13,38 @@
 #  limitations under the License.
 #
 """
-common module for conv2d bias act residual add
+conv2d bias for few channels
 """
-from aitemplate.compiler import ops
-from aitemplate.frontend.nn.module import Module
-from aitemplate.frontend.nn.parameter import Parameter
-
-# pylint: disable=C0103
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.special_conv2d_pruning_bias_act import SpecialConv2dBiasAct
 
 
-class Conv2dCNHWBiasAddAct(Module):
+class Conv2dCNHWPruningBiasFewChannels(SpecialConv2dBiasAct):
+    r"""Applies 2D convolution with bias for few channels.
+
+    This layer equals to Conv2dBias but has improved performance for in_channels < 8.
+    """
+
     def __init__(
         self,
-        op_name,
         in_channels,
         out_channels,
         kernel_size,
         stride,
         padding=0,
         dilation=1,
-        groups=1,
+        auto_padding=True,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
-        super().__init__()
-        self.weight = Parameter(
-            shape=[out_channels, kernel_size, kernel_size, in_channels // groups],
-            dtype=dtype,
+        super().__init__(
+            "conv2d_cnhw_pruning_bias_few_channels",
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding,
+            dilation,
+            auto_padding,
+            dtype,
+            pruning_ratio,
         )
-        self.bias = Parameter(shape=[out_channels], dtype=dtype)
-        op_func = getattr(ops, op_name)
-        self.op = op_func(stride=stride, pad=padding, dilate=dilation, group=groups)
-
-    def forward(self, *args):
-        assert len(args) == 2
-        x = args[0]
-        r = args[1]
-        return self.op(x, self.weight.tensor(), self.bias.tensor(), r)

@@ -15,10 +15,10 @@
 """
 General template module for conv2e + bias + residual
 """
-from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_cnhw_bias_add_act import Conv2dCNHWBiasAddAct
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.common_conv2d_cnhw_pruning_bias_add_act import Conv2dCNHWPruningBiasAddAct
 
 
-class Conv2dCNHWBiasAdd(Conv2dCNHWBiasAddAct):
+class Conv2dCNHWPruningBiasAdd(Conv2dCNHWPruningBiasAddAct):
     r"""Applies 2D convolution with bias + add.
 
     Attributes:
@@ -50,9 +50,10 @@ class Conv2dCNHWBiasAdd(Conv2dCNHWBiasAddAct):
         dilation=1,
         groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
         super().__init__(
-            "conv2d_cnhw_bias_add",
+            "conv2d_cnhw_pruning_bias_add",
             in_channels,
             out_channels,
             kernel_size,
@@ -61,4 +62,5 @@ class Conv2dCNHWBiasAdd(Conv2dCNHWBiasAddAct):
             dilation,
             groups,
             dtype,
+            pruning_ratio,
         )

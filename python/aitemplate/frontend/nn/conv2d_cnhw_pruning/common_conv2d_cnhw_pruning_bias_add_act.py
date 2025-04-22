@@ -13,7 +13,7 @@
 #  limitations under the License.
 #
 """
-common module for ConvTranspose2d_bias_act subgraph
+common module for conv2d bias act residual add
 """
 from aitemplate.compiler import ops
 from aitemplate.frontend.nn.module import Module
@@ -22,9 +22,7 @@ from aitemplate.frontend.nn.parameter import Parameter
 # pylint: disable=C0103
 
 
-class ConvTranspose2dBiasAct(Module):
-    """common functions for ConvTranspose2d_bias_act"""
-
+class Conv2dCNHWPruningBiasAddAct(Module):
     def __init__(
         self,
         op_name,
@@ -36,41 +34,23 @@ class ConvTranspose2dBiasAct(Module):
         dilation=1,
         groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
-        """Initialize the ConvTranspose2dBiasAct class
-
-        Parameters
-        ----------
-        in_channel : [type]
-            [description]
-        out_channel : [type]
-            [description]
-        kernel_size : [type]
-            [description]
-        stride : [type]
-            [description]
-        pad : str, optional
-            [description], by default 'SAME'
-        dilate : int, optional
-            [description], by default 1
-        dtype : str, optional
-            [description], by default "float16"
-
-        Raises
-        ------
-        NotImplementedError
-            [description]
-        """
         super().__init__()
         self.weight = Parameter(
-            shape=[in_channels, kernel_size, kernel_size, out_channels // groups],
+            shape=[out_channels, kernel_size, kernel_size, int((in_channels // groups) * (1 - pruning_ratio))],
             dtype=dtype,
         )
         self.bias = Parameter(shape=[out_channels], dtype=dtype)
+        self.weight_indice = Parameter( # out_channels / 8 stands for each tile is with 8 rows
+            shape=[int(out_channels / 8), (kernel_size * kernel_size * int((in_channels // groups) * (1 - pruning_ratio)))],
+            dtype="uint16_t"
+        )
         op_func = getattr(ops, op_name)
-        self.op = op_func(stride=stride, pad=padding, dilate=dilation, group=groups)
+        self.op = op_func(stride=stride, pad=padding, dilate=dilation, group=groups, pruning_ratio=pruning_ratio)
 
     def forward(self, *args):
-        assert len(args) == 1
+        assert len(args) == 2
         x = args[0]
-        return self.op(x, self.weight.tensor(), self.bias.tensor())
+        r = args[1]
+        return self.op(x, self.weight.tensor(), self.bias.tensor(), self.weight_indice.tensor(), r)

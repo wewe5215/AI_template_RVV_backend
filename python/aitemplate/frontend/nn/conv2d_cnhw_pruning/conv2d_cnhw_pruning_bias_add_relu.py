@@ -13,13 +13,13 @@
 #  limitations under the License.
 #
 """
-conv2d + bias + residual + hardswish
+General template module for conv2e + bias + residual + relu
 """
-from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_cnhw_bias_add_act import Conv2dCNHWBiasAddAct
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.common_conv2d_cnhw_pruning_bias_add_act import Conv2dCNHWPruningBiasAddAct
 
 
-class Conv2dCNHWBiasAddHardswish(Conv2dCNHWBiasAddAct):
-    r"""Applies 2D convolution with bias + add + hardswish.
+class Conv2dCNHWPruningBiasAddRelu(Conv2dCNHWPruningBiasAddAct):
+    r"""Applies 2D convolution with bias + add + relu.
 
     Attributes:
         weight (Tensor): the learnable weights of the module of shape
@@ -50,9 +50,10 @@ class Conv2dCNHWBiasAddHardswish(Conv2dCNHWBiasAddAct):
         dilation=1,
         groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
         super().__init__(
-            "conv2d_cnhw_bias_add_hardswish",
+            "conv2d_cnhw_pruning_bias_add_relu",
             in_channels,
             out_channels,
             kernel_size,
@@ -61,4 +62,5 @@ class Conv2dCNHWBiasAddHardswish(Conv2dCNHWBiasAddAct):
             dilation,
             groups,
             dtype,
+            pruning_ratio,
         )

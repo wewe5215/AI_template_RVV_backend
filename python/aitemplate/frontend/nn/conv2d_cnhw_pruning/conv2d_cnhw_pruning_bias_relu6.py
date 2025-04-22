@@ -15,10 +15,10 @@
 """
 conv2d bias relu module
 """
-from aitemplate.frontend.nn.conv2d_cnhw.common_conv2d_cnhw_bias_act import Conv2dCNHWBiasAct
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.common_conv2d_cnhw_pruning_bias_act import Conv2dCNHWPruningBiasAct
 
 
-class Conv2dCNHWBiasRelu6(Conv2dCNHWBiasAct):
+class Conv2dCNHWPruningBiasRelu6(Conv2dCNHWPruningBiasAct):
     r"""Applies 2D convolution with bias + relu."""
 
     def __init__(
@@ -31,9 +31,10 @@ class Conv2dCNHWBiasRelu6(Conv2dCNHWBiasAct):
         dilation=1,
         groups=1,
         dtype="float32",
+        pruning_ratio=0.5,
     ):
         super().__init__(
-            "conv2d_cnhw_bias_relu6",
+            "conv2d_cnhw_pruning_bias_relu6",
             in_channels,
             out_channels,
             kernel_size,
@@ -42,4 +43,5 @@ class Conv2dCNHWBiasRelu6(Conv2dCNHWBiasAct):
             dilation,
             groups,
             dtype,
+            pruning_ratio,
         )
