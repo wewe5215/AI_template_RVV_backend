@@ -8,6 +8,7 @@ from aitemplate.testing import detect_target
 
 # Import your backbone builder and weight converter for MobileNetV2.
 from mobilenet_v2 import build_mobilenetv2_backbone
+from mobilenet_v2_trans_after_layer1 import build_mobilenetv2_backbone as backbone_trans_after_layer1
 from weight_utils import export_mobilenet
 
 def mark_output(y):
@@ -44,13 +45,14 @@ class MobileNetV2Verification(unittest.TestCase):
         )
         
         # Build MobileNetV2 backbone (you need to implement build_mobilenetv2_backbone accordingly)
-        model = build_mobilenetv2_backbone()
+        # model = build_mobilenetv2_backbone()
+        model = backbone_trans_after_layer1()
         model.name_parameter_tensor()
         # Forward the input to the model
         y = model(x)
         mark_output(y)
 
-        module = compile_model(y, target, "./tmp", f"mobilenetv2")
+        module = compile_model(y, target, "./tmp", f"mobilenetv2_trans_after_layer1")
 
         # # Use the MobileNetV2 converter; this exporter should be implemented to support MobileNetV2.
         # weight_exporter = export_mobilenet("mobilenetv2", pretrained=True)

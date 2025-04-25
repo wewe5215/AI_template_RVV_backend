@@ -31,22 +31,12 @@ class MobileNetV2Stem(CNNBlockBase):
         # We pass an effective stride value (here 2) to the base.
         super().__init__(in_channels, out_channels, 2)
         conv_op = None
-        if detect_target().name() == "cuda":
-            if activation == "ReLU":
-                conv_op = nn.Conv2dBiasReluFewChannels
-            elif activation == "Hardswish":
-                conv_op = nn.Conv2dBiasHardswishFewChannels
-            else:
-                raise NotImplementedError
+        if activation == "ReLU6":
+            conv_op = nn.Conv2dBiasRelu6Transpose
+        elif activation == "ReLU":
+            conv_op = nn.Conv2dBiasReluTranspose
         else:
-            if activation == "ReLU6":
-                conv_op = nn.Conv2dBiasRelu6
-            elif activation == "ReLU":
-                conv_op = nn.Conv2dBiasRelu
-            elif activation == "Hardswish":
-                conv_op = nn.Conv2dBiasHardswish
-            else:
-                raise NotImplementedError
+            raise NotImplementedError
         # Use kernel size 3, stride 2, padding 1.
         self.conv = conv_op(in_channels, out_channels, kernel_size=3, stride=2, padding=1, dtype="float")
 
@@ -82,12 +72,9 @@ class MobileInvertedResidual(nn.Module):
         # print(f'block_idx = {block_idx}, num_blocks = {num_blocks}')
         if expansion_factor != 1:
             if activation == "ReLU6":
-                if (block_idx == 2 and num_blocks != 0) or (block_idx > 2):
-                    conv_op = nn.Conv2dCNHWBiasRelu6
-                else:
-                    conv_op = nn.Conv2dBiasRelu6
+                conv_op = nn.Conv2dCNHWBiasRelu6
             elif activation == "ReLU":
-                conv_op = nn.Conv2dBiasRelu
+                conv_op = nn.Conv2dCNHWBiasRelu
             self.expansion_conv = conv_op(in_channels, hidden_dim, kernel_size=1, stride=1, padding=0, dtype="float")
         else:
             self.expansion_conv = None
@@ -95,38 +82,17 @@ class MobileInvertedResidual(nn.Module):
         # In depthwise conv, the number of groups equals the number of input channels (hidden_dim).
         # We assume this operator accepts an extra parameter "groups".
         if activation == "ReLU6":
-            if block_idx < 2:
-                self.depthwise_conv = nn.Conv2dDepthwiseBiasRelu6(
-                    hidden_dim if self.expansion_conv is not None else in_channels,
-                    hidden_dim if self.expansion_conv is not None else in_channels,
-                    kernel_size=3,
-                    stride=stride,
-                    padding=1,
-                    groups=(hidden_dim if self.expansion_conv is not None else in_channels),
-                    dtype="float"
-                )
-            elif block_idx == 2 and num_blocks == 0:
-                self.depthwise_conv = nn.Conv2dDepthwiseBiasRelu6Transpose(
-                    hidden_dim if self.expansion_conv is not None else in_channels,
-                    hidden_dim if self.expansion_conv is not None else in_channels,
-                    kernel_size=3,
-                    stride=stride,
-                    padding=1,
-                    groups=(hidden_dim if self.expansion_conv is not None else in_channels),
-                    dtype="float"
-                )
-            else:
-                self.depthwise_conv = nn.Conv2dCNHWDepthwiseBiasRelu6(
-                    hidden_dim if self.expansion_conv is not None else in_channels,
-                    hidden_dim if self.expansion_conv is not None else in_channels,
-                    kernel_size=3,
-                    stride=stride,
-                    padding=1,
-                    groups=(hidden_dim if self.expansion_conv is not None else in_channels),
-                    dtype="float"
-                )
+            self.depthwise_conv = nn.Conv2dCNHWDepthwiseBiasRelu6(
+                hidden_dim if self.expansion_conv is not None else in_channels,
+                hidden_dim if self.expansion_conv is not None else in_channels,
+                kernel_size=3,
+                stride=stride,
+                padding=1,
+                groups=(hidden_dim if self.expansion_conv is not None else in_channels),
+                dtype="float"
+            )
         elif activation == "ReLU":
-            self.depthwise_conv = nn.Conv2dDepthwiseBiasRelu(
+            self.depthwise_conv = nn.Conv2dCNHWDepthwiseBiasRelu(
                 hidden_dim if self.expansion_conv is not None else in_channels,
                 hidden_dim if self.expansion_conv is not None else in_channels,
                 kernel_size=3,
@@ -136,39 +102,21 @@ class MobileInvertedResidual(nn.Module):
                 dtype="float"
             )
         if self.use_res_connect:
-            if block_idx < 2:
-                self.projection_conv = nn.Conv2dBiasAdd(
-                    hidden_dim if self.expansion_conv is not None else in_channels,
-                    out_channels,
-                    kernel_size=1,
-                    stride=1,
-                    padding=0,
-                    dtype="float")
-            else:
-                self.projection_conv = nn.Conv2dCNHWBiasAdd(
-                    hidden_dim if self.expansion_conv is not None else in_channels,
-                    out_channels,
-                    kernel_size=1,
-                    stride=1,
-                    padding=0,
-                    dtype="float")
+            self.projection_conv = nn.Conv2dCNHWBiasAdd(
+                hidden_dim if self.expansion_conv is not None else in_channels,
+                out_channels,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                dtype="float")
         else:
-            if block_idx < 2:
-                self.projection_conv = nn.Conv2dBias(
-                    hidden_dim if self.expansion_conv is not None else in_channels,
-                    out_channels,
-                    kernel_size=1,
-                    stride=1,
-                    padding=0,
-                    dtype="float")
-            else:
-                self.projection_conv = nn.Conv2dCNHWBias(
-                    hidden_dim if self.expansion_conv is not None else in_channels,
-                    out_channels,
-                    kernel_size=1,
-                    stride=1,
-                    padding=0,
-                    dtype="float")
+            self.projection_conv = nn.Conv2dCNHWBias(
+                hidden_dim if self.expansion_conv is not None else in_channels,
+                out_channels,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                dtype="float")
     
 
     def forward(self, x):
