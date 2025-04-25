@@ -19,6 +19,7 @@ AIT operators.
 from aitemplate.compiler.ops.common import *
 from aitemplate.compiler.ops.conv import *
 from aitemplate.compiler.ops.conv_cnhw import *
+from aitemplate.compiler.ops.conv_cnhw_pruning import *
 from aitemplate.compiler.ops.embedding import *
 from aitemplate.compiler.ops.gemm_special import *
 from aitemplate.compiler.ops.gemm_universal import *
