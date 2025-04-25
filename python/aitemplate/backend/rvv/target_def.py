@@ -53,7 +53,8 @@ class RVV(Target):
     def __init__(
         self,
         template_path = XNNPACK_PATH,
-        arch="rv64gcv_zvfh",
+        xnnpack_path = "/home/riscv/Desktop/XNNPACK",
+        arch="rv64gcv1_zfh_zvfh",
         RVV_version=None,
         ait_static_files_path=AIT_STATIC_FILES_PATH_CPU,
         **kwargs,
@@ -69,6 +70,7 @@ class RVV(Target):
         super().__init__(ait_static_files_path)
         self._target_type = 3
         self._template_path = template_path
+        self._xnnpack_path = xnnpack_path
         self._ait_include_path = ait_static_files_path
         self._arch = arch
         self._kwargs = kwargs
@@ -88,7 +90,7 @@ class RVV(Target):
             path to xnnpack compiler library
         """
         # TODO : to be revised later
-        xnnpack_path = os.environ.get("XNNPACK_PATH", "/Users/wewe5215/Desktop/AI_template_RVV_backend/3rdparty/XNNPACK/build/local/")
+        xnnpack_path = os.environ.get("XNNPACK_PATH", f"{self._xnnpack_path}/build/local")
         return xnnpack_path
     def _build_gnu_host_compiler_options(self) -> List[str]:
         return [
@@ -114,7 +116,7 @@ class RVV(Target):
 
     def _build_include_directories(self) -> List[str]:
         xnnpack_path = [
-            os.path.join(self._template_path, "include"),
+            os.path.join(self._xnnpack_path, "/home/riscv/Desktop/XNNPACK/include"),
             os.path.join(self._pkg_path(), "pthreadpool-source/include"),
         ]
         return xnnpack_path
@@ -126,9 +128,10 @@ class RVV(Target):
         xnnpack_path = [
             os.path.join(self._pkg_path(), f" {self._pkg_path()}/*.a"),
             os.path.join(self._pkg_path(), "cpuinfo"),
-            os.path.join(self._pkg_path(), "kleidiai"),
             os.path.join(self._pkg_path(), "pthreadpool"),
         ]
+        if is_macos():
+            xnnpack_path.append(os.path.join(self._pkg_path(), "kleidiai"))
         return xnnpack_path
 
     def get_link_directories(self) -> List[str]:
@@ -142,7 +145,7 @@ class RVV(Target):
             # "-menable-experimental-extensions",
             environ.get_compiler_opt_level(),
             "-std=c++17",
-            # f"-march={self._arch}",
+            f"-march={self._arch}",
             # f"-mrvv-vector-bits={environ.get_mrvv_vector_bits()}",
             "-v",
         ]
@@ -162,10 +165,10 @@ class RVV(Target):
             options.append("-I" + path)
         for path in link_path:
             options.append("-L" + path)
-        if is_macos():
-            options.append("-lxnnpack -lkleidiai -lpthreadpool -lcpuinfo -lpthread -g")
-        else:
-            options.append("-lXNNPACK -lpthreadpool -lcpuinfo -lpthread -g")
+        # if is_macos():
+        #     options.append("-lxnnpack -lkleidiai -lpthreadpool -lcpuinfo -lpthread -g")
+        # else:
+        options.append("-lXNNPACK -lpthreadpool -lcpuinfo -lpthread -g")
         return " ".join(options)
 
     def src_extension(self):
@@ -210,9 +213,9 @@ class RVV(Target):
 
     def compile_cmd(self, executable=False):
         if executable:
-            if is_macos():
-                cmd = self.cc() + " " + self._compile_options + " -o {target} {src} -Wl,-lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl"
-            else:
+            # if is_macos():
+            #     cmd = self.cc() + " " + self._compile_options + " -o {target} {src} -Wl,-lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl"
+            # else:
                 cmd = self.cc() + " " + self._compile_options + " -o {target} {src} -Wl,--start-group -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl,--end-group"
         else:
             cmd = self.cc() + " " + self._compile_options + " -c -o {target} {src}"
