@@ -48,7 +48,7 @@ template_with_pruning = jinja2.Template(
             """
 {{indent}}//{{name}}
 {{indent}}xnn_operator_t op_conv = nullptr;
-{{indent}}const xnn_status status = xnn_create_xnn_create_input_T_pruned_convolution2d_nhwc_f32_x2v(
+{{indent}}const xnn_status status = xnn_create_input_T_pruned_convolution2d_nhwc_f32_x2v(
 {{indent}}  PH, PW, PH, PW, i32_kernel_h, i32_kernel_w,
 {{indent}}  SH, SW, DH, DW, 1, CI,
 {{indent}}  CO, 1 * CI, 1 * CO, ({{DataName}}*)(weight_ptr), ({{DataName}}*)(bias_ptr),
@@ -73,12 +73,12 @@ template_with_pruning = jinja2.Template(
 {{indent}}    /*threadpool=*/pthreadpool_, pruning_ratio), xnn_status_success);
 {{indent}}CHECK_EQ(workspace_size, 0);
 {{indent}}CHECK_EQ(workspace_alignment, 1);
-{{indent}}CHECK_EQ(xnn_setup_{{Conv2DSpecialization}}(
+{{indent}}CHECK_EQ(xnn_setup_input_T_pruned_convolution2d_nhwc_f32(
 {{indent}}    op_conv, 
 {{indent}}    /*workspace=*/nullptr, 
 {{indent}}    ({{DataName}}*)(in_ptr), 
 {{indent}}    ({{DataName}}*)(out_ptr), 
-{{indent}}    (uint16_t*)(pruned_weight_indice),
+{{indent}}    (uint16_t*)(weight_indice_ptr),
 {{indent}}    /*lmul=*/2), xnn_status_success);
 {{indent}}CHECK_EQ(xnn_run_operator(op_conv, /*threadpool=*/pthreadpool_), xnn_status_success);
             """

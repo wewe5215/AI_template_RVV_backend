@@ -218,8 +218,9 @@ class conv2d_cnhw_pruning(Operator):
         return params_factory
 
     def _infer_shape(self, x: List[int], w: List[int]) -> List[int]:
-        if x[3] != w[3] * self._attrs["group"]:
-            raise RuntimeError("X/W Shape mismatch for conv2d")
+        pruning_ratio = self._attrs["pruning_ratio"]
+        if x[3] != ((w[3] * self._attrs["group"]) / (1-pruning_ratio)) :
+            raise RuntimeError(f"X/W Shape mismatch for conv2d with pruning_ratio = {(pruning_ratio)}")
 
         eval_func = self.shape_eval_template.render(
             indent="",

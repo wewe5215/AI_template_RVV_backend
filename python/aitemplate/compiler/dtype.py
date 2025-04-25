@@ -26,6 +26,7 @@ _DTYPE2BYTE = {
     "int32": 4,
     "int64": 8,
     "bfloat16": 2,
+    "uint16_t": 2,
 }
 
 
@@ -43,6 +44,7 @@ _DTYPE_TO_ENUM = {
     "int64": 4,
     "bool": 5,
     "bfloat16": 6,
+    "uint16_t": 8,
 }
 
 
@@ -134,6 +136,8 @@ def dtype_to_enumerator(dtype: str) -> str:
             return "kBool"
         elif dtype == "bfloat16":
             return "kBFloat16"
+        elif dtype == "uint16_t":
+            return "k_Uint16"
         else:
             raise AssertionError(f"unknown dtype {dtype}")
 

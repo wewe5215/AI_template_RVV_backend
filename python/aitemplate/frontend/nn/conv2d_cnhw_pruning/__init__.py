@@ -34,10 +34,11 @@ from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_relu6 i
 #     Conv2dCNHWPruningBiasReluFewChannels,
 # )
 from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_bias_sigmoid import Conv2dCNHWPruningBiasSigmoid
-from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise import Conv2dCNHWPruningDepthwise
-from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias import Conv2dCNHWPruningDepthwiseBias
-from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias_relu import Conv2dCNHWPruningDepthwiseBiasRelu
-from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias_relu6 import Conv2dCNHWPruningDepthwiseBiasRelu6
+# depthwise convolution with pruning is not supported
+# from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise import Conv2dCNHWPruningDepthwise
+# from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias import Conv2dCNHWPruningDepthwiseBias
+# from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias_relu import Conv2dCNHWPruningDepthwiseBiasRelu
+# from aitemplate.frontend.nn.conv2d_cnhw_pruning.conv2d_cnhw_pruning_depthwise_bias_relu6 import Conv2dCNHWPruningDepthwiseBiasRelu6
 # from aitemplate.frontend.nn.conv2d_cnhw_pruning.transposed_conv2d_cnhw_pruning_bias import ConvTranspose2dBias
 # from aitemplate.frontend.nn.conv2d_cnhw_pruning.transposed_conv2d_cnhw_pruning_bias_relu import (
 #     ConvTranspose2dBiasRelu,

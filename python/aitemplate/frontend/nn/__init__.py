@@ -19,6 +19,7 @@ from aitemplate.frontend.nn.module import Module
 from aitemplate.frontend.nn.conv1d import *
 from aitemplate.frontend.nn.conv2d import *
 from aitemplate.frontend.nn.conv2d_cnhw import *
+from aitemplate.frontend.nn.conv2d_cnhw_pruning import *
 from aitemplate.frontend.nn.conv3d import *
 from aitemplate.frontend.nn.linear import *
 from aitemplate.frontend.nn.padding import *

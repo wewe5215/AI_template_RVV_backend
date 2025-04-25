@@ -73,7 +73,7 @@ def CreateConv2dFwdOperator(manifest, operation_kind, out_element_op, out_data_o
     return operations
 def CreateConv2dPruningFwdOperator(manifest, operation_kind, out_element_op, out_data_op=""):
     in_element_op = library.TensorOperation.PassThrough
-    conv2d_spec = conv.Conv2DSpecialization.ConvCNHWF32,
+    conv2d_spec = conv.Conv2DSpecialization.ConvCNHWF32
 
     operations = []
     data_type = library.DataType.f32

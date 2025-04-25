@@ -86,7 +86,7 @@ void {{function_name}} (
     int stridew,
     int dilationw,
     int padw,
-    float* pruning_ratio,
+    float pruning_ratio,
     pthreadpool* pthreadpool_
   ) {
 
