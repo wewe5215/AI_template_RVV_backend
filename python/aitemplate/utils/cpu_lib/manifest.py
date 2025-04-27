@@ -129,18 +129,23 @@ class Manifest:
                 not in self.operations[operation.operation_kind].keys()
             ):
                 self.operations[operation.operation_kind][operation.extra_kind] = {}
-
+            
+            if (
+                operation.A.layout
+                not in self.operations[operation.operation_kind][
+                    operation.extra_kind
+                ].keys()
+            ):
+                self.operations[operation.operation_kind][operation.extra_kind][operation.A.layout] = {}
+            
             if (
                 configuration_name
                 not in self.operations[operation.operation_kind][
                     operation.extra_kind
                 ].keys()
             ):
-                self.operations[operation.operation_kind][operation.extra_kind][
-                    configuration_name
-                ] = []
+                self.operations[operation.operation_kind][operation.extra_kind][operation.A.layout][configuration_name] = []
 
-            self.operations[operation.operation_kind][operation.extra_kind][
-                configuration_name
-            ].append(operation)
+
+            self.operations[operation.operation_kind][operation.extra_kind][operation.A.layout][configuration_name].append(operation)
             self.operation_count += 1

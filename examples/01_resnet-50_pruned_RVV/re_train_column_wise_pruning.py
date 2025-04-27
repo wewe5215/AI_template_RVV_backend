@@ -178,8 +178,8 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
 
-    # Set up the StepLR scheduler to decay LR by a factor of 10 every 30 epochs.
-    scheduler_step_size = 30 * num_update_steps_per_epoch  # steps corresponding to 30 epochs.
+    # Set up the StepLR scheduler to decay LR by a factor of 10 every 5 epochs.
+    scheduler_step_size = 5 * num_update_steps_per_epoch  # steps corresponding to 5 epochs.
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step_size, gamma=0.1)
 
     # Prepare the model, optimizer, dataloader, and scheduler with accelerator.
@@ -187,7 +187,7 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
         model, optimizer, train_dataloader, lr_scheduler
     )
 
-    # Apply custom pruning to the model.
+    # Apply custom pruning to the model and log the event.
     result_line = f"apply pruning ratio = {pruning_ratio}"
     print(result_line)
     if accelerator.is_local_main_process:
@@ -196,10 +196,23 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
         with open(result_file, "a") as f:
             f.write(result_line + "\n")
 
-    # Recalculate total steps in case the dataloader changed.
+    # Recalculate the total number of update steps per epoch (in case the dataloader changed).
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
+    # If a checkpointing_steps argument exists and is set, use it; otherwise, store a checkpoint every 10 epochs.
+    # Here, we compute checkpointing_steps as 10 epochs worth of update steps.
+    if hasattr(args, "checkpointing_steps") and args.checkpointing_steps is not None:
+        try:
+            # Attempt to use the provided checkpointing_steps value.
+            checkpointing_steps = int(args.checkpointing_steps)
+        except ValueError:
+            print("Invalid checkpointing_steps provided; falling back to every 10 epochs.")
+            checkpointing_steps = 10 * num_update_steps_per_epoch
+    else:
+        checkpointing_steps = 10 * num_update_steps_per_epoch
+
+    print(f"Checkpointing will occur every {checkpointing_steps} steps (every 10 epochs).")
     # Optionally initialize trackers.
     if args.with_tracking:
         experiment_config = vars(args)
@@ -253,6 +266,13 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
             if accelerator.sync_gradients:
                 progress_bar.update(1)
                 completed_steps += 1
+
+            if isinstance(checkpointing_steps, int):
+                if completed_steps % checkpointing_steps == 0:
+                    output_dir = f"step_{completed_steps}"
+                    if args.output_dir is not None:
+                        output_dir = os.path.join(args.output_dir, output_dir)
+                    accelerator.save_state(output_dir)
             
             if completed_steps >= args.max_train_steps:
                 break
@@ -274,6 +294,7 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
             prune.remove(module, weight_name)
         else:
             print(f"Layer {layer_name} was not pruned, skipping removal.")
+    accelerator.save_state(args.output_dir)
     accelerator.wait_for_everyone()
     # Unwrap the model from the accelerator.
     unwrapped_model = accelerator.unwrap_model(model)

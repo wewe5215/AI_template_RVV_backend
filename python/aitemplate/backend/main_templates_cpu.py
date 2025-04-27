@@ -40,6 +40,7 @@ MODEL_TEMPLATE_CPU = jinja2.Template(
 #include <iomanip>
 #include <pthreadpool.h>
 #include <thread>
+#include "xnnpack.h"
 
 {{ function_decl }}
 
@@ -105,9 +106,11 @@ class {{model_name}} : public ModelBase<{{model_name}}> {
     ///////////////////////////////////////////////////////////////////////////
     // default RunImpl implemenation
     void RunImpl(StreamType stream) {
+    const xnn_status status_init = xnn_initialize(nullptr);
   {% for func in function_seq %}
   {{ func }}
   {% endfor %}
+    xnn_deinitialize();
     }
 {% endif %}
 
@@ -121,6 +124,7 @@ class {{model_name}} : public ModelBase<{{model_name}}> {
       }
 
       ss << "{\\n";
+      const xnn_status status_init = xnn_initialize(nullptr);
       {% for func_name, func, input_sizes, output_sizes, func_properties in per_op_profiler_seq %}
       {
         std::cout << "Profiling: " << "{{ func_name }}" << " (" << iters << " iterations)" << std::endl;
@@ -149,7 +153,7 @@ class {{model_name}} : public ModelBase<{{model_name}}> {
       }
       {% endfor %}
       ss << "}\\n";
-
+      xnn_deinitialize();
       std::cout << "AIT per op profiling finished." << std::endl;
 #endif
     }

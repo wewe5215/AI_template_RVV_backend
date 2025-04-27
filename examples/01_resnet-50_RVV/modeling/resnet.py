@@ -81,11 +81,34 @@ class BasicBlock(CNNBlockBase):
     with two 3x3 conv layers and a projection shortcut if needed.
     """
 
-    def __init__(self, in_channels, out_channels, *, stride=1, norm="BN"):
+    def __init__(self, in_channels, out_channels, *, stride=1, norm="BN", activation="ReLU"):
         super().__init__(in_channels, out_channels, stride)
+        # If the input and output dimensions differ, or if we need to change the spatial size,
+        # use a 1x1 convolution for the shortcut.
+        if in_channels != out_channels or stride != 1:
+            self.downsample_0 = nn.Conv2dBias(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, dtype="float")
+        else:
+            self.downsample_0 = None
+
+        # For simplicity we assume the activation is ReLU.
+        # Here we use fused conv operations similar to the BottleneckBlock.
+        # The first conv: 3x3 with 'stride' and padding 1.
+        self.conv1 = nn.Conv2dBiasRelu(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
+        # The second conv: 3x3 with stride 1 and padding 1.
+        # This op is fused with an "add" of the shortcut and a ReLU.
+        self.conv2 = nn.Conv2dBiasAddRelu(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x):
-        raise NotImplementedError()
+        out = self.conv1(x)
+        # Determine the shortcut connection.
+        if self.downsample_0 is not None:
+            downsample = self.downsample_0(x)
+        else:
+            downsample = x
+        # Fuse the addition of the shortcut with the second convolution's output
+        # and apply the final ReLU.
+        out = self.conv2(out, downsample)
+        return out
 
 
 class BottleneckBlock(CNNBlockBase):
@@ -412,7 +435,10 @@ def build_resnet_backbone(depth, activation):
     width_per_group = 64
     bottleneck_channels = num_groups * width_per_group
     in_channels = 64
-    out_channels = 256
+    if depth >= 50:
+        out_channels = 256
+    else:
+        out_channels = 64
 
     stem = BasicStem(in_channels=3, out_channels=64, norm=norm, activation=activation)
 

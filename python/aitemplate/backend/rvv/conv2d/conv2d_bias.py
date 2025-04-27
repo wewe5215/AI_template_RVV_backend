@@ -31,12 +31,12 @@ def conv2d_bias_config(
     op_kind = cpu_lib.library.Conv2dKind.Conv2dBias
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
-    conv2d_specialization = cpu_lib.conv2d_operation.Conv2DSpecialization.ConvNhwcF32
+    Layout = cpu_lib.library.LayoutType.NHWC
     func_attrs["op_instance"] = common.extract_config(
         dtype = dtype,
         op_kind = op_kind,
         extra_kind = extra_kind,
-        conv2d_specialization = conv2d_specialization)
+        Layout = Layout)
 
 
 @registry.reg("rvv.conv2d_bias.gen_profiler")

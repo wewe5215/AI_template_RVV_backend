@@ -111,6 +111,7 @@ class LayoutType(enum.Enum):
     KYXC = auto()
     NHWK = auto()
     NCHW = auto()
+    CNHW = auto()
     KCYX = auto()
     NKWH = auto()
     NDHWC = auto()
@@ -137,7 +138,8 @@ LayoutTag = {
     LayoutType.NHWC: "nhwc",
     LayoutType.NCHW: "nchw",
     LayoutType.ColumnMajor: "column",
-    LayoutType.RowMajor: "row"
+    LayoutType.RowMajor: "row",
+    LayoutType.CNHW: "cnhw"
 }
 
 
@@ -166,23 +168,42 @@ OperationKindNames = {
 class Conv2dKind(enum.Enum):
     Conv2d = auto()
     Conv2dBias = auto()
+    Conv2dBiasTranspose = auto()
     Conv2dBiasAdd = auto()
     Conv2dBiasRelu = auto()
+    Conv2dBiasReluTranspose = auto()
     Conv2dBiasRelu6 = auto()
+    Conv2dBiasRelu6Transpose = auto()
     Conv2dBiasAddRelu = auto()
     Conv2dBiasAddRelu6 = auto()
     Conv2dBiasReluAdd = auto()
     Conv2dBiasRelu6Add = auto()
     Conv2dBiasSigmoid = auto()
+
+    Conv2dPruning = auto()
+    Conv2dPruningBias = auto()
+    Conv2dPruningBiasAdd = auto()
+    Conv2dPruningBiasRelu = auto()
+    Conv2dPruningBiasRelu6 = auto()
+    Conv2dPruningBiasAddRelu = auto()
+    Conv2dPruningBiasAddRelu6 = auto()
+    Conv2dPruningBiasReluAdd = auto()
+    Conv2dPruningBiasRelu6Add = auto()
+    Conv2dPruningBiasSigmoid = auto()
+
     GroupConv2dBiasRelu = auto()
     GroupConv2dBiasRelu6 = auto()
     TransposedConv2d = auto()
+    TransposedConv2dBias = auto()
     TransposedConv2dBiasRelu = auto()
     Conv2dDepthwise = auto()
     Conv2dDepthwiseBias = auto()
+    Conv2dDepthwiseBiasTranspose = auto()
     Conv2dDepthwiseBiasAdd = auto()
     Conv2dDepthwiseBiasRelu = auto()
+    Conv2dDepthwiseBiasReluTranspose = auto()
     Conv2dDepthwiseBiasRelu6 = auto()
+    Conv2dDepthwiseBiasRelu6Transpose = auto()
     Conv2dDepthwiseBiasAddRelu = auto()
     Conv2dDepthwiseBiasAddRelu6 = auto()
 
@@ -190,23 +211,42 @@ class Conv2dKind(enum.Enum):
 Conv2dKindNames = {
     Conv2dKind.Conv2d: "conv2d",
     Conv2dKind.Conv2dBias: "conv2d_bias",
+    Conv2dKind.Conv2dBiasTranspose: "conv2d_bias_transpose",
     Conv2dKind.Conv2dBiasAdd: "conv2d_bias_add",
     Conv2dKind.Conv2dBiasRelu: "conv2d_bias_relu",
+    Conv2dKind.Conv2dBiasReluTranspose: "conv2d_bias_relu_transpose",
     Conv2dKind.Conv2dBiasRelu6: "conv2d_bias_relu6",
+    Conv2dKind.Conv2dBiasRelu6Transpose: "conv2d_bias_relu6_transpose",
     Conv2dKind.Conv2dBiasAddRelu: "conv2d_bias_add_relu",
     Conv2dKind.Conv2dBiasAddRelu6: "conv2d_bias_add_relu6",
     Conv2dKind.Conv2dBiasReluAdd: "conv2d_bias_relu_add",
     Conv2dKind.Conv2dBiasRelu6Add: "conv2d_bias_relu6_add",
     Conv2dKind.Conv2dBiasSigmoid: "conv2d_bias_sigmoid",
+
+    Conv2dKind.Conv2dPruning: "conv2d_pruning",
+    Conv2dKind.Conv2dPruningBias: "conv2d_pruning_bias",
+    Conv2dKind.Conv2dPruningBiasAdd: "conv2d_pruning_bias_add",
+    Conv2dKind.Conv2dPruningBiasRelu: "conv2d_pruning_bias_relu",
+    Conv2dKind.Conv2dPruningBiasRelu6: "conv2d_pruning_bias_relu6",
+    Conv2dKind.Conv2dPruningBiasAddRelu: "conv2d_pruning_bias_add_relu",
+    Conv2dKind.Conv2dPruningBiasAddRelu6: "conv2d_pruning_bias_add_relu6",
+    Conv2dKind.Conv2dPruningBiasReluAdd: "conv2d_pruning_bias_relu_add",
+    Conv2dKind.Conv2dPruningBiasRelu6Add: "conv2d_pruning_bias_relu6_add",
+    Conv2dKind.Conv2dPruningBiasSigmoid: "conv2d_pruning_bias_sigmoid",
+
     Conv2dKind.GroupConv2dBiasRelu: "group_conv2d_bias_relu",
     Conv2dKind.GroupConv2dBiasRelu6: "group_conv2d_bias_relu6",
     Conv2dKind.TransposedConv2d: "transposed_conv2d",
+    Conv2dKind.TransposedConv2dBias: "transposed_conv2d_bias",
     Conv2dKind.TransposedConv2dBiasRelu: "transposed_conv2d_bias_relu",
     Conv2dKind.Conv2dDepthwise: "conv2d_depthwise",
     Conv2dKind.Conv2dDepthwiseBias: "conv2d_depthwise_bias",
+    Conv2dKind.Conv2dDepthwiseBiasTranspose: "conv2d_depthwise_bias_transpose",
     Conv2dKind.Conv2dDepthwiseBiasAdd: "conv2d_depthwise_bias_add",
     Conv2dKind.Conv2dDepthwiseBiasRelu: "conv2d_depthwise_bias_relu",
+    Conv2dKind.Conv2dDepthwiseBiasReluTranspose: "conv2d_depthwise_bias_relu_transpose",
     Conv2dKind.Conv2dDepthwiseBiasRelu6: "conv2d_depthwise_bias_relu6",
+    Conv2dKind.Conv2dDepthwiseBiasRelu6Transpose: "conv2d_depthwise_bias_relu6_transpose",
     Conv2dKind.Conv2dDepthwiseBiasAddRelu: "conv2d_depthwise_bias_add_relu",
     Conv2dKind.Conv2dDepthwiseBiasAddRelu6: "conv2d_depthwise_bias_add_relu6",
 }
@@ -236,6 +276,7 @@ class TensorOperation(enum.Enum):
     Mul = auto()
     Max = auto()
     Min = auto()
+    Transpose = auto()
     Sqrtdiff = auto()
     UnaryAbs = auto()
     UnaryBankersRounding = auto()
@@ -286,6 +327,7 @@ TensorOperationTag = {
     TensorOperation.UnaryRsqrt: "reciprocal_square_root_nc",
     TensorOperation.UnaryTanh: "tanh_nc",
     TensorOperation.UnaryTrunc: "truncation_nc",
+    TensorOperation.Transpose: "transpose_nd",
 }
 
 

@@ -17,6 +17,6 @@ Pool module init.
 """
 from aitemplate.compiler.ops.pool.avg_pool2d import avg_pool2d
 from aitemplate.compiler.ops.pool.max_pool2d import max_pool2d
+from aitemplate.compiler.ops.pool.avg_pool2d_transpose import avg_pool2d_transpose
 
-
-__all__ = ["avg_pool2d", "max_pool2d"]
+__all__ = ["avg_pool2d", "max_pool2d", "avg_pool2d_transpose",]

@@ -168,9 +168,6 @@ void {{function_name}} (
   {{output_addr_calculator}}
   {{extra_shape}}
   {{input_output_checks}}
-  {% if is_first_op %}
-    const xnn_status status_init = xnn_initialize(nullptr);
-  {% endif %}
   {{exec_paths}}
   {% for idx in range(input_ndims) %}
       std::cout << "input_ndims{{idx}}: " << *a_dim{{idx}} << std::endl;
@@ -457,12 +454,13 @@ def extract_config(
     layout=RCR,
     op_kind=None,
     extra_kind=None,
+    Layout=None
 ):
     import cpu_lib
     spec = RVVSpec()
     lib_dtype = spec.dtype_to_lib_type(dtype)
     gemm_ops = OrderedDict()
-    extract_ops = list(Target.current()._operators[op_kind][extra_kind].items())
+    extract_ops = list(Target.current()._operators[op_kind][extra_kind][Layout].items())
     for key, value in extract_ops:
         for op in value:
             if layout == RCR:
@@ -529,7 +527,6 @@ def gen_function(
         instances="",
         function_name=func_name,
         dtype="float",
-        is_first_op = (match.group(1) == '0'),
         shape_eval=shape_eval_func,
         input_addr_calculator=input_addr_calculator,
         output_addr_calculator=output_addr_calculator,
@@ -661,7 +658,6 @@ def gen_profiler(
         output_ndims=ndims,
         shape_eval=shape_func,
         input_output_checks=input_output_checks,
-        is_first_op = True,
         exec_paths="\n".join(instances),
         output_addr_calculator=output_addr_calculator,
         extra_code=extra_code,

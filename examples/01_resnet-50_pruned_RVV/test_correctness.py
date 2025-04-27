@@ -47,9 +47,6 @@ def mark_output(y):
 
 def compile_module(model_name, batch_size):
 
-    if model_name != "resnet50":
-        raise NotImplementedError
-
     model_name = f"{model_name}"
     target = detect_target()
     # Create input tensor, need to specify the shape, dtype and is_input flag
@@ -67,20 +64,21 @@ def compile_module(model_name, batch_size):
     module = compile_model(y, target, "./tmp", model_name)
     return module
 
-class ResNet50Verification(unittest.TestCase):
-    def test_resnet50(self):
-        batch_size = 4
+class ResNetVerification(unittest.TestCase):
+    def test_resnet(self):
+        batch_size = 1
         pruning_ratio = 0.75
-        model_name = "resnet50"
+        depth = 152
+        model_name = f"resnet{depth}"
         torch_dtype = torch.float32
-        if pruning_ratio != 0.5:
-            metadata_folder = f"metadata_revised_cnhw_pruned_{int(pruning_ratio*100)}_{model_name}_{batch_size}"
+        if depth != 50 or (depth == 50 and pruning_ratio != 0.5):
+            metadata_folder = f"metadata_cnhw_pruned_{int(pruning_ratio*100)}_{model_name}_{batch_size}"
         else:
-            metadata_folder = f"metadata_revised_cnhw_pruned_{model_name}_{batch_size}"
+            metadata_folder = f"metadata_cnhw_pruned_{model_name}_{batch_size}"
         # metadata_folder = "test"
         weights_file = f"{metadata_folder}/weights_file_pruned_{batch_size}.npz"
         io_file = f"{metadata_folder}/io_tensors_{batch_size}.npz"
-        timm_exporter = timm_export("resnet50", pretrained=False)
+        timm_exporter = timm_export(model_name, pretrained=False)
         ait_params = timm_exporter.export_model(half=False)
         pt_model = timm_exporter.pt_model.to(dtype=torch_dtype, device="cpu")
         pt_model.eval()
@@ -88,28 +86,48 @@ class ResNet50Verification(unittest.TestCase):
         np_weights = {}
         for k, v in ait_params.items():
             np_weights[k] = v.detach().cpu().numpy().astype(np.float32)
-        new_np_weights = prune_model_weights(np_weights, pruning_ratio, batch_size)
-        # i = 110
+        new_np_weights = prune_model_weights(np_weights, pruning_ratio, batch_size, depth)
+        
+        # for key, value in np_weights.items():
+        #     if "weight" in key and "indice" not in key and "fc" not in key:
+        #         # print(key)
+        #         out_ch, k_h, k_w, in_ch = value.shape
+        #         print(f'{key} | {out_ch}, {k_h}, {k_w}, {in_ch}')
         # for key, value in new_np_weights.items():
         #     if "indice" in key:
-        #         size = value.shape
-        #         if len(size) == 1:
-        #             size_str = str(size[0])
-        #         else:
-        #             size_str = ", ".join(map(str, size))
-        #         print(f'     max_param_shapes_[{i}] = {{{size_str}}};')
-        #         i = i + 1
-        # i = 110
+        #         print(f'     constant_name_to_ptr_["{key}"] = const_cast<const void**>(reinterpret_cast<void**>(&{key}));')
+        # for key, value in new_np_weights.items():
+        #     if "indice" in key:
+        #         print(f'if ({key} == nullptr) {{\n    throw std::runtime_error("Constant {key} was not set! Set the value with set_constant.");\n}}')
+        # for key, value in new_np_weights.items():
+        #     if "indice" in key:
+        #         print(f'   void* {key} {{nullptr}};')
+        
+        i = 314
+        for key, value in new_np_weights.items():
+            if "indice" in key:
+                size = value.shape
+                if len(size) == 1:
+                    size_str = str(size[0])
+                else:
+                    size_str = ", ".join(map(str, size))
+                print(f'     max_param_shapes_[{i}] = {{{size_str}}};')
+                i = i + 1
+        # i = 314
         # for key, value in new_np_weights.items():
         #     if "indice" in key:
         #         print(f'     param_names_[{i}] = "{key}";')
         #         i = i + 1
-        # i = 108
+        # i = 314
+        # for key, value in new_np_weights.items():
+        #     if "indice" in key:
+        #         print(f'     param_dtypes_[{i}] = AITemplateDtype::k_Uint16;')
+        #         i = i + 1
+        # i = 312
         # for key, value in new_np_weights.items():
         #     if "indice" in key:
         #         print(f'    unbound_constant_name_to_idx_["{key}"] = {i};')
         #         i = i + 1
-        # np.savez_compressed(weights_file, **np_weights)
         np.savez_compressed(weights_file, **new_np_weights)
         # ait model expects NHWC format
         x_ait = torch.rand([batch_size, 224, 224, 3], dtype=torch_dtype, device="cpu")
@@ -123,19 +141,19 @@ class ResNet50Verification(unittest.TestCase):
         io_data = {"x_input": x_input_np, "y_output": y_output_np}
         # Save to a compressed NPZ file
         np.savez_compressed(io_file, **io_data)
-        transfer_folder(metadata_folder, target_user, target_ip, target_dir)
+        # transfer_folder(metadata_folder, target_user, target_ip, target_dir)
         remote_confirmation_file = f"{target_dir}/output_file_{model_name}_{batch_size}.npz"
         local_confirmation_file = f"output_file_{model_name}_{batch_size}.npz"
-        poll_for_confirmation(target_user, target_ip, remote_confirmation_file, local_confirmation_file)
-        data = np.load(local_confirmation_file, allow_pickle=True)
-        y_ait = data["y_output"]
+        # poll_for_confirmation(target_user, target_ip, remote_confirmation_file, local_confirmation_file)
+        # data = np.load(local_confirmation_file, allow_pickle=True)
+        # y_ait = data["y_output"]
 
         # # torch model expects NCHW format
-        x_pt = torch.transpose(x_ait, 1, 3).contiguous()
-        with torch.no_grad():
-            y_pt = pt_model(x_pt)
-        y_np = y_pt.cpu().numpy()
-        np.savez(f"revised_cnhw_pruned_{int(pruning_ratio*100)}_{model_name}_{batch_size}_y_pt.npz", y=y_np)
+        # x_pt = torch.transpose(x_ait, 1, 3).contiguous()
+        # with torch.no_grad():
+        #     y_pt = pt_model(x_pt)
+        # y_np = y_pt.cpu().numpy()
+        # np.savez(f"cnhw_pruned_{int(pruning_ratio*100)}_{model_name}_{batch_size}_y_pt.npz", y=y_np)
         # print("my answer:")
         # for i in torch.from_numpy(y_ait.reshape([batch_size, 1000])):
         #     print(f"{i} ")

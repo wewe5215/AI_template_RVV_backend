@@ -26,8 +26,11 @@ _LOGGER = logging.getLogger(__name__)
 # TODO : add f16 implementation later
 EXEC_TEMPLATE_AVG = jinja2.Template(
     """
+{% if is_transpose %}
+{{indent}}{{DataName}}* tmp_out = ({{DataName}}*)malloc(NI * HO * WO * CO * sizeof({{DataName}}));
+{% endif %}
 {{indent}}xnn_operator_t op_avg = nullptr;
-{{indent}}const xnn_status status = xnn_create_average_pooling2d_nhwc_f32(
+{{indent}}const xnn_status status = xnn_create_average_pooling2d_nhwc_f{{DTypeBit}}(
 {{indent}}  PH, PW, PH, PW, KH, KW, SH, SW, 
 {{indent}}  -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), 
 {{indent}}  /*flags=*/0, &op_avg);
@@ -40,19 +43,37 @@ EXEC_TEMPLATE_AVG = jinja2.Template(
 {{indent}}size_t w_align = 0;
 {{indent}}CHECK_EQ(
 {{indent}}  xnn_status_success,
-{{indent}}  xnn_reshape_average_pooling2d_nhwc_f32(
+{{indent}}  xnn_reshape_average_pooling2d_nhwc_f{{DTypeBit}}(
 {{indent}}    op_avg, NI, HI, WI,
 {{indent}}    CI, /*input_pixel_stride=*/CI, /*output_pixel_stride=*/CO,
 {{indent}}    &w_size, &w_align,
 {{indent}}    /*output_height_out=*/nullptr, /*output_width_out=*/nullptr,
 {{indent}}    /*threadpool=*/pthreadpool_));
-{{indent}}CHECK_LE(w_align, 16);
-{{indent}}std::vector<char> workspace_vector(w_size + w_align + 16);
+{{indent}}CHECK_LE(w_align, 64);
+{{indent}}std::vector<char> workspace_vector(w_size + w_align + 64);
 {{indent}}void* maybe_aligned_workspace = workspace_vector.data();
 {{indent}}void* aligned_workspace = \
     (void*)((intptr_t)maybe_aligned_workspace + w_align - (intptr_t)maybe_aligned_workspace % w_align);
-{{indent}}CHECK_EQ(xnn_status_success, xnn_setup_average_pooling2d_nhwc_f32(op_avg, aligned_workspace, (float*)(in_ptr), (float*)(out_ptr)));
+{% if is_transpose %}
+{{indent}}CHECK_EQ(xnn_status_success, xnn_setup_average_pooling2d_nhwc_f{{DTypeBit}}(op_avg, aligned_workspace, (float*)(in_ptr), (float*)(tmp_out)));
+{% else %}
+{{indent}}CHECK_EQ(xnn_status_success, xnn_setup_average_pooling2d_nhwc_f{{DTypeBit}}(op_avg, aligned_workspace, (float*)(in_ptr), (float*)(out_ptr)));
+{% endif %}
 {{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(op_avg, /*threadpool=*/pthreadpool_));
+{% if is_transpose %}
+{{indent}}xnn_operator_t transpose_op = nullptr;
+{{indent}}std::vector<size_t> shape = {(size_t)CO, (size_t)(NI * HO * WO)};
+{{indent}}std::vector<size_t> perm = {1, 0};
+{{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{operation}}_x{{DTypeBit}}(0, &transpose_op));
+{{indent}}CHECK_NE(nullptr, transpose_op);
+{{indent}}CHECK_EQ(
+{{indent}}xnn_status_success, xnn_reshape_{{operation}}_x{{DTypeBit}}(
+{{indent}} transpose_op, shape.size(), shape.data(), perm.data(), pthreadpool_));
+{{indent}}CHECK_EQ(
+{{indent}}xnn_status_success, xnn_setup_{{operation}}_x{{DTypeBit}}(transpose_op, tmp_out, ({{DataName}}*)(out_ptr)));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(transpose_op, /*threadpool=*/pthreadpool_));
+{{indent}}free(tmp_out);
+{% endif %}
 """
 )
 
@@ -109,9 +130,6 @@ void {{function_name}}(
     pthreadpool* pthreadpool_
     ) {
   {{shape_function}}
-  {% if is_first_op %}
-    const xnn_status status_init = xnn_initialize(nullptr);
-  {% endif %}
   {{exec_paths}}
   return;
   throw std::runtime_error(
@@ -170,6 +188,7 @@ def gen_function(
     exec_cond_template,
     shape_eval_template,
     shape_save_template,
+    is_transpose=False,
 ):
     """
     Parameters
@@ -199,6 +218,10 @@ def gen_function(
 
     spec = RVVSpec()
     dtype = spec.dtype_to_backend_type(func_attrs["inputs"][0]._attrs["dtype"])
+    if "32" in dtype or dtype == "float":
+        dtype_bit = "32"
+    else:
+        dtype_bit = "16"
     op_type = func_attrs["op"]
     func_name = func_attrs["name"]
     exec_path = func_attrs["exec_path"]
@@ -206,7 +229,8 @@ def gen_function(
     if "max" in op_type:
         exec_paths = EXEC_TEMPLATE_MAX.render(indent="    ", DataName=dtype)
     elif "avg" in op_type:
-        exec_paths = EXEC_TEMPLATE_AVG.render(indent="    ", DataName=dtype)
+        exec_paths = EXEC_TEMPLATE_AVG.render(
+            indent="    ", DataName=dtype, operation="transpose_nd", is_transpose=is_transpose, DTypeBit=dtype_bit)
     else:
         raise NotImplementedError
     shape_eval_func = shape_eval_template.render(
@@ -235,7 +259,6 @@ def gen_function(
     return SRC_TEMPLATE.render(
         function_name=func_name,
         shape_function=shape_func,
-        is_first_op = (match.group(1) == '0'),
         exec_paths=exec_paths,
     )
 

@@ -28,9 +28,9 @@ def extract_config(func_attrs, dtype="float16", unary_op_name="Identity"):
         op_kind = cpu_lib.library.Conv2dKind.Conv2dBias
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
-    conv2d_specialization = cpu_lib.conv2d_operation.Conv2DSpecialization.ConvNhwcF32
+    Layout = cpu_lib.library.LayoutType.NHWC
     return common.extract_config(
         dtype = dtype,
         op_kind = op_kind,
         extra_kind = extra_kind,
-        conv2d_specialization = conv2d_specialization)
+        Layout = Layout)

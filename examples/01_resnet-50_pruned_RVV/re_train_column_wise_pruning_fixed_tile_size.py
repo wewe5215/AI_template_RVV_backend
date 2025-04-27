@@ -45,7 +45,7 @@ layers_to_prune = [
 sparsity = 0.25
 M = 4
 N = int(M * (1.0 - sparsity))
-V = 8
+V = 1
 result_file = f"results_prune_{V}_{N}_{M}.txt"
 def f32_data_pruning_column_wise_with_ratio(weight, mr, pattern="2:4", block_groups=None):
     """
@@ -206,8 +206,8 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
 
-    # Set up the StepLR scheduler to decay LR by a factor of 10 every 30 epochs.
-    scheduler_step_size = 30 * num_update_steps_per_epoch  # steps corresponding to 30 epochs.
+    # Set up the StepLR scheduler to decay LR by a factor of 10 every 10 epochs.
+    scheduler_step_size = 15 * num_update_steps_per_epoch  # steps corresponding to 10 epochs.
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step_size, gamma=0.1)
 
     # Prepare the model, optimizer, dataloader, and scheduler with accelerator.
@@ -248,10 +248,9 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
         # (This part may require additional customization.)
     
     progress_bar.update(completed_steps)
-
+    final_acc = 0
     # Define a standard classification loss.
     criterion = nn.CrossEntropyLoss().to(device)
-
     for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
         total_loss = 0
@@ -285,7 +284,16 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
             with open(result_file, "a") as f:
                 f.write(result_line + "\n")
         # Evaluate after each epoch.
-        validate(args, accelerator, eval_data, model, is_regression)
+        acc = validate(args, accelerator, eval_data, model, is_regression)
+        if final_acc < acc:
+            final_acc = acc
+        result_line = f"current_max acc = {final_acc}"
+        print(result_line)
+        if accelerator.is_local_main_process:
+            abs_path = os.path.abspath(result_file)
+            with open(result_file, "a") as f:
+                f.write(result_line + "\n")
+    print(f'final_acc = {final_acc}')
     for layer_name in layers_to_prune:
         module_name, weight_name = layer_name.rsplit('.', 1)
         module = dict(model.named_modules())[module_name]
