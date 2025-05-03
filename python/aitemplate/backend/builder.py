@@ -985,6 +985,118 @@ clean:
             cmds.append(make_clean_constants_cmd)
         _run_make_cmds(cmds, self._timeout, build_dir, allow_cache=allow_cache)
 
+class RemoteBuilder(Builder):
+    def __init__(self, n_jobs: int = -1, timeout: int = 180):
+        super().__init__(n_jobs=n_jobs, timeout=timeout)  # inherits _n_jobs, _timeout, runner, etc.
+        self.remote_user     = "riscv"
+        self.remote_host     = "192.168.33.96"
+        self.remote_base_dir = "~/Desktop/AITemplate_Profile"
+        self.remote_run_dir = "~/Desktop/AITemplate_Benchmark_on_XNNPACK"
+
+    # override only the method that invokes make:
+    def make_profilers(self, generated_profilers, workdir):
+        file_pairs = [f for gp in generated_profilers for f in gp]
+        if not file_pairs:
+            return
+        build_dir = shlex.quote(os.path.join(workdir, "profiler"))
+        makefile_name = self._gen_makefile_for_profilers(file_pairs, build_dir)
+        # Write compiler version string(s) into build directory, so these can be used as part of cache key
+        self._gen_compiler_version_files(build_dir)
+        write_binhash_file(build_dir)
+
+        make_path = shlex.quote(Target.current().make())
+        if Target.current().name() == "rvv":
+            make_flags = " ".join(
+                [
+                    f"-f {makefile_name}",
+                    f"-C {build_dir}",
+                ]
+            )
+        else:
+            make_flags = " ".join(
+                [
+                    f"-f {makefile_name}",
+                    "--output-sync",
+                    f"-C {build_dir}",
+                ]
+            )
+        make_clean_cmd = f" {make_path} {make_flags} clean "
+        make_all_cmd = f" {make_path} {make_flags} -j{self._n_jobs} all "
+        cmds = [make_clean_cmd, make_all_cmd]
+
+        remote_build = os.path.join(
+            self.remote_base_dir,
+            os.path.basename(build_dir)
+        )
+        subprocess.run(
+            ["scp", "-r", build_dir, f"{self.remote_user}@{self.remote_host}:{remote_build}"],
+            check=True
+        )
+        ssh_cmd = " && ".join([
+            f"cd {remote_build}",
+            *cmds
+        ])
+        proc = subprocess.Popen(
+            ["ssh", f"{self.remote_user}@{self.remote_host}", ssh_cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=os.environ.copy()
+        )
+        out, err = proc.communicate(timeout=self._timeout)
+        if proc.returncode != 0:
+            raise RuntimeError(f"Remote build failed:\n{err.decode()}")
+
+    def make(
+        self,
+        file_pairs,
+        dll_name,
+        workdir,
+        test_name,
+        debug_settings=_DEBUG_SETTINGS,
+        allow_cache=True,
+    ):
+        self.gen_makefile(file_pairs, dll_name, workdir, test_name, debug_settings)
+        self._gen_compiler_version_files(os.path.join(workdir, test_name)) 
+        write_binhash_file(os.path.join(workdir, test_name))
+
+        make_path = shlex.quote(Target.current().make())
+        # TODO : add "--output-sync" to make_flags for rvv later
+        if Target.current().name() == "rvv":
+            make_flags = " ".join(
+                [
+                    f"-C {test_name}",
+                ]
+            )
+        else:
+            make_flags = " ".join(
+                [
+                    "--output-sync",
+                    f"-C {test_name}",
+                ]
+            )
+        make_clean_cmd = f" {make_path} {make_flags} clean "
+        make_all_cmd = f" {make_path} {make_flags} -j{self._n_jobs} all "
+        make_clean_constants_cmd = f" {make_path} {make_flags} clean_constants "
+        cmds = [make_clean_cmd, make_all_cmd]
+        if not is_debug():
+            cmds.append(make_clean_constants_cmd)
+        subprocess.run(
+            ["scp", "-r", os.path.join(workdir, test_name), f"{self.remote_user}@{self.remote_host}:{self.remote_run_dir}"],
+            check=True
+        )
+        ssh_cmd = " && ".join([
+            f"cd {self.remote_run_dir}",
+            *cmds
+        ])
+        proc = subprocess.Popen(
+            ["ssh", f"{self.remote_user}@{self.remote_host}", ssh_cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=os.environ.copy()
+        )
+        out, err = proc.communicate(timeout=self._timeout)
+        if proc.returncode != 0:
+            raise RuntimeError(f"Remote build failed:\n{err.decode()}")
 
 def get_compile_engine():
     if is_cmake_compilation():
@@ -992,6 +1104,9 @@ def get_compile_engine():
 
         compile_engine = builder_cmake.BuilderCMake()
     else:
-        compile_engine = Builder()
+        if Target.current().name() == "rvv":
+            compile_engine = RemoteBuilder()
+        else:
+            compile_engine = Builder()
 
     return compile_engine

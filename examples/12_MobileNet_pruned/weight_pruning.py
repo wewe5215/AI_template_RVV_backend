@@ -125,8 +125,6 @@ def prune_model_weights(np_weights, pruning_ratio, batch_size):
                 for indice in indices:
                     if indice >= kernel_height * kernel_width * input_channel:
                         print(f'{indice} out of range')
-                    if "blocks_5_0_projection" in key:
-                        print(indice)
                 part1 = math.ceil((output_channel) / mr)
                 part2 = (kernel_height * kernel_width * input_channel) * (1 - pruning_ratio)
                 # print(f'pruned_weight shape = {pruned_weight.shape}')

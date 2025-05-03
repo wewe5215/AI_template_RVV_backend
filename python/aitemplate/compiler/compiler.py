@@ -143,7 +143,14 @@ def _mark_isolated_int_vars(sorted_graph: List[Tensor]):
 
 
 _DEBUG_SETTINGS = AITDebugSettings()
+class DummyModule:
+    """A no-op stand-in for remote‐only compilations."""
+    def __init__(self):
+        # if you need any attributes later, initialize them here
+        self.debug_sorted_graph = None
 
+    def forward(self, *args, **kwargs):
+        raise RuntimeError("This module was never compiled locally; forward() is not available.")
 
 @callstack_stats()
 def compile_model(
@@ -161,6 +168,7 @@ def compile_model(
     debug_settings: AITDebugSettings = _DEBUG_SETTINGS,
     do_optimize_graph: bool = True,
     profile_timeout: int = 500,
+    remote_compile = False
 ) -> Model:
     """Compiles a model and generates a .so file.
 
@@ -346,9 +354,12 @@ def compile_model(
             _LOGGER.info(
                 f"compiled the final .so file elapsed time: {elapsed_dt_sec(start_t)}",
             )
-
-    module = Model(
-        os.path.join(workdir, test_name, dll_name), num_runtimes, allocator_kind
-    )
-    module.debug_sorted_graph = graph
+    if remote_compile == False:
+        module = Model(
+            os.path.join(workdir, test_name, dll_name), num_runtimes, allocator_kind
+        )
+        module.debug_sorted_graph = graph
+    else:
+        # we’re in remote‐compile mode → return a dummy instead of a real .so
+        module = DummyModule()
     return module
