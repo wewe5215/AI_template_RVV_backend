@@ -5,11 +5,17 @@ import numpy as np
 from aitemplate.compiler import compile_model
 from aitemplate.compiler.base import Tensor
 from aitemplate.testing import detect_target
-
+import subprocess
+import os
 # Import your backbone builder and weight converter for MobileNetV2.
 from mobilenet_v2 import build_mobilenetv2_backbone
+from mobilenet_v2_trans_after_layer1 import build_mobilenetv2_backbone as backbone_trans_after_layer1
 from weight_utils import export_mobilenet
 from weight_pruning import prune_model_weights
+from remote_send_receive_files import transfer_folder, check_remote_file_exists, retrieve_confirmation_file, poll_for_confirmation
+target_user = "riscv"                # Your RISC-V board username
+target_ip   = "192.168.33.96"              # Your RISC-V board IP address
+target_dir  = f"/home/{target_user}/Desktop/AITemplate_Benchmark_on_XNNPACK" # Target directory to store files
 def mark_output(y):
     """
     Mark the output tensors for AITemplate optimization.
@@ -34,7 +40,7 @@ class MobileNetV2Verification(unittest.TestCase):
         batch_size = 1
         torch_dtype = torch.float32
         ait_dtype = "float32"
-        pruning_ratio = 0.9375
+        pruning_ratio = 0.5
         # Create input tensor (AITemplate expects NHWC)
         x = Tensor(
             shape=[batch_size, 224, 224, 3],
@@ -50,7 +56,7 @@ class MobileNetV2Verification(unittest.TestCase):
         y = model(x)
         mark_output(y)
 
-        # module = compile_model(y, target, "./tmp", f"cnhw_pruned_{int(pruning_ratio*100)}_mobilenetv2_1")
+        compile_model(y, target, "./tmp", f"cnhw_pruned_{int(pruning_ratio*100)}_mobilenetv2_{batch_size}", remote_compile=True)
 
         # # Use the MobileNetV2 converter; this exporter should be implemented to support MobileNetV2.
         weight_exporter = export_mobilenet("mobilenetv2", pretrained=True)
@@ -65,27 +71,43 @@ class MobileNetV2Verification(unittest.TestCase):
         io_file = f"{metadata_folder}/io_tensors_{batch_size}.npz"
 
         np.savez_compressed(weights_file, **new_np_weights)
-
-        pt_model = weight_exporter.pt_model.to(dtype=torch_dtype, device="cpu")
-        pt_model.eval()
-        # for name, param in ait_params.items():
-        #     module.set_constant_with_tensor(name, param)
-
         # ait model expects NHWC format
         x_ait = torch.rand([batch_size, 224, 224, 3], dtype=torch_dtype, device="cpu")
         # center the input wrt the training data for numerical stability
         x_ait -= torch.tensor([0.485, 0.456, 0.406])
         x_ait /= torch.tensor([0.229, 0.224, 0.225])
-        # torch model expects NCHW format
-        x_pt = torch.transpose(x_ait, 1, 3).contiguous()
-        with torch.no_grad():
-            y_pt = pt_model(x_pt)
         y_ait = torch.zeros([batch_size, 1, 1, 1000], dtype=torch_dtype, device="cpu")
-        # module.run_with_tensors([x_ait], [y_ait])
         x_input_np = x_ait.cpu().detach().numpy().astype(np.float32)
         y_output_np = y_ait.cpu().detach().numpy().astype(np.float32)
         io_data = {"x_input": x_input_np, "y_output": y_output_np}
         np.savez_compressed(io_file, **io_data)
+        transfer_folder(metadata_folder, target_user, target_ip, target_dir)
+
+        ssh_cmd = " && ".join([
+            f"cd {target_dir}",
+            f"python3 static/test_correctness_pruning_on_riscv.py --model-name cnhw_pruned_{int(pruning_ratio*100)}_mobilenetv2 --batch-size {batch_size}"
+        ])
+        proc = subprocess.Popen(
+            ["ssh", f"{target_user}@{target_ip}", ssh_cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=os.environ.copy()
+        )
+        out, err = proc.communicate(timeout=180)
+        if proc.returncode != 0:
+            raise RuntimeError(f"Remote build failed:\n{err.decode()}")
+
+        subprocess.run([
+            "scp",
+            f"{target_user}@{target_ip}:{target_dir}/output_file_cnhw_pruned_{int(pruning_ratio*100)}_mobilenetv2_{batch_size}.npz",
+            "."
+        ], check=True)
+        pt_model = weight_exporter.pt_model.to(dtype=torch_dtype, device="cpu")
+        pt_model.eval()
+        # torch model expects NCHW format
+        x_pt = torch.transpose(x_ait, 1, 3).contiguous()
+        with torch.no_grad():
+            y_pt = pt_model(x_pt)
         y_np = y_pt.cpu().numpy()
         np.savez(f"mobilenetv2_{batch_size}_y_pt.npz", y=y_np)
         # torch.testing.assert_close(
