@@ -23,7 +23,7 @@ import numpy as np
 from group_op_and_lmul import fetch_lmul_for_op
 FINAL_SPARSITY = 0.75                # P  (keep 25 %)
 MASK_UPDATE_F  = 1                   # every iteration
-WARMUP_EPOCHS  = 10
+WARMUP_EPOCHS  = 0
 TOTAL_EPOCHS   = 100
 MOMENTUM       = 0.875
 WEIGHT_DECAY   = 2e-5                # paper: L1, here as L2; small diff in practice
@@ -65,7 +65,8 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
       indices: a 1D numpy array (dtype uint16) with the recorded column indices
     """
     output_channel, input_channel = weight.shape
-    indices = []  # Store selected column indices (from the first row in each block)
+    # comment out indices if needed
+    # indices = []  # Store selected column indices (from the first row in each block)
     mask = []     # Flattened binary mask
     for i in range(0, output_channel, mr):
         end_offset = min(mr, output_channel - i)
@@ -76,8 +77,8 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
             for j in range(end_offset):
                 for k in range(input_channel):
                     mask.append(1 if k < keep_count else 0)
-                    if j == 0:
-                        indices.append(k)
+                    # if j == 0:
+                    #     indices.append(k)
         else:
             threshold = np.percentile(accumulator, pruning_ratio * 100)
             for j in range(end_offset):
@@ -85,13 +86,13 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
                     select = (accumulator[k] >= threshold) if (input_channel % 2 == 0) else (accumulator[k] > threshold)
                     if select:
                         mask.append(1)
-                        if j == 0:
-                            indices.append(k)
+                        # if j == 0:
+                        #     indices.append(k)
                     else:
                         mask.append(0)
-    indices = np.array(indices, dtype=np.uint16)
+    # indices = np.array(indices, dtype=np.uint16)
     mask = np.array(mask, dtype=np.uint8)
-    return mask, indices
+    return mask#, indices
 
 def evaluate(model: nn.Module, dataloader: DataLoader, device):
     model.eval(); correct = total = 0
@@ -106,13 +107,14 @@ def evaluate(model: nn.Module, dataloader: DataLoader, device):
 
 def magnitude_attention_mask(t: torch.Tensor, pruning_ratio: float) -> torch.Tensor:
     """Return a 0/1 mask keeping top‑(1−p) of |t|."""
-    flat = t.abs().flatten()
-    k = int((1.0 - pruning_ratio) * flat.numel())
-    if k == 0:
-        thr = float('inf')
-    else:
-        thr = flat.topk(k, sorted=True).values[-1]
-    binary_mask = (t.abs() > thr).float()
+    with torch.no_grad():
+        flat = t.abs().flatten()
+        k = int((1.0 - pruning_ratio) * flat.numel())
+        if k == 0:
+            thr = float('inf')
+        else:
+            thr = flat.topk(k, sorted=True).values[-1]
+        binary_mask = (t.abs() > thr).float()
 
     # update attention
     z = 1
@@ -141,7 +143,7 @@ def apply_map_masks(model: nn.Module, layers_to_prune, p_ratio: float):
             'layer2.0' in layer_name and \
             ('conv1' in layer_name or 'downsample' in layer_name)
         ):
-            print(f"skip {layer_name}")
+            # print(f"skip {layer_name}")
             continue
         key = f"{layer_name}.weight".replace('.', '_')
         lmul = int(weight_to_lmul[key])
@@ -152,14 +154,23 @@ def apply_map_masks(model: nn.Module, layers_to_prune, p_ratio: float):
         else:
             mr = 3
         nr = int(lmul * (VLEN / 32))
-        mask_in_device, attention = magnitude_attention_mask(module.weight, p_ratio).cpu().numpy()
-        output_channel, input_channel, kernel_height, kernel_width = module.weight.shape
-        mask_in_device_2d = mask_in_device.reshape(output_channel, kernel_height * kernel_width * input_channel)
-        mask, indice = f32_data_pruning_column_wise_with_ratio(mask_in_device_2d, nr, mr, p_ratio)
-        custom_mask = torch.from_numpy(mask.astype(np.float32)) \
-                           .view_as(module.weight).to(module.weight.device)
-        prune.CustomFromMask.apply(module, 'weight', custom_mask)
-        module._map_attention = attention
+        with torch.no_grad():
+            binary_mask, attention_mask = magnitude_attention_mask(module.weight, p_ratio)
+            output_channel, input_channel, kernel_height, kernel_width = module.weight.shape
+            mask_in_device_2d = binary_mask.reshape(output_channel, kernel_height * kernel_width * input_channel)
+            mask = f32_data_pruning_column_wise_with_ratio(mask_in_device_2d.cpu().numpy(), nr, mr, p_ratio)
+            custom_mask = torch.from_numpy(mask.astype(np.float32)) \
+                            .view_as(module.weight).to(module.weight.device)
+            prune.CustomFromMask.apply(module, 'weight', custom_mask)
+            module._map_attention = attention_mask.detach().cpu().numpy()
+
+def get_cubic_pruning_ratio(epoch, c0, Ps, Pt):
+    """
+    Returns the current pruning ratio at epoch 'epoch'
+    using a cubic schedule from Eq. (3) in MAP paper.
+    """
+    progress = (epoch - WARMUP_EPOCHS) / float(TOTAL_EPOCHS-WARMUP_EPOCHS)
+    return Pt + (Ps - Pt) * (1 - progress) ** 3
 
 def train_one_epoch(epoch, model, dataloader, optimizer, scheduler, accelerator,
                     criterion, start_prune_epoch, end_prune_epoch):
@@ -172,9 +183,8 @@ def train_one_epoch(epoch, model, dataloader, optimizer, scheduler, accelerator,
         images, labels = images.to(device), labels.to(device)
 
         # --- MAP mask update every F=1 iters after warm‑up ---
-        if start_prune_epoch <= epoch <= end_prune_epoch:
-            progress = (epoch - start_prune_epoch) / max(1, (end_prune_epoch - start_prune_epoch))
-            current_p = FINAL_SPARSITY * (progress ** 3)  # cubic schedule
+        if start_prune_epoch <= epoch <= end_prune_epoch and (step % args.frequency == 0):
+            current_p = get_cubic_pruning_ratio(epoch, WARMUP_EPOCHS, 0, FINAL_SPARSITY)
             apply_map_masks(model, layers_to_prune, current_p)
 
         with accelerator.accumulate(model):
@@ -186,6 +196,12 @@ def train_one_epoch(epoch, model, dataloader, optimizer, scheduler, accelerator,
                 scheduler.step()
         running_loss += loss.item()
         progress_bar.set_description(f"E{epoch+1} L{running_loss/(step+1):.4f}")
+
+    if accelerator.is_local_main_process:
+        if start_prune_epoch <= epoch <= end_prune_epoch:
+            print(f"Epoch {epoch+1}: exploration, pruning ratio={current_p:.4f}")
+        else:
+            print(f"Epoch {epoch+1}: exploitation (mask fixed)")
 
 def warmup_cosine_scheduler(optimizer, warmup_steps, total_steps, min_lr=0.0):
     def lr_lambda(current_step):
@@ -208,8 +224,8 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
                                 weight_decay=WEIGHT_DECAY, nesterov=True)
 
     # Calculate the number of update steps per epoch.
-    total_steps = TOTAL_EPOCHS * math.ceil(len(train_dataloader))
-    warmup_steps = WARMUP_EPOCHS * math.ceil(len(train_dataloader))
+    total_steps = TOTAL_EPOCHS * math.ceil(len(train_dataloader) / args.gradient_accumulation_steps) # divide with gradient
+    warmup_steps = WARMUP_EPOCHS * math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     lr_scheduler = warmup_cosine_scheduler(optimizer, warmup_steps, total_steps)
 
     # Prepare the model, optimizer, dataloader, and scheduler with accelerator.
@@ -224,14 +240,14 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
 
         if accelerator.is_local_main_process:
             acc = evaluate(model, eval_dataloader, accelerator.device)
-            logger.info(f"Epoch {epoch+1}: Val Acc {acc:.2f}%")
+            print(f"Epoch {epoch+1}: Val Acc {acc:.2f}%")
             best_acc = max(best_acc, acc)
 
     if accelerator.is_local_main_process:
         os.makedirs(args.output_dir, exist_ok=True)
         torch.save(accelerator.unwrap_model(model).state_dict(),
                    os.path.join(args.output_dir, 'map_resnet50_imagenet.pth'))
-        logger.info(f"Best validation accuracy: {best_acc:.2f}%")
+        print(f"Best validation accuracy: {best_acc:.2f}%")
 
 
 
@@ -240,13 +256,15 @@ if __name__ == "__main__":
     parser.add_argument('--train_dir', type=str, default='/data/imagenet/train')
     parser.add_argument('--val_dir',   type=str, default='/data/imagenet/val')
     parser.add_argument('--output_dir', type=str, required=True)
-    parser.add_argument('--per_device_batch', type=int, default=256)  # 4×256 = 1024 global
+    parser.add_argument('--per_device_batch', type=int, default=64)  # 4×256 = 1024 global
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Number of gradient accumulation steps")
+    parser.add_argument("--frequency", type=int, default=1, help="frequency to update mask and attention")
     args = parser.parse_args()
 
     # Set device.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Create accelerator.
-    accelerator = Accelerator(mixed_precision="no")  # Set fp16=True if using mixed precision.
+    accelerator = Accelerator(mixed_precision="no", gradient_accumulation_steps=args.gradient_accumulation_steps)  # Set fp16=True if using mixed precision.
     # Set seed for reproducibility.
     set_seed(42)
     # Define data transforms for training and evaluation.
