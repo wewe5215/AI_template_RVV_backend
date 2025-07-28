@@ -71,27 +71,32 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
     for i in range(0, output_channel, mr):
         end_offset = min(mr, output_channel - i)
         block = weight[i:i+end_offset, :]  # (end_offset, input_channel)
-        accumulator = np.sum(np.abs(block), axis=0)
-        keep_count = int(np.ceil((1 - pruning_ratio) * input_channel))
-        if np.all(accumulator == accumulator[0]):
-            for j in range(end_offset):
-                for k in range(input_channel):
-                    mask.append(1 if k < keep_count else 0)
+        accumulator = block.abs().sum(dim=0)
+        keep_count = int(torch.ceil((1 - pruning_ratio) * torch.tensor(input_channel, dtype=torch.float32)).item())
+        if torch.all(accumulator == accumulator[0]):
+            # for j in range(end_offset):
+            #     for k in range(input_channel):
+                    block_mask = torch.zeros((end_offset, input_channel), dtype=torch.uint8, device=weight.device)
+                    block_mask[:, :keep_count] = 1
                     # if j == 0:
                     #     indices.append(k)
         else:
-            threshold = np.percentile(accumulator, pruning_ratio * 100)
-            for j in range(end_offset):
-                for k in range(input_channel):
-                    select = (accumulator[k] >= threshold) if (input_channel % 2 == 0) else (accumulator[k] > threshold)
-                    if select:
-                        mask.append(1)
-                        # if j == 0:
-                        #     indices.append(k)
-                    else:
-                        mask.append(0)
+            # threshold = np.percentile(accumulator, pruning_ratio * 100)
+            threshold = torch.kthvalue(accumulator, input_channel - keep_count + 1).values.item()
+            block_mask = (accumulator >= threshold).to(torch.uint8).repeat(end_offset, 1)
+            # for j in range(end_offset):
+            #     for k in range(input_channel):
+                    # select = (accumulator[k] >= threshold) if (input_channel % 2 == 0) else (accumulator[k] > threshold)
+                    # if select:
+                    #     mask.append(1)
+                    #     # if j == 0:
+                    #     #     indices.append(k)
+                    # else:
+                    #     mask.append(0)
     # indices = np.array(indices, dtype=np.uint16)
-    mask = np.array(mask, dtype=np.uint8)
+        mask.append(block_mask)
+    mask = torch.cat(mask, dim=0).flatten()
+    # mask = np.array(mask, dtype=np.uint8)
     return mask#, indices
 
 def evaluate(model: nn.Module, dataloader: DataLoader, device):
@@ -158,9 +163,8 @@ def apply_map_masks(model: nn.Module, layers_to_prune, p_ratio: float):
             binary_mask, attention_mask = magnitude_attention_mask(module.weight, p_ratio)
             output_channel, input_channel, kernel_height, kernel_width = module.weight.shape
             mask_in_device_2d = binary_mask.reshape(output_channel, kernel_height * kernel_width * input_channel)
-            mask = f32_data_pruning_column_wise_with_ratio(mask_in_device_2d.cpu().numpy(), nr, mr, p_ratio)
-            custom_mask = torch.from_numpy(mask.astype(np.float32)) \
-                            .view_as(module.weight).to(module.weight.device)
+            mask = f32_data_pruning_column_wise_with_ratio(mask_in_device_2d, nr, mr, p_ratio)
+            custom_mask = mask.view_as(module.weight).to(module.weight.device)
             prune.CustomFromMask.apply(module, 'weight', custom_mask)
             module._map_attention = attention_mask.detach().cpu().numpy()
 
