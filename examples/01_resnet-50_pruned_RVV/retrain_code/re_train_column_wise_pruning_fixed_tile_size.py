@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.utils.prune as prune
@@ -7,7 +8,6 @@ from accelerate.utils import set_seed
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import torchvision
-import torchvision.models as models
 import torchvision.transforms as transforms
 import timm
 import re
@@ -16,18 +16,10 @@ import json
 import logging
 import math
 import os
+logger = get_logger(__name__)
 import random
 from pathlib import Path
 import numpy as np
-from torchvision.models import resnet50, ResNet50_Weights
-vlen = 256
-from group_op_and_lmul import fetch_lmul_for_op
-
-CONV_WEIGHT_PATTERN = re.compile(r"conv\d+\.weight")
-logger = get_logger(__name__)
-pruning_ratio = 0.5
-result_file = f"results_prune_{int(pruning_ratio*100)}.txt"
-# List of ResNet-50 convolution weight parameters to prune.
 layers_to_prune = [
     # Uncomment or adjust the layers you want to prune:
     # 'layer1.0.conv1.weight', 'layer1.0.conv2.weight', 'layer1.0.conv3.weight',
@@ -50,83 +42,119 @@ layers_to_prune = [
     'layer4.1.conv1.weight', 'layer4.1.conv2.weight', 'layer4.1.conv3.weight',
     'layer4.2.conv1.weight', 'layer4.2.conv2.weight', 'layer4.2.conv3.weight'
 ]
-
-def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
+sparsity = 0.75
+M = 4
+N = int(M * (1.0 - sparsity))
+V = 8
+result_file = f"results_prune_{V}_{N}_{M}_resnet50.txt"
+def f32_data_pruning_column_wise_with_ratio(weight, mr, pattern="2:4", block_groups=None):
     """
-    Performs column-wise pruning on a 2D weight array using a given pruning ratio.
+    Performs column-wise pruning on a 2D weight array using a specified pattern.
+    
+    The weight matrix (shape: [output_channel, input_channel]) is processed group by group along the row dimension.
+    For each group (either provided via block_groups or as contiguous blocks of size mr), an aggregated L1 norm is
+    computed over each column. Then, for each contiguous block of columns of size Y (specified in the pattern "X:Y"),
+    the top X columns (or a proportional number for incomplete blocks) are retained (set to 1 in the mask) while 
+    the rest are pruned (set to 0). An alternative pattern "half" is also available to keep 50% of columns overall.
     
     Parameters:
       weight: a 2D numpy array of shape (output_channel, input_channel)
-      nr: an integer multiplier for the recorded indices
-      mr: block size (number of rows per block)
-      pruning_ratio: fraction of columns to prune (e.g., 0.5 means prune bottom 50% columns)
+      mr: Block size (number of rows per group). Required if block_groups is not provided.
+      pattern: A string in the format "X:Y" (e.g., "2:4", "1:4", "2:8") to specify the desired keep:group_size ratio,
+               or "half" to keep half of the columns overall.
+      block_groups: (Optional) A list of lists specifying custom groups of row indices. If None, contiguous blocks of
+                    size mr are used.
                      
     Returns:
-      mask: a 1D numpy array (flattened binary mask)
-      indices: a 1D numpy array (dtype uint16) with the recorded column indices
+      mask: A 1D numpy array (flattened binary mask) of length output_channel * input_channel.
+      indices: A 1D numpy array (dtype uint16) recording the selected column indices (from the aggregated decision
+               in the first row of each group).
     """
     output_channel, input_channel = weight.shape
-    indices = []  # Store selected column indices (from the first row in each block)
-    mask = []     # Flattened binary mask
-    for i in range(0, output_channel, mr):
-        end_offset = min(mr, output_channel - i)
-        block = weight[i:i+end_offset, :]  # (end_offset, input_channel)
-        accumulator = np.sum(np.abs(block), axis=0)
-        keep_count = int(np.ceil((1 - pruning_ratio) * input_channel))
-        if np.all(accumulator == accumulator[0]):
-            for j in range(end_offset):
-                for k in range(input_channel):
-                    mask.append(1 if k < keep_count else 0)
-                    if j == 0:
-                        indices.append(k)
-        else:
-            threshold = np.percentile(accumulator, pruning_ratio * 100)
-            for j in range(end_offset):
-                for k in range(input_channel):
-                    select = (accumulator[k] >= threshold) if (input_channel % 2 == 0) else (accumulator[k] > threshold)
-                    if select:
-                        mask.append(1)
-                        if j == 0:
-                            indices.append(k)
-                    else:
-                        mask.append(0)
-    indices = np.array(indices, dtype=np.uint16)
-    mask = np.array(mask, dtype=np.uint8)
-    return mask, indices
+    mask = np.zeros_like(weight, dtype=np.uint8)
+    indices = []  # Record selected column indices
 
-def perform_pruning(model, pruning_ratio=0.5):
-    """
-    Applies custom column-wise pruning to ResNet-50 convolution layers.
-    """
-    batch_size = 1
-    weight_to_lmul = fetch_lmul_for_op(batch_size)
+    # If no custom grouping is provided, create contiguous groups of rows of size mr.
+    if block_groups is None:
+        if mr is None:
+            raise ValueError("Either mr or block_groups must be provided")
+        block_groups = [list(range(i, min(i + mr, output_channel))) for i in range(0, output_channel, mr)]
+    
+    # Process each group of rows.
+    for group in block_groups:
+        # Aggregate the L1 norm for each column across all rows in this group.
+        aggregated = np.sum(np.abs(weight[group, :]), axis=0)
+        group_mask = np.zeros((len(group), input_channel), dtype=np.uint8)
+        group_indices = []
+        
+        if pattern == "half":
+            # Retain the top 50% of columns based on aggregated L1 norm.
+            keep_count = int(np.ceil(input_channel / 2))
+            top_indices = np.argsort(-aggregated)[:keep_count]
+            for col in range(input_channel):
+                if col in top_indices:
+                    group_mask[:, col] = 1
+                    group_indices.append(col)
+                else:
+                    group_mask[:, col] = 0
+        elif ":" in pattern:
+            keep_target = N
+            group_size = M
+            
+            # Process the columns in contiguous blocks of size group_size.
+            for col_start in range(0, input_channel, group_size):
+                col_end = min(col_start + group_size, input_channel)
+                actual_block_size = col_end - col_start
+                # If the block is complete, keep_target columns; if not, scale proportionally.
+                effective_keep = keep_target if actual_block_size == group_size else int(np.ceil(actual_block_size * keep_target / group_size))
+                # Extract aggregated L1 norms for the current block of columns.
+                agg_values = aggregated[col_start:col_end]
+                # Get indices (within the block) of the top effective_keep columns.
+                top_local_indices = np.argsort(-agg_values)[:effective_keep]
+                for local_idx in range(actual_block_size):
+                    if local_idx in top_local_indices:
+                        group_mask[:, col_start + local_idx] = 1
+                        group_indices.append(col_start + local_idx)
+                    else:
+                        group_mask[:, col_start + local_idx] = 0
+        else:
+            raise ValueError("Unsupported pattern. Use a pattern like 'X:Y' or 'half'.")
+        
+        # Place the group's mask into the overall mask.
+        mask[group, :] = group_mask
+        indices.extend(group_indices)
+    
+    indices = np.array(indices, dtype=np.uint16)
+    mask = mask.flatten()  # Return mask as a 1D array.
+    return mask, indices
+def perform_pruning(model):
+
+    
+    result_line = f'{V} : {N} : {M} pruning is applied'
+    print(result_line)
+    with open(result_file, "a") as f:
+            f.write(result_line + "\n")
     for layer_name in layers_to_prune:
         module_name, weight_name = layer_name.rsplit('.', 1)
         module = dict(model.named_modules())[module_name]
         key = layer_name.replace('.', '_')  # e.g., "layer1_0_conv1_weight"
-        lmul = int(weight_to_lmul[key])
-        if lmul in [1, 4]:
-            mr = 7
-        elif lmul == 2:
-            mr = 8
-        else:
-            mr = 3
-        nr = int(lmul * (vlen / 32))
         # Convert weight tensor to NumPy from CPU.
         weight_tensor = getattr(module, weight_name).detach().cpu().numpy().astype(np.float32)
         output_channel, input_channel, kernel_height, kernel_width = weight_tensor.shape
         weight_2d = weight_tensor.reshape(output_channel, kernel_height * kernel_width * input_channel)
-        mask, indice = f32_data_pruning_column_wise_with_ratio(weight_2d, nr, mr, pruning_ratio)
-        # Convert mask back to PyTorch tensor and reshape to original weight shape, 
-        # then move it to the device of the module's weight.
+        mask, indices = f32_data_pruning_column_wise_with_ratio(weight_2d, V, pattern=f"{N}:{M}")
         custom_mask = torch.from_numpy(mask).reshape(weight_tensor.shape).to(getattr(module, weight_name).device)
         prune.CustomFromMask.apply(module, weight_name, custom_mask)
         print(f"Applied custom mask on {layer_name} with shape {weight_tensor.shape}")
-    
     # Optionally, print the mask shapes.
     for name, module in model.named_modules():
         if hasattr(module, 'weight_mask'):
             print(f"Layer: {name}, Mask shape: {module.weight_mask.shape}")
+import shutil
+def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+    torch.save(state, filename)
+    if is_best:
+        shutil.copyfile(filename, 'model_best.pth.tar')
 
 def evaluate_model(model, dataloader, device):
     """
@@ -149,7 +177,6 @@ def evaluate_model(model, dataloader, device):
             if batch_idx % 10 == 0:
                 print(f"Processed {batch_idx} batches, current accuracy: {100 * correct / total:.2f}%")
     final_accuracy = 100 * correct / total
-    print(f"Final evaluation accuracy: {final_accuracy:.2f}%")
     result_line = f"Final evaluation accuracy: {final_accuracy:.2f}%"
     print(result_line)
     if accelerator.is_local_main_process:
@@ -169,8 +196,9 @@ def validate(args, accelerator, eval_data, model, is_regression):
 def train(args, accelerator, train_data, eval_data, model, is_regression=False):
     """Train the ResNet-50 model after applying pruning."""
     train_dataset, train_dataloader = train_data
-
-    # Define the optimizer.
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    # Use all model parameters (or split by weight decay if desired).
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, eps=args.adam_epsilon)
 
     # Calculate the number of update steps per epoch.
@@ -178,8 +206,8 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
 
-    # Set up the StepLR scheduler to decay LR by a factor of 10 every 5 epochs.
-    scheduler_step_size = 5 * num_update_steps_per_epoch  # steps corresponding to 5 epochs.
+    # Set up the StepLR scheduler to decay LR by a factor of 10 every 10 epochs.
+    scheduler_step_size = 30 * num_update_steps_per_epoch  # steps corresponding to 10 epochs.
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step_size, gamma=0.1)
 
     # Prepare the model, optimizer, dataloader, and scheduler with accelerator.
@@ -187,32 +215,11 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
         model, optimizer, train_dataloader, lr_scheduler
     )
 
-    # Apply custom pruning to the model and log the event.
-    result_line = f"apply pruning ratio = {pruning_ratio}"
-    print(result_line)
-    if accelerator.is_local_main_process:
-        abs_path = os.path.abspath(result_file)
-        print(f"Results will be written to: {abs_path}")
-        with open(result_file, "a") as f:
-            f.write(result_line + "\n")
 
-    # Recalculate the total number of update steps per epoch (in case the dataloader changed).
+    # Recalculate total steps in case the dataloader changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
-    # If a checkpointing_steps argument exists and is set, use it; otherwise, store a checkpoint every 10 epochs.
-    # Here, we compute checkpointing_steps as 10 epochs worth of update steps.
-    if hasattr(args, "checkpointing_steps") and args.checkpointing_steps is not None:
-        try:
-            # Attempt to use the provided checkpointing_steps value.
-            checkpointing_steps = int(args.checkpointing_steps)
-        except ValueError:
-            print("Invalid checkpointing_steps provided; falling back to every 10 epochs.")
-            checkpointing_steps = 10 * num_update_steps_per_epoch
-    else:
-        checkpointing_steps = 10 * num_update_steps_per_epoch
-
-    print(f"Checkpointing will occur every {checkpointing_steps} steps (every 10 epochs).")
     # Optionally initialize trackers.
     if args.with_tracking:
         experiment_config = vars(args)
@@ -241,10 +248,9 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
         # (This part may require additional customization.)
     
     progress_bar.update(completed_steps)
-
+    final_acc = 0
     # Define a standard classification loss.
-    criterion = nn.CrossEntropyLoss()
-
+    criterion = nn.CrossEntropyLoss().to(device)
     for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
         total_loss = 0
@@ -266,16 +272,10 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
             if accelerator.sync_gradients:
                 progress_bar.update(1)
                 completed_steps += 1
-
-            if isinstance(checkpointing_steps, int):
-                if completed_steps % checkpointing_steps == 0:
-                    output_dir = f"step_{completed_steps}"
-                    if args.output_dir is not None:
-                        output_dir = os.path.join(args.output_dir, output_dir)
-                    accelerator.save_state(output_dir)
             
             if completed_steps >= args.max_train_steps:
                 break
+
         result_line = f"Epoch {epoch+1} completed. Average loss: {total_loss / (step+1):.4f}"
         print(result_line)
         if accelerator.is_local_main_process:
@@ -283,9 +283,17 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
             print(f"Results will be written to: {abs_path}")
             with open(result_file, "a") as f:
                 f.write(result_line + "\n")
-        print(f"Epoch {epoch+1} completed. Average loss: {total_loss / (step+1):.4f}")
         # Evaluate after each epoch.
-        validate(args, accelerator, eval_data, model, is_regression)
+        acc = validate(args, accelerator, eval_data, model, is_regression)
+        if final_acc < acc:
+            final_acc = acc
+        result_line = f"current_max acc = {final_acc}"
+        print(result_line)
+        if accelerator.is_local_main_process:
+            abs_path = os.path.abspath(result_file)
+            with open(result_file, "a") as f:
+                f.write(result_line + "\n")
+    print(f'final_acc = {final_acc}')
     for layer_name in layers_to_prune:
         module_name, weight_name = layer_name.rsplit('.', 1)
         module = dict(model.named_modules())[module_name]
@@ -294,7 +302,6 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
             prune.remove(module, weight_name)
         else:
             print(f"Layer {layer_name} was not pruned, skipping removal.")
-    accelerator.save_state(args.output_dir)
     accelerator.wait_for_everyone()
     # Unwrap the model from the accelerator.
     unwrapped_model = accelerator.unwrap_model(model)
@@ -309,14 +316,14 @@ def train(args, accelerator, train_data, eval_data, model, is_regression=False):
     }, os.path.join(args.output_dir, 'checkpoint.pth'))
     # Save the model's state dictionary.
     torch.save(unwrapped_model.state_dict(), os.path.join(args.output_dir, "pytorch_model.bin"))
-    
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a pruned ResNet-50 model for image classification")
     parser.add_argument("--model_name_or_path", type=str, default="resnet50", help="Pretrained model name or path")
     parser.add_argument("--output_dir", type=str, required=True, help="Directory to save the final model")
     parser.add_argument("--adam_epsilon", type=float, default=1e-8, help="Epsilon for Adam optimizer")
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Initial learning rate")
-    parser.add_argument("--num_train_epochs", type=int, default=200, help="Number of training epochs")
+    parser.add_argument("--num_train_epochs", type=int, default=150, help="Number of training epochs")
     parser.add_argument("--max_train_steps", type=int, default=None, help="Maximum training steps")
     parser.add_argument("--per_device_train_batch_size", type=int, default=32, help="Train batch size per device")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Number of gradient accumulation steps")
@@ -366,14 +373,12 @@ if __name__ == "__main__":
     eval_data = (eval_dataset, eval_dataloader)
     
     # Load pretrained ResNet-50.
-    if args.model_name_or_path.lower() == "resnet50":
-        print("request ResNet50_Weights.IMAGENET1K_V1")
-        weights = ResNet50_Weights.IMAGENET1K_V1  # Explicitly request the V1 weights.
-        model = resnet50(weights=weights)
-    else:
-        model = models.__dict__[args.model_name_or_path](pretrained=True)
+    import torchvision.models as models
+    from torchvision.models import resnet50, ResNet50_Weights
+    weights = ResNet50_Weights.IMAGENET1K_V1  # Explicitly request the V1 weights.
+    model = resnet50(weights=weights)
     model.to(device)
-    perform_pruning(model, pruning_ratio=pruning_ratio)
+    perform_pruning(model)
     # Train the model.
     train(args, accelerator, train_data, eval_data, model, is_regression=False)
     
