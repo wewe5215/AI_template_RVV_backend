@@ -147,3 +147,11 @@ tags
 
 *.npz
 *.txt
+
+examples/*/model-generated.h
+examples/*/model-generated-new.h
+examples/*/test_correctness_standalone.py
+teacher_code/
+output_dir/
+metadata_*/
+record_chosen_lmul/
