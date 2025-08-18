@@ -2,6 +2,8 @@ import subprocess
 import os
 import click
 import time
+TARGET_USER = "riscv"                # Your RISC-V board username
+TARGET_IP   = "192.168.33.96"        # Your RISC-V board IP address
 def transfer_folder(folder: str, target_user: str, target_ip: str, target_dir: str):
     """
     Transfers a whole folder recursively to the target using scp -r.
@@ -58,6 +60,25 @@ def retrieve_confirmation_file(target_user: str, target_ip: str, remote_file: st
     except subprocess.CalledProcessError as e:
         print(f"[Host] Failed to retrieve confirmation file: {e}")
 
+def remote_run_program_send_back_result(target_dir, script_run_program, model_name, batch_size):
+    ssh_cmd = " && ".join([
+        f"cd {target_dir}",
+        f"python3 {script_run_program} --model-name {model_name} --batch-size {batch_size}"
+    ])
+    proc = subprocess.Popen(
+        ["ssh", f"{TARGET_USER}@{TARGET_IP}", ssh_cmd],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=os.environ.copy()
+    )
+    out, err = proc.communicate(timeout=180)
+    if proc.returncode != 0:
+        raise RuntimeError(f"Remote build failed:\n{err.decode()}")
+    subprocess.run([
+        "scp",
+        f"{TARGET_USER}@{TARGET_IP}:{target_dir}/output_file_{model_name}_{batch_size}.npz",
+        "."
+    ], check=True)
 
 def poll_for_confirmation(target_user: str, target_ip: str, remote_file: str, local_destination: str, timeout: int = 300, poll_interval: int = 5):
     """

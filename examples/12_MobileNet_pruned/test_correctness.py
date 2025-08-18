@@ -1,7 +1,7 @@
 import unittest
 import torch
 import numpy as np
-
+import os
 from aitemplate.compiler import compile_model
 from aitemplate.compiler.base import Tensor
 from aitemplate.testing import detect_target
@@ -12,10 +12,16 @@ from mobilenet_v2 import build_mobilenetv2_backbone
 from mobilenet_v2_trans_after_layer1 import build_mobilenetv2_backbone as backbone_trans_after_layer1
 from weight_utils import export_mobilenet
 from weight_pruning import prune_model_weights
-from remote_send_receive_files import transfer_folder, check_remote_file_exists, retrieve_confirmation_file, poll_for_confirmation
-target_user = "riscv"                # Your RISC-V board username
-target_ip   = "192.168.33.96"              # Your RISC-V board IP address
-target_dir  = f"/home/{target_user}/Desktop/AITemplate_Benchmark_on_XNNPACK" # Target directory to store files
+from aitemplate.utils.remote_send_receive_files import (
+    transfer_folder, 
+    check_remote_file_exists, 
+    retrieve_confirmation_file, 
+    poll_for_confirmation,
+    TARGET_USER,
+    TARGET_IP,
+    remote_run_program_send_back_result
+)
+target_dir  = f"/home/{TARGET_USER}/Desktop/AITemplate_Benchmark_on_XNNPACK" # Target directory to store files
 def mark_output(y):
     """
     Mark the output tensors for AITemplate optimization.
@@ -55,8 +61,8 @@ class MobileNetV2Verification(unittest.TestCase):
         # Forward the input to the model
         y = model(x)
         mark_output(y)
-
-        compile_model(y, target, "./tmp", f"cnhw_pruned_{int(pruning_ratio*100)}_mobilenetv2_{batch_size}", remote_compile=True)
+        model_name = f"cnhw_pruned_{int(pruning_ratio*100)}_mobilenetv2"
+        compile_model(y, target, "./tmp", f"{model_name}_{batch_size}", remote_compile=True)
 
         # # Use the MobileNetV2 converter; this exporter should be implemented to support MobileNetV2.
         weight_exporter = export_mobilenet("mobilenetv2", pretrained=True)
@@ -66,10 +72,10 @@ class MobileNetV2Verification(unittest.TestCase):
             np_weights[k] = v.detach().cpu().numpy().astype(np.float32)
         new_np_weights = prune_model_weights(np_weights, pruning_ratio, batch_size)
 
-        metadata_folder = f"metadata_cnhw_pruned_{int(pruning_ratio*100)}_mobilenetv2_{batch_size}"
+        metadata_folder = f"metadata_{model_name}_{batch_size}"
+        os.makedirs(metadata_folder, exist_ok=True)
         weights_file = f"{metadata_folder}/weights_file_pruned_{batch_size}.npz"
         io_file = f"{metadata_folder}/io_tensors_{batch_size}.npz"
-
         np.savez_compressed(weights_file, **new_np_weights)
         # ait model expects NHWC format
         x_ait = torch.rand([batch_size, 224, 224, 3], dtype=torch_dtype, device="cpu")
@@ -81,27 +87,9 @@ class MobileNetV2Verification(unittest.TestCase):
         y_output_np = y_ait.cpu().detach().numpy().astype(np.float32)
         io_data = {"x_input": x_input_np, "y_output": y_output_np}
         np.savez_compressed(io_file, **io_data)
-        transfer_folder(metadata_folder, target_user, target_ip, target_dir)
+        transfer_folder(metadata_folder, TARGET_USER, TARGET_IP, target_dir)
+        remote_run_program_send_back_result(target_dir, "static/test_correctness_pruning_on_riscv.py", model_name, batch_size)
 
-        ssh_cmd = " && ".join([
-            f"cd {target_dir}",
-            f"python3 static/test_correctness_pruning_on_riscv.py --model-name cnhw_pruned_{int(pruning_ratio*100)}_mobilenetv2 --batch-size {batch_size}"
-        ])
-        proc = subprocess.Popen(
-            ["ssh", f"{target_user}@{target_ip}", ssh_cmd],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=os.environ.copy()
-        )
-        out, err = proc.communicate(timeout=180)
-        if proc.returncode != 0:
-            raise RuntimeError(f"Remote build failed:\n{err.decode()}")
-
-        subprocess.run([
-            "scp",
-            f"{target_user}@{target_ip}:{target_dir}/output_file_cnhw_pruned_{int(pruning_ratio*100)}_mobilenetv2_{batch_size}.npz",
-            "."
-        ], check=True)
         pt_model = weight_exporter.pt_model.to(dtype=torch_dtype, device="cpu")
         pt_model.eval()
         # torch model expects NCHW format
@@ -110,9 +98,9 @@ class MobileNetV2Verification(unittest.TestCase):
             y_pt = pt_model(x_pt)
         y_np = y_pt.cpu().numpy()
         np.savez(f"mobilenetv2_{batch_size}_y_pt.npz", y=y_np)
-        # torch.testing.assert_close(
-        #     y_pt, y_ait.reshape([batch_size, 1000]), rtol=1, atol=1e-1
-        # )
+        torch.testing.assert_close(
+            y_pt, y_ait.reshape([batch_size, 1000]), rtol=1e-1, atol=1e-1
+        )
 
 
 if __name__ == "__main__":

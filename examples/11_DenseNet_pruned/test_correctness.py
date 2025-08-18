@@ -1,21 +1,7 @@
-#  Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-#  Licensed under the Apache License, Version 2.0 (the "License");
-#  you may not use this file except in compliance with the License.
-#  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-#  Unless required by applicable law or agreed to in writing, software
-#  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#  See the License for the specific language governing permissions and
-#  limitations under the License.
-#
 import unittest
-
 import torch
-
+import numpy as np
+import os
 from aitemplate.compiler import compile_model
 import numpy as np
 from aitemplate.compiler.base import Tensor
@@ -23,8 +9,17 @@ from aitemplate.testing import detect_target
 
 from modeling.densenet import build_densenet_backbone
 from weight_utils import timm_export
-
-
+from weight_pruning import prune_model_weights
+from aitemplate.utils.remote_send_receive_files import (
+    transfer_folder, 
+    check_remote_file_exists, 
+    retrieve_confirmation_file, 
+    poll_for_confirmation,
+    TARGET_USER,
+    TARGET_IP,
+    remote_run_program_send_back_result
+)
+target_dir  = f"/home/{TARGET_USER}/Desktop/AITemplate_Benchmark_on_XNNPACK" # Target directory to store files
 def mark_output(y):
     """Different to PyTorch, we need to explicit mark output tensor for optimization,
 
@@ -45,10 +40,10 @@ def mark_output(y):
 class Densenet121Verification(unittest.TestCase):
     def test_densenet121(self):
         target = detect_target()
-        batch_size = 4
+        batch_size = 2
+        pruning_ratio = 0.5
+        model_name = "densenet121"
         torch_dtype = torch.float32
-        weights_file = f"DenseNet121_weights_file.npz"
-        io_file = f"DenseNet121_io_tensors_{batch_size}.npz"
         ait_dtype = "float32"
         # Create input tensor, need to specify the shape, dtype and is_input flag
         x = Tensor(
@@ -64,42 +59,41 @@ class Densenet121Verification(unittest.TestCase):
         y = model(x)
         # Mark output tensor
         mark_output(y)
+        model_name = f"cnhw_pruned_{int(pruning_ratio*100)}_densenet121"
+        module = compile_model(y, target, "./tmp", f"{model_name}_{batch_size}")
 
         timm_exporter = timm_export("densenet121", pretrained=False)
         ait_params = timm_exporter.export_model(half=False)
-        pt_model = timm_exporter.pt_model.to(dtype=torch_dtype, device="cpu")
-        pt_model.eval()
-        # module = compile_model(y, target, "./tmp", f"densenet121_{batch_size}")
         np_weights = {}
         for k, v in ait_params.items():
             np_weights[k] = v.detach().cpu().numpy().astype(np.float32)
-        np.savez_compressed(weights_file, **np_weights)
-        # for name, param in ait_params.items():
-        #     # print(f'ait_params name: {name}, param.shape = {param.shape}')
-        #     module.set_constant_with_tensor(name, param)
-        # print(f'pt_model:{pt_model}')
-        # print(f'module:{module}')
+        new_np_weights = prune_model_weights(np_weights, pruning_ratio, batch_size)
+        metadata_folder = f"metadata_{model_name}_{batch_size}"
+        os.makedirs(metadata_folder, exist_ok=True)
+        weights_file = f"{metadata_folder}/weights_file_pruned_{batch_size}.npz"
+        io_file = f"{metadata_folder}/io_tensors_{batch_size}.npz"
+        np.savez_compressed(weights_file, **new_np_weights)
         # ait model expects NHWC format
         x_ait = torch.rand([batch_size, 224, 224, 3], dtype=torch_dtype, device="cpu")
         # center the input wrt the training data for numerical stability
         x_ait -= torch.tensor([0.485, 0.456, 0.406])
         x_ait /= torch.tensor([0.229, 0.224, 0.225])
+        y_ait = torch.zeros([batch_size, 1, 1, 1000], dtype=torch_dtype, device="cpu")
+        x_input_np = x_ait.cpu().detach().numpy().astype(np.float32)
+        y_output_np = y_ait.cpu().detach().numpy().astype(np.float32)
+        io_data = {"x_input": x_input_np, "y_output": y_output_np}
+        np.savez_compressed(io_file, **io_data)
+        transfer_folder(metadata_folder, TARGET_USER, TARGET_IP, target_dir)
+        remote_run_program_send_back_result(target_dir, "static/test_correctness_pruning_on_riscv.py", model_name, batch_size)
+
+        pt_model = timm_exporter.pt_model.to(dtype=torch_dtype, device="cpu")
+        pt_model.eval()
         # torch model expects NCHW format
         x_pt = torch.transpose(x_ait, 1, 3).contiguous()
         with torch.no_grad():
             y_pt = pt_model(x_pt)
         y_np = y_pt.cpu().numpy()
         np.savez(f"densenet121_{batch_size}_y_pt.npz", y=y_np)
-        y_ait = torch.zeros([batch_size, 1, 1, 1000], dtype=torch_dtype, device="cpu")
-        x_input_np = x_ait.cpu().detach().numpy().astype(np.float32)
-        y_output_np = y_ait.cpu().detach().numpy().astype(np.float32)
-        io_data = {"x_input": x_input_np, "y_output": y_output_np}
-        np.savez_compressed(io_file, **io_data)
-        # module.run_with_tensors([x_ait], [y_ait])
-
-        # torch.testing.assert_close(
-        #     y_pt, y_ait.reshape([batch_size, 1000]), rtol=1e-1, atol=1
-        # )
 
 
 if __name__ == "__main__":
