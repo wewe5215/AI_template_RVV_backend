@@ -67,7 +67,6 @@ class export_mobilenet:
         fused_model = {}
         # Process every parameter in the state dict.
         for param_name in self.pt_state.keys():
-            print(f'param_name = {param_name}')
             self.transform_params(param_name, fused_model)
         # Replace periods with underscores in keys to match AITemplate naming conventions.
         ait_model = {k.replace(".", "_"): weight for k, weight in fused_model.items()}
@@ -113,10 +112,8 @@ class export_mobilenet:
             block_index = int(parts[1])
             conv_type = parts[3]
             conv_w = self.pt_state[name]
-            print(f'block_index = {block_index}, conv_type = {conv_type}')
             if conv_type == "conv_dw":
                 bn_key_prefix = f"blocks.0.0.bn1"
-                print(f'bn_key_prefix = {bn_key_prefix}')
                 bn_w = self.pt_state[bn_key_prefix + ".weight"]
                 bn_b = self.pt_state[bn_key_prefix + ".bias"]
                 bn_mean = self.pt_state[bn_key_prefix + ".running_mean"]
@@ -124,7 +121,6 @@ class export_mobilenet:
                 new_key = f'blocks.0.0.depthwise.conv.weight'
             elif conv_type == "conv_pw":
                 bn_key_prefix = f"blocks.0.0.bn2"
-                print(f'bn_key_prefix = {bn_key_prefix}')
                 bn_w = self.pt_state[bn_key_prefix + ".weight"]
                 bn_b = self.pt_state[bn_key_prefix + ".bias"]
                 bn_mean = self.pt_state[bn_key_prefix + ".running_mean"]
@@ -143,10 +139,8 @@ class export_mobilenet:
             conv_type = parts[3]
             sub_block_index = parts[2]
             conv_w = self.pt_state[name]
-            print(f'block_index = {block_index}, sub_block_index = {sub_block_index}, conv_type = {conv_type}')
             if conv_type == "conv_pw":
                 bn_key_prefix = f"blocks.{block_index}.{sub_block_index}.bn1"
-                print(f'bn_key_prefix = {bn_key_prefix}')
                 bn_w = self.pt_state[bn_key_prefix + ".weight"]
                 bn_b = self.pt_state[bn_key_prefix + ".bias"]
                 bn_mean = self.pt_state[bn_key_prefix + ".running_mean"]
@@ -154,7 +148,6 @@ class export_mobilenet:
                 new_key = f'blocks.{block_index}.{sub_block_index}.expansion.conv.weight'
             elif conv_type == "conv_dw":
                 bn_key_prefix = f"blocks.{block_index}.{sub_block_index}.bn2"
-                print(f'bn_key_prefix = {bn_key_prefix}')
                 bn_w = self.pt_state[bn_key_prefix + ".weight"]
                 bn_b = self.pt_state[bn_key_prefix + ".bias"]
                 bn_mean = self.pt_state[bn_key_prefix + ".running_mean"]
@@ -162,7 +155,6 @@ class export_mobilenet:
                 new_key = f'blocks.{block_index}.{sub_block_index}.depthwise.conv.weight'
             elif conv_type == "conv_pwl":
                 bn_key_prefix = f"blocks.{block_index}.{sub_block_index}.bn3"
-                print(f'bn_key_prefix = {bn_key_prefix}')
                 bn_w = self.pt_state[bn_key_prefix + ".weight"]
                 bn_b = self.pt_state[bn_key_prefix + ".bias"]
                 bn_mean = self.pt_state[bn_key_prefix + ".running_mean"]

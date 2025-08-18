@@ -13,7 +13,6 @@ import torchvision.models as models
 from aitemplate.testing import detect_target
 from aitemplate.compiler import ops
 import timm
-from torchvision.models import MobileNet_V2_Weights
 # -----------------------------------------------------------------------------
 # Utility: Fuse convolution and batch norm (post-conv scenario)
 # -----------------------------------------------------------------------------
