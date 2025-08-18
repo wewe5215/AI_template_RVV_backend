@@ -18,5 +18,12 @@ Pool module init.
 from aitemplate.compiler.ops.pool.avg_pool2d import avg_pool2d
 from aitemplate.compiler.ops.pool.max_pool2d import max_pool2d
 from aitemplate.compiler.ops.pool.avg_pool2d_transpose import avg_pool2d_transpose
+from aitemplate.compiler.ops.pool.avg_pool2d_cnhw import avg_pool2d_cnhw
+from aitemplate.compiler.ops.pool.avg_pool2d_cnhw_transpose import avg_pool2d_cnhw_transpose
 
-__all__ = ["avg_pool2d", "max_pool2d", "avg_pool2d_transpose",]
+__all__ = ["avg_pool2d", 
+           "max_pool2d",
+           "avg_pool2d_transpose", 
+           "avg_pool2d_cnhw",
+           "avg_pool2d_cnhw_transpose"
+        ]

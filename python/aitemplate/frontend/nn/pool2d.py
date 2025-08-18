@@ -15,7 +15,7 @@
 """
 pool2d-family modules.
 """
-from aitemplate.compiler.ops import avg_pool2d, max_pool2d, avg_pool2d_transpose
+from aitemplate.compiler.ops import avg_pool2d, max_pool2d, avg_pool2d_transpose, avg_pool2d_cnhw, avg_pool2d_cnhw_transpose
 from aitemplate.frontend.nn.module import Module
 
 
@@ -107,6 +107,54 @@ class AvgPool2dTranspose(Module):
     def __init__(self, kernel_size, stride, padding):
         super().__init__()
         self.op = avg_pool2d_transpose(kernel_size, stride, padding)
+
+    def forward(self, *args):
+        r"""Applies AvgPool2d on the input."""
+        assert len(args) == 1
+        x = args[0]
+        return self.op(x)
+    
+class AvgPool2dCNHW(Module):
+    r"""Applies a 2D average pooling and Transposing over an input signal composed of several input
+    planes.
+
+    Note:
+        When ceil_mode=True, sliding windows are allowed to go off-bounds if they start within the left padding
+        or the input. Sliding windows that would start in the right padded region are ignored.
+
+    Args:
+        kernel_size: the size of the window to take an avg over
+        stride: the stride of the window
+        padding: implicit zero padding to be added on both sides
+    """
+
+    def __init__(self, kernel_size, stride, padding):
+        super().__init__()
+        self.op = avg_pool2d_cnhw(kernel_size, stride, padding)
+
+    def forward(self, *args):
+        r"""Applies AvgPool2d on the input."""
+        assert len(args) == 1
+        x = args[0]
+        return self.op(x)
+    
+class AvgPool2dCNHWTranspose(Module):
+    r"""Applies a 2D average pooling and Transposing over an input signal composed of several input
+    planes.
+
+    Note:
+        When ceil_mode=True, sliding windows are allowed to go off-bounds if they start within the left padding
+        or the input. Sliding windows that would start in the right padded region are ignored.
+
+    Args:
+        kernel_size: the size of the window to take an avg over
+        stride: the stride of the window
+        padding: implicit zero padding to be added on both sides
+    """
+
+    def __init__(self, kernel_size, stride, padding):
+        super().__init__()
+        self.op = avg_pool2d_cnhw_transpose(kernel_size, stride, padding)
 
     def forward(self, *args):
         r"""Applies AvgPool2d on the input."""
