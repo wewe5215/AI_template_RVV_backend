@@ -43,7 +43,7 @@ class concatenate(Operator):
 
     """
 
-    def __init__(self, fast_cat=True) -> None:
+    def __init__(self, fast_cat=True, cnhw=False) -> None:
         # TMP: note that fast_cat is a temporary flag to force backend to select
         # the fast concat implementation. After we finish benchmark fast concat,
         # we should remove this flag. Instead, we will rely on backend to dispatch
@@ -54,6 +54,7 @@ class concatenate(Operator):
         self._attrs["op"] = "concatenate"
         self._attrs["has_profiler"] = False
         self._attrs["fast_cat"] = fast_cat
+        self._attrs["cnhw"] = cnhw
 
     def _unique(self, vector):
         return sorted(set(vector))

@@ -59,6 +59,77 @@ void {{func_name}}(
 }
 """
 )
+SRC_TEMPLATE_CNHW = jinja2.Template(
+        """
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <random>
+#include <cstddef> // For size_t
+#include <cstring> // For memcpy
+#include <cstdio>
+#include <stdexcept>
+#include <cstdlib>
+#include <memory>
+#include <string>
+#include <vector>
+#include <riscv_vector.h>
+#include <algorithm>
+void {{func_name}}(
+    void *output,
+    {{index_type}} *output_shape[],
+    const void *inputs[],
+    const {{index_type}} *real_input_shapes[],
+    const {{index_type}} *all_input_shapes[],
+    const bool input_masks[],
+    const {{index_type}} concat_dim_sizes[],
+    {{index_type}} concat_dim,
+    {{index_type}} rank,
+    {{index_type}} num_real_inputs,
+    {{index_type}} num_all_inputs
+    ) {
+
+    // reinterpret output to uint32_t pointer.
+    uint32_t* out_ptr = reinterpret_cast<uint32_t*>(output);
+
+    // current_offset accumulates the channel offset along the concatenation dimension.
+    int64_t current_offset = 0;
+    int real_index = 0; // index into real_input_shapes array
+    size_t vlmax = __riscv_vsetvlmax_e32m8();
+    // Loop over all inputs.
+    for (int i = 0; i < num_all_inputs; i++) {
+        // In this implementation, if input_masks[i] is true we copy the input.
+        if (!input_masks[i]) {
+            continue;
+        }
+        // Get the i-th input pointer.
+        const uint32_t* in_ptr = reinterpret_cast<const uint32_t*>(inputs[i]);
+
+        // Get the shape for this input from real_input_shapes.
+        // We assume each input has rank 4.
+        int64_t in_shape[4];
+        for (int j = 0; j < rank; j++) {
+            in_shape[j] = real_input_shapes[i][j];
+        }
+
+        // Assume the shape layout is NHWC.
+        int64_t N = in_shape[0];
+        int64_t H = in_shape[1];
+        int64_t W = in_shape[2];
+        int64_t C = in_shape[3];
+        size_t input_size = N * H * W * C;
+        for(size_t i = 0; i < input_size; i += vlmax){
+            size_t vl = std::min(input_size - i, vlmax);
+            vuint32m8_t v_w0 = __riscv_vle32_v_u32m8(in_ptr, vl);
+            __riscv_vse32_v_u32m8(out_ptr, v_w0, vl);
+            in_ptr += vl;
+            out_ptr += vl;
+        }
+    }
+return;
+}
+"""
+)
 
 SRC_TEMPLATE = jinja2.Template(
     """
@@ -149,10 +220,6 @@ void {{func_name}}(
     }
 
 return;
-
-  throw std::runtime_error(
-      "Unsupported concat kernel specialization!"
-  );
 }
 """
 )
@@ -267,11 +334,19 @@ def gen_function(func_attrs, element_func=None, element_func_def=None):
     y = func_attrs["outputs"][0]
     input_type = backend_spec.dtype_to_backend_type(orig_x._attrs["dtype"])
     if len(inputs) > 0:
-        return SRC_TEMPLATE.render(
-            func_name=func_attrs["name"],
-            input_type=input_type,
-            index_type=backend_spec.index_type,
-        )
+        is_cnhw = func_attrs["cnhw"]
+        if is_cnhw and Target.current().name() == "rvv":
+            return SRC_TEMPLATE_CNHW.render(
+                func_name=func_attrs["name"],
+                input_type=input_type,
+                index_type=backend_spec.index_type,
+            )
+        else:
+            return SRC_TEMPLATE.render(
+                func_name=func_attrs["name"],
+                input_type=input_type,
+                index_type=backend_spec.index_type,
+            )
 
     return DUMMY_KERNEL_TEMPLATE.render(
         func_name=func_attrs["name"],
