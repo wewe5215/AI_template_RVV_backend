@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-from aitemplate.frontend.nn.conv2d_cnhw_pruning.transposed_conv2d_bias_act import (
+from aitemplate.frontend.nn.conv2d_cnhw_pruning.transposed_conv2d_pruning_bias_act import (
     ConvTranspose2dBiasAct,
 )
 
