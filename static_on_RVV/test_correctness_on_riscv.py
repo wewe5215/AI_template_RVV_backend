@@ -14,8 +14,9 @@ if "numpy._core" not in sys.modules:
 
 
 def load_data(batch_size, model_name):
-    weights_file = f"static/weights_file_{model_name}.npz"
-    io_file = f"static/io_tensors_{model_name}_{batch_size}.npz"
+    folder = f"metadata_{model_name}_{batch_size}"
+    weights_file = f"{folder}/weights_file_{batch_size}.npz"
+    io_file = f"{folder}/io_tensors_{batch_size}.npz"
     
     
     if not os.path.exists(weights_file):
@@ -52,8 +53,8 @@ def transfer_file(file: str, target_user: str, target_ip: str, target_dir: str):
     print("[Host] file transferred successfully.")
 
 def run(model_name, batch_size, mod=None, graph_mode=True):
-    match = re.search(r'(resnet(?:18|34|50|101|152))$', model_name)
-    weights, x_input, y_output = load_data(batch_size, match.group(1))
+#    match = re.search(r'(resnet(?:18|34|50|101|152))$', model_name)
+    weights, x_input, y_output = load_data(batch_size, model_name)
     model_name = f"{model_name}_{batch_size}"
     mod = Model(os.path.join(f"./{model_name}", "test.so"))
     for name, param in weights.items():
