@@ -60,7 +60,7 @@ class Densenet121Verification(unittest.TestCase):
         model_name = f"cnhw_densenet121"
         # module = compile_model(y, target, "./tmp", f"{model_name}_{batch_size}", remote_compile=True)
 
-        timm_exporter = timm_export("densenet121", pretrained=False)
+        timm_exporter = timm_export("densenet121", pretrained=True)
         ait_params = timm_exporter.export_model(half=False)
         np_weights = {}
         for k, v in ait_params.items():
@@ -91,8 +91,6 @@ class Densenet121Verification(unittest.TestCase):
         x_pt = torch.transpose(x_ait, 1, 3).contiguous()
         with torch.no_grad():
             y_pt = pt_model(x_pt)
-        y_np = y_pt.cpu().numpy()
-        np.savez(f"densenet121_{batch_size}_y_pt.npz", y=y_np)
 
         output_file = f"output_file_{model_name}_{batch_size}.npz"
         output_np = np.load(output_file, allow_pickle=True)
