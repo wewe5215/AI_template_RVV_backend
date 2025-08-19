@@ -60,7 +60,7 @@ def retrieve_confirmation_file(target_user: str, target_ip: str, remote_file: st
     except subprocess.CalledProcessError as e:
         print(f"[Host] Failed to retrieve confirmation file: {e}")
 
-def remote_run_program_send_back_result(target_dir, script_run_program, model_name, batch_size):
+def remote_run_program_send_back_result(target_dir, script_run_program, model_name, batch_size, is_benchmark=False):
     ssh_cmd = " && ".join([
         f"cd {target_dir}",
         f"python3 {script_run_program} --model-name {model_name} --batch-size {batch_size}"
@@ -71,12 +71,16 @@ def remote_run_program_send_back_result(target_dir, script_run_program, model_na
         stderr=subprocess.PIPE,
         env=os.environ.copy()
     )
-    out, err = proc.communicate(timeout=180)
+    out, err = proc.communicate(timeout=1800)
     if proc.returncode != 0:
         raise RuntimeError(f"Remote build failed:\n{err.decode()}")
+    if is_benchmark:
+        out = f"{model_name}_ait_benchmark.txt"
+    else:
+        out = f"output_file_{model_name}_{batch_size}.npz"
     subprocess.run([
         "scp",
-        f"{TARGET_USER}@{TARGET_IP}:{target_dir}/output_file_{model_name}_{batch_size}.npz",
+        f"{TARGET_USER}@{TARGET_IP}:{target_dir}/{out}",
         "."
     ], check=True)
 
