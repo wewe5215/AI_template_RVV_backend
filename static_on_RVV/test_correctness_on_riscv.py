@@ -37,21 +37,6 @@ def load_data(batch_size, model_name):
     print(f"[Target] Loaded weights, input, and output data")
     return weights, x_input, y_output
 
-def transfer_file(file: str, target_user: str, target_ip: str, target_dir: str):
-    """
-    
-    Parameters:
-        file (str): The path to the file to be transferred.
-        target_user (str): The username on the target machine.
-        target_ip (str): The IP address of the target machine.
-        target_dir (str): The destination directory on the target machine.
-    """
-    subprocess.run(
-        ["scp", file, f"{target_user}@{target_ip}:{target_dir}"],
-        check=True
-    )
-    print("[Host] file transferred successfully.")
-
 def run(model_name, batch_size, mod=None, graph_mode=True):
 #    match = re.search(r'(resnet(?:18|34|50|101|152))$', model_name)
     weights, x_input, y_output = load_data(batch_size, model_name)
