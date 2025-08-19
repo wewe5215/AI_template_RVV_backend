@@ -56,46 +56,41 @@ class DenseLayer(nn.Module):
     A single DenseLayer. It first applies a 1×1 bottleneck conv (reducing dimensionality)
     followed by a 3×3 conv. Its output is concatenated with the input along the channel axis.
     """
-    def __init__(self, in_channels, growth_rate, bn_size=4, norm="BN", activation="ReLU"):
+    def __init__(self, num_blocks, in_channels, growth_rate, bn_size=4, norm="BN", activation="ReLU"):
         super().__init__()
         mid_channels = bn_size * growth_rate
-        if detect_target().name() == "cuda":
-            if activation == "ReLU":
-                conv1_op = nn.Conv2dBiasReluFewChannels
-                conv2_op = nn.Conv2dBiasReluFewChannels
-            elif activation == "Hardswish":
-                conv1_op = nn.Conv2dBiasHardswishFewChannels
-                conv2_op = nn.Conv2dBiasHardswishFewChannels
-            else:
-                raise NotImplementedError
-        else:
-            if activation == "ReLU":
+        if activation == "ReLU":
+            if num_blocks < 2:
                 conv1_op = nn.Conv2dBiasRelu
                 conv2_op = nn.Conv2dBiasRelu
-            elif activation == "Hardswish":
-                conv1_op = nn.Conv2dBiasHardswish
-                conv2_op = nn.Conv2dBiasHardswish
             else:
-                raise NotImplementedError
+                conv1_op = nn.Conv2dCNHWPruningBiasRelu
+                conv2_op = nn.Conv2dCNHWPruningBiasRelu
+        else:
+            raise NotImplementedError
         self.conv1 = conv1_op(in_channels, mid_channels, 1, 1, 0, dtype="float")
         self.conv2 = conv2_op(mid_channels, growth_rate, 3, 1, 1, dtype="float")
+        if num_blocks < 2:
+            self.concat = ops.concatenate()
+        else:
+            self.concat = ops.concatenate(cnhw=True)
 
     def forward(self, x):
         new_features = self.conv1(x)
         new_features = self.conv2(new_features)
         # Concatenate along the channel dimension (assuming NHWC, so dim=3)
-        return ops.concatenate()([x, new_features], dim=3)
+        return self.concat([x, new_features], dim=3)
 
 class DenseBlock(nn.Module):
     """
     A dense block is a sequential stack of DenseLayers.
     """
-    def __init__(self, num_layers, in_channels, growth_rate, bn_size=4, norm="BN", activation="ReLU"):
+    def __init__(self, num_blocks, num_layers, in_channels, growth_rate, bn_size=4, norm="BN", activation="ReLU"):
         super().__init__()
         layers = []
         channels = in_channels
         for _ in range(num_layers):
-            layer = DenseLayer(channels, growth_rate, bn_size, norm, activation)
+            layer = DenseLayer(num_blocks, channels, growth_rate, bn_size, norm, activation)
             layers.append(layer)
             channels += growth_rate
         self.block = nn.Sequential(*layers)
@@ -109,24 +104,24 @@ class Transition(nn.Module):
     A transition layer downsamples the feature maps and reduces the number of channels.
     Typically, it performs a 1×1 conv followed by a 2×2 average pooling.
     """
-    def __init__(self, in_channels, out_channels, norm="BN", activation="ReLU"):
+    def __init__(self, in_channels, out_channels, num_blocks, norm="BN", activation="ReLU"):
         super().__init__()
-        if detect_target().name() == "cuda":
-            if activation == "ReLU":
-                conv_op = nn.Conv2dBiasReluFewChannels
-            elif activation == "Hardswish":
-                conv_op = nn.Conv2dBiasHardswishFewChannels
-            else:
-                raise NotImplementedError
-        else:
-            if activation == "ReLU":
+        if activation == "ReLU":
+            if num_blocks < 2:
                 conv_op = nn.Conv2dBiasRelu
-            elif activation == "Hardswish":
-                conv_op = nn.Conv2dBiasHardswish
             else:
-                raise NotImplementedError
+                conv_op = nn.Conv2dCNHWPruningBiasRelu
+        else:
+            raise NotImplementedError
         self.conv = conv_op(in_channels, out_channels, 1, 1, 0, dtype="float")
-        self.pool = nn.AvgPool2d(2, 2, 0)
+        if num_blocks == 0:
+            self.pool = nn.AvgPool2d(2, 2, 0)
+        elif num_blocks == 1:
+            self.pool = nn.AvgPool2dTranspose(2, 2, 0)
+        elif num_blocks == 2:
+            self.pool = nn.AvgPool2dCNHW(2, 2, 0)
+        else:
+            self.pool = nn.AvgPool2dCNHWTranspose(2, 2, 0)
 
     def forward(self, x):
         x = self.conv(x)
@@ -175,8 +170,6 @@ class DenseNet(nn.Module):
             self.add_module(name, stage)
             self.stage_names.append(name)
             self.stages.append(stage)
-            # print(f'name = {name}')
-            # Each transition (if present) downsamples by a factor of 2.
             current_stride = int(current_stride * 2)
             self._out_feature_strides[name] = current_stride
             # Assume the last block in the stage has the attribute out_channels.
@@ -190,7 +183,7 @@ class DenseNet(nn.Module):
             # self.norm5 = getattr(batch_norm, "BatchNorm2d")(
             #     final_channels, eps=1e-05, permute_input_output=False
             # )
-            self.avgpool = nn.AvgPool2d(7, 1, 0)
+            self.avgpool = nn.AvgPool2dCNHWTranspose(7, 1, 0)
             self.fc = nn.Linear(self._out_feature_channels[self.stage_names[-1]], num_classes, dtype="float")
 
         if out_features is None:
@@ -234,12 +227,12 @@ def build_densenet_backbone():
     num_features = num_init_features
     # For each dense block, create a DenseBlock and, if not the last block, add a Transition.
     for i, num_layers in enumerate(block_config):
-        dense_block = DenseBlock(num_layers, num_features, growth_rate, bn_size=4, norm=norm, activation=activation)
+        dense_block = DenseBlock(i, num_layers, num_features, growth_rate, bn_size=4, norm=norm, activation=activation)
         stages.append([dense_block])
         num_features = dense_block.out_channels
         if i != len(block_config) - 1:
             # Transition reduces channels by 50%.
-            trans = Transition(num_features, num_features // 2, norm=norm, activation=activation)
+            trans = Transition(num_features, num_features // 2, i,norm=norm, activation=activation)
             stages.append([trans])
             num_features = num_features // 2
 
