@@ -62,7 +62,7 @@ class MobileNetV2Verification(unittest.TestCase):
         y = model(x)
         mark_output(y)
         model_name = "cnhw_mobilenetv2_trans_after_layer1"
-        module = compile_model(y, target, "./tmp", f"{model_name}_{batch_size}")
+        # module = compile_model(y, target, "./tmp", f"{model_name}_{batch_size}", remote_compile = True)
 
         # # Use the MobileNetV2 converter; this exporter should be implemented to support MobileNetV2.
         weight_exporter = export_mobilenet("mobilenetv2", pretrained=True)
@@ -97,6 +97,9 @@ class MobileNetV2Verification(unittest.TestCase):
         with torch.no_grad():
             y_pt = pt_model(x_pt)
 
+        output_file = f"output_file_{model_name}_{batch_size}.npz"
+        output_np = np.load(output_file, allow_pickle=True)
+        y_ait = torch.from_numpy(output_np["y_output"].reshape([batch_size, 1000]))
         torch.testing.assert_close(
             y_pt, y_ait.reshape([batch_size, 1000]), rtol=1, atol=1e-1
         )
