@@ -16,7 +16,8 @@
 RVV pool2d init
 """
 from aitemplate.backend.rvv.pool2d import avg_pool2d, max_pool2d, \
-    avg_pool2d_transpose, avg_pool2d_cnhw, avg_pool2d_cnhw_transpose
+    avg_pool2d_transpose, avg_pool2d_cnhw, avg_pool2d_cnhw_transpose, \
+    max_pool2d_transpose
 
 __all__ = [
     "avg_pool2d",
@@ -24,4 +25,5 @@ __all__ = [
     "avg_pool2d_transpose",
     "avg_pool2d_cnhw",
     "avg_pool2d_cnhw_transpose",
+    "max_pool2d_transpose",
 ]

@@ -132,6 +132,9 @@ EXEC_TEMPLATE_AVG_CNHW = jinja2.Template(
 
 EXEC_TEMPLATE_MAX = jinja2.Template(
     """
+{% if is_transpose %}
+{{indent}}{{DataName}}* tmp_out = ({{DataName}}*)malloc(NI * HO * WO * CO * sizeof({{DataName}}));
+{% endif %}
 {{indent}}xnn_operator_t op_max = nullptr;
 {{indent}}const xnn_status status = xnn_create_max_pooling2d_nhwc_f32(
 {{indent}}  PH, PW, PH, PW, KH, KW, SH, SW,
@@ -144,8 +147,26 @@ EXEC_TEMPLATE_MAX = jinja2.Template(
 {{indent}}                        op_max, NI, HI, WI, CI, /*input_pixel_stride=*/CI,
 {{indent}}                        /*output_pixel_stride=*/CO, /*output_height_out=*/nullptr, /*output_width_out=*/nullptr,
 {{indent}}                        /*threadpool=*/pthreadpool_));
+{% if is_transpose %}
+{{indent}}CHECK_EQ(xnn_status_success, xnn_setup_max_pooling2d_nhwc_f32(op_max, (float*)(in_ptr), (float*)(tmp_out)));
+{% else %}
 {{indent}}CHECK_EQ(xnn_status_success, xnn_setup_max_pooling2d_nhwc_f32(op_max, (float*)(in_ptr), (float*)(out_ptr)));
+{% endif %}
 {{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(op_max, /*threadpool=*/pthreadpool_));
+{% if is_transpose %}
+{{indent}}xnn_operator_t transpose_op = nullptr;
+{{indent}}std::vector<size_t> shape = {(size_t)(NI * HO * WO), (size_t)CO};
+{{indent}}std::vector<size_t> perm = {1, 0};
+{{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{operation}}_x{{DTypeBit}}(0, &transpose_op));
+{{indent}}CHECK_NE(nullptr, transpose_op);
+{{indent}}CHECK_EQ(
+{{indent}}xnn_status_success, xnn_reshape_{{operation}}_x{{DTypeBit}}(
+{{indent}} transpose_op, shape.size(), shape.data(), perm.data(), pthreadpool_));
+{{indent}}CHECK_EQ(
+{{indent}}xnn_status_success, xnn_setup_{{operation}}_x{{DTypeBit}}(transpose_op, tmp_out, ({{DataName}}*)(out_ptr)));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(transpose_op, /*threadpool=*/pthreadpool_));
+{{indent}}free(tmp_out);
+{% endif %}
 """
 )
 
@@ -281,7 +302,7 @@ def gen_function(
     exec_path = func_attrs["exec_path"]
     exec_paths = ""
     if "max" in op_type:
-        exec_paths = EXEC_TEMPLATE_MAX.render(indent="    ", DataName=dtype)
+        exec_paths = EXEC_TEMPLATE_MAX.render(indent="    ", DataName=dtype, operation="transpose_nd", is_transpose=is_transpose, DTypeBit=dtype_bit)
     elif "avg" in op_type:
         if is_cnhw:
             # f16 is not supported currently

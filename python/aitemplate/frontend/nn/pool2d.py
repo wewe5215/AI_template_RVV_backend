@@ -15,7 +15,14 @@
 """
 pool2d-family modules.
 """
-from aitemplate.compiler.ops import avg_pool2d, max_pool2d, avg_pool2d_transpose, avg_pool2d_cnhw, avg_pool2d_cnhw_transpose
+from aitemplate.compiler.ops import (
+    avg_pool2d, 
+    max_pool2d, 
+    avg_pool2d_transpose, 
+    avg_pool2d_cnhw, 
+    avg_pool2d_cnhw_transpose,
+    max_pool2d_transpose
+)
 from aitemplate.frontend.nn.module import Module
 
 
@@ -53,6 +60,39 @@ class MaxPool2d(Module):
         x = args[0]
         return self.op(x)
 
+class MaxPool2dTranspose(Module):
+    r"""Applies a 2D max pooling over an input signal composed of several input
+    planes.
+
+    In the simplest case, the output value of the layer with input size :math:`(N, H, W, C)`,
+    output :math:`(N, H_{out}, W_{out}, C)` and :attr:`kernel_size` :math:`(kH, kW)`
+    can be precisely described as:
+
+    .. math::
+        \begin{aligned}
+            out(N_i, h, w, C_j) ={} & \max_{m=0, \ldots, kH-1} \max_{n=0, \ldots, kW-1} \\
+                                    & \text{input}(N_i, \text{stride[0]} \times h + m,
+                                                   \text{stride[1]} \times w + n, C_j)
+        \end{aligned}
+
+    If :attr:`padding` is non-zero, then the input is implicitly padded with negative infinity on both sides
+    for :attr:`padding` number of points.
+
+    Args:
+        kernel_size: the size of the window to take a max over
+        stride: the stride of the window
+        padding: implicit zero padding to be added on both sides
+    """
+
+    def __init__(self, kernel_size, stride, padding=0):
+        super().__init__()
+        self.op = max_pool2d_transpose(kernel_size, stride, padding)
+
+    def forward(self, *args):
+        r"""Applies MaxPool2d on the input."""
+        assert len(args) == 1
+        x = args[0]
+        return self.op(x)
 
 class AvgPool2d(Module):
     r"""Applies a 2D average pooling over an input signal composed of several input
