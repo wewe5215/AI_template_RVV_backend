@@ -58,7 +58,7 @@ class Densenet121Verification(unittest.TestCase):
         # Mark output tensor
         mark_output(y)
         model_name = f"cnhw_densenet121"
-        # module = compile_model(y, target, "./tmp", f"{model_name}_{batch_size}", remote_compile=True)
+        module = compile_model(y, target, "./tmp", f"{model_name}_{batch_size}", remote_compile=True)
 
         timm_exporter = timm_export("densenet121", pretrained=True)
         ait_params = timm_exporter.export_model(half=False)
