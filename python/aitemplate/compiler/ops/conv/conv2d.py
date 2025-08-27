@@ -25,7 +25,7 @@ from operator import itemgetter
 from typing import Any, Dict, List, Tuple, Union
 
 import jinja2
-
+import subprocess
 from aitemplate import backend
 from aitemplate.backend import registry
 from aitemplate.backend.target import Target
@@ -198,6 +198,7 @@ class conv2d(Operator):
         self.exec_key_template = EXEC_KEY_TEMPLATE
         self.exec_dyn_key_template = EXEC_DYN_KEY_TEMPLATE
         self.exec_cond_template = EXEC_COND_TEMPLATE
+        self.ssh_client = None
 
     def _get_params_factory(self):
         params_factory = {}
@@ -444,7 +445,8 @@ class conv2d(Operator):
             See also: :func:`~aitemplate.compiler.transform.profile.profile`
         """
         target = backend.target.Target.current()
-
+        from aitemplate.utils.remote_send_receive_files import TARGET_USER, TARGET_IP, SSH_CLIENT
+        self.ssh_client = SSH_CLIENT
         func_key = "{target}.{op}.config".format(
             target=target.name(), op=self._attrs["op"]
         )
@@ -467,9 +469,21 @@ class conv2d(Operator):
             )
 
     def _gen_profile_cmd(self, profiler_prefix, cfg, x_shape):
-        exe_path = os.path.join(profiler_prefix, cfg)
-        if not os.access(exe_path, os.X_OK):
-            raise RuntimeError("Profiler %s is not executable" % exe_path)
+        from aitemplate.backend.builder import REMOTE_PROFILE_FOLDER
+        from aitemplate.compiler.compiler import IS_REMOTE_COMPILE
+        ssh_client = self.ssh_client
+        if IS_REMOTE_COMPILE and ssh_client is not None:
+            exe_path = os.path.join(REMOTE_PROFILE_FOLDER, "profiler", self._attrs["op"], cfg)
+            command = f"test -x {exe_path} && echo exists"
+            stdin, stdout, stderr = ssh_client.exec_command(command)
+            stdout = stdout.read().decode()
+            stderr = stderr.read().decode()
+            if "exists" not in stdout:
+                raise RuntimeError(f"SSH command timed out while checking for remote file: {exe_path} .")
+        else:
+            exe_path = os.path.join(profiler_prefix, cfg)
+            if not os.access(exe_path, os.X_OK):
+                raise RuntimeError("Profiler %s is not executable" % exe_path)
         cmd = [exe_path]
         params = self._get_params_factory()
         cmd.append(x_shape[0])
