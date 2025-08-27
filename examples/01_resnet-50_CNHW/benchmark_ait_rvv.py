@@ -26,10 +26,15 @@ from aitemplate.testing import detect_target
 from modeling.resnet import build_resnet_backbone
 from weight_utils import export_to_torch_tensor
 import subprocess
-from static.remote_send_receive_files import transfer_folder, check_remote_file_exists, retrieve_confirmation_file, poll_for_confirmation
-target_user = "riscv"                # Your RISC-V board username
-target_ip   = "192.168.96.48"              # Your RISC-V board IP address
-target_dir  = f"/home/{target_user}/Desktop/AITemplate_Benchmark_on_XNNPACK" # Target directory to store files
+from aitemplate.utils.remote_send_receive_files import (
+    transfer_folder, 
+    check_remote_file_exists, 
+    retrieve_confirmation_file, 
+    poll_for_confirmation,
+    TARGET_USER,
+    TARGET_IP
+)
+target_dir  = f"/home/{TARGET_USER}/Desktop/AITemplate_Benchmark_on_XNNPACK" # Target directory to store files
 
 def mark_output(y):
     """Different to PyTorch, we need to explicit mark output tensor for optimization,
@@ -100,7 +105,7 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True):
     print(f"Input/output tensors have been saved to {io_file}")
 
     folder = "static"
-    transfer_folder(folder, target_user, target_ip, target_dir)
+    transfer_folder(folder, TARGET_USER, TARGET_IP, target_dir)
 
 
 @click.command()
@@ -125,7 +130,7 @@ def main(use_fp16_acc=False, use_graph=True, batch_size=0):
     dev_flag = dev_flag.replace(",", "_")
     remote_confirmation_file = f"{target_dir}/resnet50_ait_benchmark_dev_{dev_flag}.txt"
     local_confirmation_file = f"resnet50_ait_benchmark_dev_{dev_flag}.txt"
-    poll_for_confirmation(target_user, target_ip, remote_confirmation_file, local_confirmation_file)
+    poll_for_confirmation(TARGET_USER, TARGET_IP, remote_confirmation_file, local_confirmation_file)
 
 
 

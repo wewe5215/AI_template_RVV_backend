@@ -49,7 +49,7 @@ class BasicStem(CNNBlockBase):
     with a conv, relu and max_pool.
     """
 
-    def __init__(self, in_channels=3, out_channels=64, norm="BN", activation="ReLU"):
+    def __init__(self, in_channels=3, out_channels=64, norm="BN", activation="ReLU", depth=50):
         super().__init__(in_channels, out_channels, 4)
         conv_op = None
         if detect_target().name() == "cuda":
@@ -67,7 +67,10 @@ class BasicStem(CNNBlockBase):
             else:
                 raise NotImplementedError
         self.conv1 = conv_op(in_channels, out_channels, 7, 2, 7 // 2, dtype="float")
-        self.pool = nn.MaxPool2d(3, 2, 1)
+        if depth == 18 or depth == 34:
+            self.pool = nn.MaxPool2dTranspose(3, 2, 1)
+        else:
+            self.pool = nn.MaxPool2d(3, 2, 1)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -81,22 +84,17 @@ class BasicBlock(CNNBlockBase):
     with two 3x3 conv layers and a projection shortcut if needed.
     """
 
-    def __init__(self, in_channels, out_channels, *, stride=1, norm="BN", activation="ReLU"):
+    def __init__(self, in_channels, out_channels, *, block_idx, stride=1, norm="BN", activation="ReLU"):
         super().__init__(in_channels, out_channels, stride)
         # If the input and output dimensions differ, or if we need to change the spatial size,
         # use a 1x1 convolution for the shortcut.
         if in_channels != out_channels or stride != 1:
-            self.downsample_0 = nn.Conv2dBias(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, dtype="float")
+            self.downsample_0 = nn.Conv2dCNHWBias(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, dtype="float")
         else:
             self.downsample_0 = None
 
-        # For simplicity we assume the activation is ReLU.
-        # Here we use fused conv operations similar to the BottleneckBlock.
-        # The first conv: 3x3 with 'stride' and padding 1.
-        self.conv1 = nn.Conv2dBiasRelu(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
-        # The second conv: 3x3 with stride 1 and padding 1.
-        # This op is fused with an "add" of the shortcut and a ReLU.
-        self.conv2 = nn.Conv2dBiasAddRelu(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2dCNHWBiasRelu(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
+        self.conv2 = nn.Conv2dCNHWBiasAddRelu(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x):
         out = self.conv1(x)
@@ -124,6 +122,7 @@ class BottleneckBlock(CNNBlockBase):
         out_channels,
         *,
         bottleneck_channels,
+        block_idx,
         stride=1,
         num_groups=1,
         norm="BN",
@@ -145,10 +144,15 @@ class BottleneckBlock(CNNBlockBase):
         super().__init__(in_channels, out_channels, stride)
 
         if in_channels != out_channels:
-            self.downsample_0 = nn.Conv2dBias(in_channels, out_channels, 1, stride, 0, dtype="float")
+            if block_idx < 1:
+                self.downsample_0 = nn.Conv2dBias(in_channels, out_channels, 1, stride, 0, dtype="float")
+            elif block_idx == 1:
+                self.downsample_0 = nn.Conv2dBiasTranspose(in_channels, out_channels, 1, stride, 0, dtype="float")
+            else:
+                self.downsample_0 = nn.Conv2dCNHWBias(in_channels, out_channels, 1, stride, 0, dtype="float")
         else:
             self.downsample_0 = None
-
+        print(f'block_idx in bottleneck = {block_idx}, stride = {stride}')
         # The original MSRA ResNet models have stride in the first 1x1 conv
         # The subsequent fb.torch.resnet and Caffe2 ResNe[X]t implementations have
         # stride in the 3x3 conv
@@ -156,18 +160,35 @@ class BottleneckBlock(CNNBlockBase):
 
         conv_op = None
         conv_op_add = None
-        if activation == "ReLU":
-            conv_op = nn.Conv2dBiasRelu
-            conv_op_add = nn.Conv2dBiasAddRelu
-        elif activation == "Hardswish":
-            conv_op = nn.Conv2dBiasHardswish
-            conv_op_add = nn.Conv2dBiasAddHardswish
+        if block_idx < 1:
+            if activation == "ReLU":
+                conv_op1 = nn.Conv2dBiasRelu
+                conv_op2 = nn.Conv2dBiasRelu
+                conv_op_add = nn.Conv2dBiasAddRelu
+            else:
+                raise NotImplementedError
+        elif block_idx == 1:
+            if activation == "ReLU":
+                conv_op1 = nn.Conv2dBiasRelu
+                if stride_3x3 == 2:
+                    conv_op2 = nn.Conv2dBiasReluTranspose
+                else:
+                    conv_op2 = nn.Conv2dBiasRelu
+                conv_op_add = nn.Conv2dBiasAddRelu
+            else:
+                raise NotImplementedError
         else:
-            raise NotImplementedError
+            if activation == "ReLU":
+                conv_op1 = nn.Conv2dCNHWBiasRelu
+                conv_op2 = nn.Conv2dCNHWBiasRelu
+                conv_op_add = nn.Conv2dCNHWBiasAddRelu
+            else:
+                raise NotImplementedError
 
-        self.conv1 = conv_op(in_channels, bottleneck_channels, 1, stride_1x1, 0)
 
-        self.conv2 = conv_op(
+        self.conv1 = conv_op1(in_channels, bottleneck_channels, 1, stride_1x1, 0)
+
+        self.conv2 = conv_op2(
             bottleneck_channels,
             bottleneck_channels,
             3,
@@ -268,7 +289,7 @@ class ResNet(nn.Module):
         self.stage_names = tuple(self.stage_names)  # Make it static for scripting
 
         if num_classes is not None:
-            self.avgpool = nn.AvgPool2d(7, 1, 0)
+            self.avgpool = nn.AvgPool2dTranspose(7, 1, 0)
             self.fc = nn.Linear(curr_channels, num_classes, dtype="float")
 
         if out_features is None:
@@ -361,59 +382,6 @@ class ResNet(nn.Module):
             in_channels = out_channels
         return blocks
 
-    @staticmethod
-    def make_default_stages(depth, block_class=None, **kwargs):
-        """
-        Created list of ResNet stages from pre-defined depth (one of 18, 34, 50, 101, 152).
-        If it doesn't create the ResNet variant you need, please use :meth:`make_stage`
-        instead for fine-grained customization.
-        Args:
-            depth (int): depth of ResNet
-            block_class (type): the CNN block class. Has to accept
-                `bottleneck_channels` argument for depth > 50.
-                By default it is BasicBlock or BottleneckBlock, based on the
-                depth.
-            kwargs:
-                other arguments to pass to `make_stage`. Should not contain
-                stride and channels, as they are predefined for each depth.
-        Returns:
-            list[list[CNNBlockBase]]: modules in all stages; see arguments of
-                :class:`ResNet.__init__`.
-        """
-        num_blocks_per_stage = {
-            18: [2, 2, 2, 2],
-            34: [3, 4, 6, 3],
-            50: [3, 4, 6, 3],
-            101: [3, 4, 23, 3],
-            152: [3, 8, 36, 3],
-        }[depth]
-        if block_class is None:
-            block_class = BasicBlock if depth < 50 else BottleneckBlock
-        if depth < 50:
-            in_channels = [64, 64, 128, 256]
-            out_channels = [64, 128, 256, 512]
-        else:
-            in_channels = [64, 256, 512, 1024]
-            out_channels = [256, 512, 1024, 2048]
-        ret = []
-        for n, s, i, o in zip(
-            num_blocks_per_stage, [1, 2, 2, 2], in_channels, out_channels
-        ):
-            if depth >= 50:
-                kwargs["bottleneck_channels"] = o // 4
-            ret.append(
-                ResNet.make_stage(
-                    block_class=block_class,
-                    num_blocks=n,
-                    stride_per_block=[s] + [1] * (n - 1),
-                    in_channels=i,
-                    out_channels=o,
-                    **kwargs,
-                )
-            )
-        return ret
-
-
 def make_stage(*args, **kwargs):
     """
     Deprecated alias for backward compatibiltiy.
@@ -440,7 +408,7 @@ def build_resnet_backbone(depth, activation):
     else:
         out_channels = 64
 
-    stem = BasicStem(in_channels=3, out_channels=64, norm=norm, activation=activation)
+    stem = BasicStem(in_channels=3, out_channels=64, norm=norm, activation=activation, depth=depth)
 
     num_blocks_per_stage = {
         18: [2, 2, 2, 2],
@@ -454,6 +422,7 @@ def build_resnet_backbone(depth, activation):
 
     for idx, stage_idx in enumerate(range(2, 6)):
         # res5_dilation is used this way as a convention in R-FCN & Deformable Conv paper
+        print(f'idx = {idx}, stage_idx = {stage_idx}')
         dilation = 1
         first_stride = 1 if idx == 0 or (stage_idx == 5 and dilation == 2) else 2
         stage_kargs = {
@@ -473,6 +442,7 @@ def build_resnet_backbone(depth, activation):
             stage_kargs["dilation"] = dilation
             stage_kargs["num_groups"] = num_groups
             stage_kargs["block_class"] = BottleneckBlock
+        stage_kargs["block_idx"] = idx
         blocks = ResNet.make_stage(**stage_kargs)
         in_channels = out_channels
         out_channels *= 2
@@ -480,3 +450,7 @@ def build_resnet_backbone(depth, activation):
         stages.append(blocks)
 
     return ResNet(stem, stages, num_classes=1000)
+
+if __name__ == "__main__":
+    # Create a MobileNetV2 model instance.
+    model = build_resnet_backbone(depth=50 ,activation="ReLU")
