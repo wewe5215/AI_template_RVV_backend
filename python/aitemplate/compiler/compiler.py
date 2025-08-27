@@ -40,12 +40,12 @@ from aitemplate.utils import graph_utils
 from aitemplate.utils.debug_settings import AITDebugSettings
 from aitemplate.utils.misc import callstack_stats
 from aitemplate.utils.serialization.serdes_code import dump_program
-
+from aitemplate.utils.remote_send_receive_files import TARGET_USER, TARGET_IP, set_up_ssh_client
 # pylint: disable=W0102
 
 
 _LOGGER = logging.getLogger(__name__)
-
+IS_REMOTE_COMPILE = None
 
 def _validate_tensor_args(sorted_graph: List[Tensor], output_tensors: List[Tensor]):
     """
@@ -213,7 +213,12 @@ def compile_model(
     """
     if constants is None:
         constants = {}
-
+    global IS_REMOTE_COMPILE
+    IS_REMOTE_COMPILE = remote_compile
+    if IS_REMOTE_COMPILE:
+        set_up_ssh_client()
+    from aitemplate.utils.remote_send_receive_files import SSH_CLIENT
+    ssh_client = SSH_CLIENT
     recompile = os.getenv("AIT_RECOMPILE", "1")
     graph = None
     os.makedirs(workdir, exist_ok=True)  # explicitly ensure workdir exists

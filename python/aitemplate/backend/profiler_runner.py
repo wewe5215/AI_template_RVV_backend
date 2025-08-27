@@ -218,19 +218,33 @@ class Runner(BaseRunner):
 def run_task(cmds, queue, dev_select_flag):
     # get device or block until one is available
     device = queue.get()
-    _LOGGER.debug(f"running profiler {cmds=} on GPU #{device}")
-
+    _LOGGER.debug(f"running profiler {cmds=} on GPU/CPU #{device}")
+    from aitemplate.utils.remote_send_receive_files import TARGET_USER, TARGET_IP, SSH_CLIENT
+    from aitemplate.compiler.compiler import IS_REMOTE_COMPILE
     attempts = 0
+    ssh_client = SSH_CLIENT
     while True:
         try:
-            completed_process = subprocess.run(
-                cmds,
-                env=update_inplace(os.environ.copy(), {dev_select_flag: device}),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                shell=False,
-            )
+            if IS_REMOTE_COMPILE:
+                stdin, stdout, stderr = ssh_client.exec_command(
+                    cmds, timeout=500
+                )
+                out = stdout.read().decode()
+                err = stderr.read().decode()
+
+                exit_status = stdout.channel.recv_exit_status()
+
+                if exit_status != 0:
+                    raise RuntimeError(f"Remote build failed:\n{err}")
+            else:
+                completed_process = subprocess.run(
+                    cmds,
+                    env=update_inplace(os.environ.copy(), {dev_select_flag: device}),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    shell=False,
+                )
             break
         except Exception as ex:
             attempts += 1

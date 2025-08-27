@@ -2,8 +2,11 @@ import subprocess
 import os
 import click
 import time
+import paramiko
+import getpass
 TARGET_USER = "riscv"                # Your RISC-V board username
 TARGET_IP   = "192.168.33.96"        # Your RISC-V board IP address
+SSH_CLIENT = None
 def transfer_folder(folder: str, target_user: str, target_ip: str, target_dir: str):
     """
     Transfers a whole folder recursively to the target using scp -r.
@@ -108,3 +111,14 @@ def poll_for_confirmation(target_user: str, target_ip: str, remote_file: str, lo
             waited += poll_interval
     print("[Host] Confirmation file was not found on device within the timeout period.")
 
+def set_up_ssh_client():
+    ssh_client = paramiko.SSHClient()
+    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    password = getpass.getpass("Enter SSH password: ")
+    ssh_client.connect(
+        hostname=TARGET_IP,
+        username=TARGET_USER,
+        password=password
+    )
+    global SSH_CLIENT
+    SSH_CLIENT = ssh_client

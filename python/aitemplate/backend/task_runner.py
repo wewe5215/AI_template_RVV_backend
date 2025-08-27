@@ -24,8 +24,45 @@ import time
 import typing
 from collections import OrderedDict
 from typing import List
+import threading
+import logging
+_LOGGER = logging.getLogger(__name__)
 
+class RemoteProcess:
+    def __init__(self, ssh_client, cmd, env=None, shell=False, timeout=None):
+        self.ssh_client = ssh_client
+        self.cmd = ' '.join(cmd)
+        self.env = env or {}
+        self.timeout = timeout
+        stdin, stdout, stderr = ssh_client.exec_command(self.cmd, timeout=self.timeout)
+        self.stdin = stdin
+        self._stdout = stdout.read().decode()
+        self._stderr = stderr.read().decode()
 
+        _LOGGER.info(f"remote running task with stdout = {self._stdout}, stderr = {self._stderr}")
+        self._exit_status = None
+        self._channel = stdout.channel
+        threading.Thread(target=self._wait_for_exit, daemon=True).start()
+
+    def _wait_for_exit(self):
+        self._exit_status = self._channel.recv_exit_status()
+
+    def communicate(self):
+        self._wait_for_exit()
+        return self._stdout, self._stderr
+    def poll(self):
+        if self._exit_status is not None:
+            return self._exit_status
+        if self._channel.exit_status_ready():
+            self._exit_status = self._channel.recv_exit_status()
+            return self._exit_status
+        return None
+
+    @property
+    def returncode(self):
+        return self._exit_status
+    def kill(self):
+        return
 # pylint: disable=R1732,R1710,R1721
 class Task:
     """Task is an object containing a bash command,
@@ -46,6 +83,7 @@ class Task:
         name : str
             alias name of the task
         """
+        from aitemplate.compiler.compiler import IS_REMOTE_COMPILE
         self._finished = False
         self._is_timeout = False
         self._failed = False
@@ -59,6 +97,7 @@ class Task:
         self._stdout = ""
         self._stderr = ""
         self._kwargs = kwargs
+        self._is_remote_compile = IS_REMOTE_COMPILE
 
     def __call__(self, dev_id: int) -> None:
         """Execute the bash command with a new subprocess.
@@ -75,13 +114,25 @@ class Task:
         env = os.environ.copy()
         if "dev_flag" in self._kwargs:
             env[self._kwargs["dev_flag"]] = str(dev_id)
-        self._proc = subprocess.Popen(
-            self._cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env,
-            shell=use_shell,
-        )
+        from aitemplate.utils.remote_send_receive_files import TARGET_USER, TARGET_IP, SSH_CLIENT
+        
+        if self._is_remote_compile:
+            _LOGGER.info(f"run with cmd = {self._cmd}, ssh_client exist? {SSH_CLIENT is not None}")
+            self._proc = RemoteProcess(
+                ssh_client=SSH_CLIENT,
+                cmd=self._cmd,
+                env=env,
+                shell=use_shell,
+                timeout=200,
+            )
+        else:
+            self._proc = subprocess.Popen(
+                self._cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env,
+                shell=use_shell,
+            )
         self._timestamp = time.time()
 
     def is_running(self) -> bool:
@@ -156,8 +207,12 @@ class Task:
         """
         if self._failed:
             return None
-        self._stdout = self._proc.stdout.read().decode("utf-8")
-        self._stderr = self._proc.stderr.read().decode("utf-8")
+        if self._is_remote_compile:
+            self._stdout = self._proc._stdout
+            self._stderr = self._proc._stderr
+        else:
+            self._stdout = self._proc.stdout.read().decode("utf-8")
+            self._stderr = self._proc.stderr.read().decode("utf-8")
         fproc(self)
 
     def is_failed(self) -> bool:
@@ -182,7 +237,7 @@ class Task:
 
     def __del__(self) -> None:
         """Clean up process resource"""
-        if self._proc:
+        if self._proc and self._is_remote_compile is False:
             if self._proc.stdout:
                 self._proc.stdout.close()
             if self._proc.stderr:

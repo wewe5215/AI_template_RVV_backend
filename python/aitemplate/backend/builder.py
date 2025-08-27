@@ -48,7 +48,9 @@ from aitemplate.utils.misc import is_debug, is_windows
 
 _LOGGER = logging.getLogger(__name__)
 _DEBUG_SETTINGS = AITDebugSettings()
-from aitemplate.compiler.compiler import IS_REMOTE_COMPILE
+REMOTE_PROFILE_FOLDER = "~/Desktop/AITemplate_Profile"
+REMOTE_RUN_FOLDER = "~/Desktop/AITemplate_Benchmark_on_XNNPACK"
+from aitemplate.utils.remote_send_receive_files import TARGET_USER, TARGET_IP
 
 def _augment_for_trace(cmd):
     return (
@@ -986,12 +988,13 @@ clean:
         _run_make_cmds(cmds, self._timeout, build_dir, allow_cache=allow_cache)
 
 class RemoteBuilder(Builder):
-    def __init__(self, n_jobs: int = -1, timeout: int = 1200):
+    def __init__(self, ssh_client, n_jobs: int = -1, timeout: int = 1200):
         super().__init__(n_jobs=n_jobs, timeout=timeout)  # inherits _n_jobs, _timeout, runner, etc.
         self.remote_user     = "riscv"
         self.remote_host     = "192.168.33.96"
-        self.remote_base_dir = "~/Desktop/AITemplate_Profile"
-        self.remote_run_dir = "~/Desktop/AITemplate_Benchmark_on_XNNPACK"
+        self.remote_base_dir = REMOTE_PROFILE_FOLDER
+        self.remote_run_dir = REMOTE_RUN_FOLDER
+        self.ssh_client = ssh_client
 
     # override only the method that invokes make:
     def make_profilers(self, generated_profilers, workdir):
@@ -1035,14 +1038,10 @@ class RemoteBuilder(Builder):
             f"cd {remote_build}",
             *cmds
         ])
-        proc = subprocess.Popen(
-            ["ssh", f"{self.remote_user}@{self.remote_host}", ssh_cmd],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=os.environ.copy()
-        )
-        out, err = proc.communicate(timeout=self._timeout)
-        if proc.returncode != 0:
+        stdin, stdout, stderr = self.ssh_client.exec_command(ssh_cmd, timeout=self._timeout)
+        err = stderr.read().decode()
+        exit_status = stdout.channel.recv_exit_status()
+        if exit_status != 0:
             raise RuntimeError(f"Remote build failed:\n{err.decode()}")
 
     def make(
@@ -1103,8 +1102,12 @@ def get_compile_engine():
 
         compile_engine = builder_cmake.BuilderCMake()
     else:
+        from aitemplate.compiler.compiler import IS_REMOTE_COMPILE
+        from aitemplate.utils.remote_send_receive_files import SSH_CLIENT
         if Target.current().name() == "rvv" and IS_REMOTE_COMPILE == True:
-            compile_engine = RemoteBuilder()
+            if SSH_CLIENT == None:
+                raise RuntimeError(f"ssh_client doesn't exist")
+            compile_engine = RemoteBuilder(SSH_CLIENT)
         else:
             compile_engine = Builder()
 
