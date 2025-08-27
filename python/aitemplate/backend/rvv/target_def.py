@@ -75,6 +75,7 @@ class RVV(Target):
         self._arch = arch
         self._kwargs = kwargs
         self._compile_options = self._build_compile_options()
+        self._link_options = self._build_link_options()
         if RVV_version is None:
             # try to set default RVV version based on the arch
             # clang17 supports v0.12 version
@@ -130,8 +131,8 @@ class RVV(Target):
             os.path.join(self._pkg_path(), "cpuinfo"),
             os.path.join(self._pkg_path(), "pthreadpool"),
         ]
-        if is_macos():
-            xnnpack_path.append(os.path.join(self._pkg_path(), "kleidiai"))
+        # if is_macos():
+        #     xnnpack_path.append(os.path.join(self._pkg_path(), "kleidiai"))
         return xnnpack_path
 
     def get_link_directories(self) -> List[str]:
@@ -139,14 +140,9 @@ class RVV(Target):
 
     def _build_clang_compiler_options(self) -> List[str]:
         options = [
-            # "--target=riscv64-unknown-elf",
-            # "--sysroot=$(RISCV)/riscv64-unknown-elf",
-            # "--gcc-toolchain=$(RISCV)",
-            # "-menable-experimental-extensions",
             environ.get_compiler_opt_level(),
             "-std=c++17",
             f"-march={self._arch}",
-            # f"-mrvv-vector-bits={environ.get_mrvv_vector_bits()}",
             "-v",
         ]
         options.extend(self._get_clang_debug_options())
@@ -157,18 +153,21 @@ class RVV(Target):
 
     def compile_options(self):
         return self._compile_options
+    def link_options(self):
+        return self._link_options
     def _build_compile_options(self):
         options = self._build_gnu_host_compiler_options() + self._build_clang_compiler_options()
         include_path = self.get_include_directories()
-        link_path = self.get_link_directories()
         for path in include_path:
             options.append("-I" + path)
+
+        return " ".join(options)
+    def _build_link_options(self):
+        options = []
+        link_path = self.get_link_directories()
         for path in link_path:
             options.append("-L" + path)
-        # if is_macos():
-        #     options.append("-lxnnpack -lkleidiai -lpthreadpool -lcpuinfo -lpthread -g")
-        # else:
-        options.append("-lXNNPACK -lpthreadpool -lcpuinfo -lpthread -g")
+        options.append("-Wl,--start-group -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl,--end-group -g")
         return " ".join(options)
 
     def src_extension(self):
@@ -213,10 +212,7 @@ class RVV(Target):
 
     def compile_cmd(self, executable=False):
         if executable:
-            # if is_macos():
-            #     cmd = self.cc() + " " + self._compile_options + " -o {target} {src} -Wl,-lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl"
-            # else:
-                cmd = self.cc() + " " + self._compile_options + " -o {target} {src} -Wl,--start-group -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl,--end-group"
+            cmd = self.cc() + " " + self._compile_options + " -o {target} {src} " + self._link_options
         else:
             cmd = self.cc() + " " + self._compile_options + " -c -o {target} {src}"
         return cmd

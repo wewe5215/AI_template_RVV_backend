@@ -48,7 +48,7 @@ from aitemplate.utils.misc import is_debug, is_windows
 
 _LOGGER = logging.getLogger(__name__)
 _DEBUG_SETTINGS = AITDebugSettings()
-
+from aitemplate.compiler.compiler import IS_REMOTE_COMPILE
 
 def _augment_for_trace(cmd):
     return (
@@ -287,7 +287,7 @@ class Builder:
     files into binary objects.
     """
 
-    def __init__(self, n_jobs: int = -1, timeout: int = 180) -> None:
+    def __init__(self, n_jobs: int = -1, timeout: int = 600) -> None:
         """Initialize a parallel builder for compiling source code.
 
         Parameters
@@ -986,7 +986,7 @@ clean:
         _run_make_cmds(cmds, self._timeout, build_dir, allow_cache=allow_cache)
 
 class RemoteBuilder(Builder):
-    def __init__(self, n_jobs: int = -1, timeout: int = 180):
+    def __init__(self, n_jobs: int = -1, timeout: int = 1200):
         super().__init__(n_jobs=n_jobs, timeout=timeout)  # inherits _n_jobs, _timeout, runner, etc.
         self.remote_user     = "riscv"
         self.remote_host     = "192.168.33.96"
@@ -1009,7 +1009,6 @@ class RemoteBuilder(Builder):
             make_flags = " ".join(
                 [
                     f"-f {makefile_name}",
-                    f"-C {build_dir}",
                 ]
             )
         else:
@@ -1017,7 +1016,7 @@ class RemoteBuilder(Builder):
                 [
                     f"-f {makefile_name}",
                     "--output-sync",
-                    f"-C {build_dir}",
+                    f"-C profiler",
                 ]
             )
         make_clean_cmd = f" {make_path} {make_flags} clean "
@@ -1026,10 +1025,10 @@ class RemoteBuilder(Builder):
 
         remote_build = os.path.join(
             self.remote_base_dir,
-            os.path.basename(build_dir)
+            os.path.basename("profiler")
         )
         subprocess.run(
-            ["scp", "-r", build_dir, f"{self.remote_user}@{self.remote_host}:{remote_build}"],
+            ["scp", "-r", os.path.join(workdir, "profiler"), f"{self.remote_user}@{self.remote_host}:{self.remote_base_dir}"],
             check=True
         )
         ssh_cmd = " && ".join([
@@ -1104,7 +1103,7 @@ def get_compile_engine():
 
         compile_engine = builder_cmake.BuilderCMake()
     else:
-        if Target.current().name() == "rvv":
+        if Target.current().name() == "rvv" and IS_REMOTE_COMPILE == True:
             compile_engine = RemoteBuilder()
         else:
             compile_engine = Builder()
