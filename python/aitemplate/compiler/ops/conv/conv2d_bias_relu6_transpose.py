@@ -100,8 +100,3 @@ class conv2d_bias_relu6_transpose(conv2d):
         self._extract_epilogue_alignment(output_shape)
         self._attrs["outputs"] = [output]
         return output
-    def _get_op_attributes(self):
-        attr = super()._get_op_attributes()
-        del attr["activation"]
-
-        return attr

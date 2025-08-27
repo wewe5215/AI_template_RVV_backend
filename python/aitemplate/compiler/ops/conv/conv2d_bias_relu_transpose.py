@@ -18,10 +18,10 @@ Fused conv2d_bias_relu_transpose op.
 from aitemplate.compiler.ops.conv.common_conv2d_bias_relu_activation import (
     conv2d_bias_relu_activation,
 )
-
-
+from aitemplate.compiler.ops.conv.conv2d import conv2d
+from aitemplate.compiler.base import Tensor
 # pylint: disable=C0103
-class conv2d_bias_relu_transpose(conv2d_bias_relu_activation):
+class conv2d_bias_relu_transpose(conv2d):
     r"""Conv2d with bias + relu + transpose.
 
     Applies a 2D convolution on input in shape (N, H, W, C_in), adds a bias in shape (C_out), performs relu and produces output in shape (N, H_out, W_out, C_out). N is batch size, H, W are the height and width of the input images in pixels, and C is the number of channels.
@@ -70,10 +70,31 @@ class conv2d_bias_relu_transpose(conv2d_bias_relu_activation):
         group : int, optional
             Number of input channels to process to compute one output channel, by default 1
         """
-        super().__init__("transpose", stride, pad, dilate=dilate, group=group)
+        super().__init__(stride, pad, dilate=dilate, group=group)
+        self._attrs["op"] = "conv2d_bias_relu_transpose"
 
-    def _get_op_attributes(self):
-        attr = super()._get_op_attributes()
-        del attr["activation"]
+    def __call__(self, x: Tensor, w: Tensor, b: Tensor):
+        """Call conv2d_depthwise with tensors x, w, b
 
-        return attr
+        Parameters
+        ----------
+        x : Tensor
+            in shape (N, H, W, C_in)
+        w : Tensor
+            in shape (C_out, K_h, K_w, 1)
+        b : Tensor
+            in shape (C_out)
+
+        Returns
+        -------
+        List[Tensor]
+            includes the output tensor in shape (N, H_out, W_out, C_out)
+        """
+        self._attrs["inputs"] = [x, w, b]
+        self._set_depth()
+        output_shape = self._infer_shapes(x, w)
+        output = Tensor(output_shape, src_ops={self}, dtype=x._attrs["dtype"])
+        self._extract_exec_path(x)
+        self._extract_epilogue_alignment(output_shape)
+        self._attrs["outputs"] = [output]
+        return output
