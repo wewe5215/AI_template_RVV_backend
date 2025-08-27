@@ -169,12 +169,13 @@ class BottleneckBlock(CNNBlockBase):
                 raise NotImplementedError
         elif block_idx == 1:
             if activation == "ReLU":
-                conv_op1 = nn.Conv2dBiasRelu
                 if stride_3x3 == 2:
+                    conv_op1 = nn.Conv2dBiasRelu
                     conv_op2 = nn.Conv2dBiasReluTranspose
                 else:
-                    conv_op2 = nn.Conv2dBiasRelu
-                conv_op_add = nn.Conv2dBiasAddRelu
+                    conv_op1 = nn.Conv2dCNHWBiasRelu
+                    conv_op2 = nn.Conv2dCNHWBiasRelu
+                conv_op_add = nn.Conv2dCNHWBiasAddRelu
             else:
                 raise NotImplementedError
         else:
