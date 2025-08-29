@@ -17,21 +17,6 @@ benchmark_pt.py            # Benchmark code for PyTorch
 benchmark_ait_rvv.py       # Benchmark code for AIT & XNNPACK backend through \
                                 sending compiled object files, python scripts to RISC-V board \
                                 and retrive the benchmark result from RISC-V board
-static
-    FakeTorchTensor.py     # Fake torch tensor (torch library isn't supported on device)
-    model.py               # Python bindings to the AIT runtime on device
-    model_utils.py         # utils used in model.py
-    remote_send_receive_files.py # functions for remote sending/retriving the files
-    run_benchmark_on_riscv.py
-    test_correctness_on_riscv.py
 ```
-
-
-
-## Reference Speed vs PyTorch Eager
-
-
-
 ### Note for Performance Results
-
-
+The correctness of the CPU-backend code generation has been verified with the 01_resnet-50 benchmark. However, if you validate remotely compiled and executed code against results from a different device—for example, comparing PyTorch on an M2 Mac with AIT running on a RISC-V Banana Pi—you may see slight differences in the ResNet-50 outputs. If you instead generate and run the CPU code locally and compare it with the PyTorch result on the same machine, there should be no mismatched elements.

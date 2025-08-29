@@ -290,7 +290,7 @@ class ResNet(nn.Module):
         self.stage_names = tuple(self.stage_names)  # Make it static for scripting
 
         if num_classes is not None:
-            self.avgpool = nn.AvgPool2dTranspose(7, 1, 0)
+            self.avgpool = nn.AvgPool2dCNHWTranspose(7, 1, 0)
             self.fc = nn.Linear(curr_channels, num_classes, dtype="float")
 
         if out_features is None:
