@@ -104,11 +104,11 @@ def prune_model_weights(np_weights, pruning_ratio, batch_size, depth=50):
           - For each weight key: new entries for "layer_weight_pruned" and "layer_weight_indice"
           - For each bias key: the bias is retained unmodified.
     """
-    if depth == 50:
-        chosen_lmul_record = 'chosen_lmul_bs'
-    else:
-        chosen_lmul_record = f'chosen_lmul_resnet{depth}_bs'
-    weight_to_lmul = fetch_lmul_for_op(batch_size, chosen_lmul_record)
+    # if depth == 50:
+    #     chosen_lmul_record = 'chosen_lmul_bs'
+    # else:
+    #     chosen_lmul_record = f'chosen_lmul_resnet{depth}_bs'
+    # weight_to_lmul = fetch_lmul_for_op(batch_size, chosen_lmul_record)
     new_model = {}
     for key, value in np_weights.items():
         if (key in layers_not_to_prune_resnet_50_101_152 and depth >= 50) or (key in layers_not_to_prune_resnet_18_34 and depth < 50):
@@ -118,8 +118,6 @@ def prune_model_weights(np_weights, pruning_ratio, batch_size, depth=50):
             if bias_key in np_weights:
                 new_model[bias_key] = np_weights[bias_key]
         elif "weight" in key:
-            # print(f'value.ndim = {value.ndim}, key = {key}')
-            # If the weight is not 2D, reshape it appropriately.
             if value.ndim != 2:
                 if value.ndim == 4:
                     # Assume weight has shape (output_channel, kernel_height, kernel_width, input_channel)
@@ -133,7 +131,7 @@ def prune_model_weights(np_weights, pruning_ratio, batch_size, depth=50):
             else:
                 weight_2d = value
 
-            lmul = int(weight_to_lmul[key])
+            lmul = 2#int(weight_to_lmul[key])
             # Calculate nr based on your mapping (using weight_to_lmul) and vlen.
             nr = lmul * (vlen / 32)  # 32 for float32
             # print(f'key = {key} being pruned with lmul = {weight_to_lmul[key]}, value.ndim = {value.ndim}')
