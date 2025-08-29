@@ -221,7 +221,7 @@ class MobileNetV2(nn.Module):
         
         # Optionally add global average pooling and a classifier.
         if num_classes is not None:
-            self.avgpool = nn.AvgPool2dTranspose(7, 1, 0)
+            self.avgpool = nn.AvgPool2dCNHWTranspose(7, 1, 0)
             self.fc = nn.Linear(last_channel, num_classes, dtype="float")
         
         # For consistency with other backbones, store output features if needed.
