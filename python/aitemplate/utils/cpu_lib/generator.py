@@ -18,6 +18,7 @@ import copy
 from aitemplate.utils.cpu_lib import (
     conv2d_operation as conv,
     gemm_operation as gemm,
+    conv2d_pruning_operation as conv_prune,
     # groupnorm_operation as groupnorm,
     # layernorm_operation as layernorm,
     library,
@@ -73,7 +74,7 @@ def CreateConv2dFwdOperator(manifest, operation_kind, out_element_op, out_data_o
     return operations
 def CreateConv2dPruningFwdOperator(manifest, operation_kind, out_element_op, out_data_op=""):
     in_element_op = library.TensorOperation.PassThrough
-    conv2d_spec = conv.Conv2DSpecialization.ConvCNHWF32
+    conv2d_spec = conv_prune.Conv2DSpecialization.ConvCNHWF32
 
     operations = []
     data_type = library.DataType.f32
@@ -88,7 +89,7 @@ def CreateConv2dPruningFwdOperator(manifest, operation_kind, out_element_op, out
     c_element_desc = library.TensorDesc(
         data_type, layout_type
     )
-    new_operation = conv.Conv2DOperation(
+    new_operation = conv_prune.Conv2D_Pruning_Operation(
         operation_kind=operation_kind,
         extra_kind=out_element_op,
         A=a_element_desc,
