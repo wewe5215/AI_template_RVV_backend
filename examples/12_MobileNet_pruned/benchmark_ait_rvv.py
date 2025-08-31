@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-"""benchmark for resnet50"""
+"""benchmark for mobilenet"""
 
 import os
 import time
@@ -23,9 +23,11 @@ from aitemplate.compiler import compile_model, Model
 
 from aitemplate.frontend import Tensor
 from aitemplate.testing import detect_target
-from modeling.densenet import build_densenet_backbone
-from weight_utils import timm_export
+from mobilenet_v2 import build_mobilenetv2_backbone
+from mobilenet_v2_trans_after_layer1 import build_mobilenetv2_backbone as backbone_trans_after_layer1
+from weight_utils import export_mobilenet
 import subprocess
+from weight_pruning import prune_model_weights
 from aitemplate.utils.remote_send_receive_files import (
     transfer_folder, 
     check_remote_file_exists, 
@@ -36,7 +38,7 @@ from aitemplate.utils.remote_send_receive_files import (
     remote_run_program_send_back_result
 )
 target_dir  = f"/home/{TARGET_USER}/Desktop/AITemplate_Benchmark_on_XNNPACK" # Target directory to store files
-
+pruning_ratio = 0.5
 def mark_output(y):
     """Different to PyTorch, we need to explicit mark output tensor for optimization,
 
@@ -62,7 +64,7 @@ def compile_module(model_name, batch_size, **kwargs):
     x = Tensor(
         shape=[batch_size, 224, 224, 3], dtype="float32", name="input0", is_input=True
     )
-    model = build_densenet_backbone()
+    model = build_mobilenetv2_backbone()
     # Mark all parameters with name same to PyTorch name convention
     model.name_parameter_tensor()
     # Forward the input tensor to the model, get output tensor
@@ -80,12 +82,13 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True):
     os.makedirs(metadata_folder, exist_ok=True)
     weights_file = f"{metadata_folder}/weights_file_{batch_size}.npz"
     io_file = f"{metadata_folder}/io_tensors_{batch_size}.npz"
-    timm_exporter = timm_export("densenet121", pretrained=False)
+    timm_exporter = export_mobilenet("mobilenetv2", pretrained=False)
     ait_params = timm_exporter.export_model(half=False)
     np_weights = {}
     for k, v in ait_params.items():
         np_weights[k] = v.detach().cpu().numpy().astype(np.float32)
-    np.savez_compressed(weights_file, **np_weights)
+    new_np_weights = prune_model_weights(np_weights, pruning_ratio, batch_size)
+    np.savez_compressed(weights_file, **new_np_weights)
 
 
     # ait model expects NHWC format
@@ -114,14 +117,14 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True):
 @click.option("--batch-size", type=int, default=0, help="Batch size")
 def main(use_fp16_acc=False, use_graph=True, batch_size=0):
     use_graph = False
-    model_name = f"cnhw_densenet121"
+    model_name = f"cnhw_pruned_{int(pruning_ratio*100)}_mobilenetv2_trans_after_layer1"
     if batch_size < 1:
         print("batch_size < 1, set batch_size to 1 and benchmark")
         bs = 1
         compile_module(model_name, bs, use_fp16_acc=use_fp16_acc)
         benchmark(model_name, bs, graph_mode=use_graph)
     else:
-        # compile_module(model_name, batch_size, use_fp16_acc=use_fp16_acc)
+        compile_module(model_name, batch_size, use_fp16_acc=use_fp16_acc)
         benchmark(model_name, batch_size, graph_mode=use_graph)
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-"""benchmark for resnet50"""
+"""benchmark for mobilenet"""
 
 import os
 import time
@@ -23,8 +23,9 @@ from aitemplate.compiler import compile_model, Model
 
 from aitemplate.frontend import Tensor
 from aitemplate.testing import detect_target
-from modeling.densenet import build_densenet_backbone
-from weight_utils import timm_export
+from mobilenet_v2 import build_mobilenetv2_backbone
+from mobilenet_v2_trans_after_layer1 import build_mobilenetv2_backbone as backbone_trans_after_layer1
+from weight_utils import export_mobilenet
 import subprocess
 from aitemplate.utils.remote_send_receive_files import (
     transfer_folder, 
@@ -62,7 +63,7 @@ def compile_module(model_name, batch_size, **kwargs):
     x = Tensor(
         shape=[batch_size, 224, 224, 3], dtype="float32", name="input0", is_input=True
     )
-    model = build_densenet_backbone()
+    model = build_mobilenetv2_backbone()
     # Mark all parameters with name same to PyTorch name convention
     model.name_parameter_tensor()
     # Forward the input tensor to the model, get output tensor
@@ -80,7 +81,7 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True):
     os.makedirs(metadata_folder, exist_ok=True)
     weights_file = f"{metadata_folder}/weights_file_{batch_size}.npz"
     io_file = f"{metadata_folder}/io_tensors_{batch_size}.npz"
-    timm_exporter = timm_export("densenet121", pretrained=False)
+    timm_exporter = export_mobilenet("mobilenetv2", pretrained=False)
     ait_params = timm_exporter.export_model(half=False)
     np_weights = {}
     for k, v in ait_params.items():
@@ -114,14 +115,14 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True):
 @click.option("--batch-size", type=int, default=0, help="Batch size")
 def main(use_fp16_acc=False, use_graph=True, batch_size=0):
     use_graph = False
-    model_name = f"cnhw_densenet121"
+    model_name = f"cnhw_mobilenetv2_trans_after_layer1"
     if batch_size < 1:
         print("batch_size < 1, set batch_size to 1 and benchmark")
         bs = 1
         compile_module(model_name, bs, use_fp16_acc=use_fp16_acc)
         benchmark(model_name, bs, graph_mode=use_graph)
     else:
-        # compile_module(model_name, batch_size, use_fp16_acc=use_fp16_acc)
+        compile_module(model_name, batch_size, use_fp16_acc=use_fp16_acc)
         benchmark(model_name, batch_size, graph_mode=use_graph)
 
 if __name__ == "__main__":
