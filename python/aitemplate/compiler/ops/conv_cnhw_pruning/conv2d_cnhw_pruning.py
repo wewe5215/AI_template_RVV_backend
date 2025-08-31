@@ -199,6 +199,10 @@ class conv2d_cnhw_pruning(Operator):
         self.exec_key_template = EXEC_KEY_TEMPLATE
         self.exec_dyn_key_template = EXEC_DYN_KEY_TEMPLATE
         self.exec_cond_template = EXEC_COND_TEMPLATE
+        self.remote_user     = "riscv"
+        self.remote_host     = "192.168.33.96"
+        self.remote_base_dir = "~/Desktop/AITemplate_Profile"
+        self._timeout = 180
 
     def _get_params_factory(self):
         params_factory = {}
@@ -446,7 +450,8 @@ class conv2d_cnhw_pruning(Operator):
             See also: :func:`~aitemplate.compiler.transform.profile.profile`
         """
         target = backend.target.Target.current()
-
+        from aitemplate.utils.remote_send_receive_files import TARGET_USER, TARGET_IP, SSH_CLIENT
+        self.ssh_client = SSH_CLIENT
         func_key = "{target}.{op}.config".format(
             target=target.name(), op=self._attrs["op"]
         )
@@ -469,9 +474,21 @@ class conv2d_cnhw_pruning(Operator):
             )
         return
     def _gen_profile_cmd(self, profiler_prefix, cfg, x_shape):
-        exe_path = os.path.join(profiler_prefix, cfg)
-        if not os.access(exe_path, os.X_OK):
-            raise RuntimeError("Profiler %s is not executable" % exe_path)
+        from aitemplate.backend.builder import REMOTE_PROFILE_FOLDER
+        from aitemplate.compiler.compiler import IS_REMOTE_COMPILE
+        ssh_client = self.ssh_client
+        if IS_REMOTE_COMPILE and ssh_client is not None:
+            exe_path = os.path.join(REMOTE_PROFILE_FOLDER, "profiler", self._attrs["op"], cfg)
+            command = f"test -x {exe_path} && echo exists"
+            stdin, stdout, stderr = ssh_client.exec_command(command)
+            stdout = stdout.read().decode()
+            stderr = stderr.read().decode()
+            if "exists" not in stdout:
+                raise RuntimeError(f"SSH command timed out while checking for remote file: {exe_path} .")
+        else:
+            exe_path = os.path.join(profiler_prefix, cfg)
+            if not os.access(exe_path, os.X_OK):
+                raise RuntimeError("Profiler %s is not executable" % exe_path)
         cmd = [exe_path]
         params = self._get_params_factory()
         cmd.append(x_shape[0])
@@ -589,18 +606,18 @@ class conv2d_cnhw_pruning(Operator):
         devices=None,
         dynamic_profiling_strategy=DynamicProfileStrategy.HINTS,
     ):
-        # if devices is None:
-        #     devices = [0]
-        # self._profile_static(workdir, devices)
+        if devices is None:
+            devices = [0]
+        self._profile_static(workdir, devices)
 
-        # if self._has_dynamic_input_dims():
-        #     if dynamic_profiling_strategy != DynamicProfileStrategy.HINTS:
-        #         raise NotImplementedError(
-        #             "conv2d only supports HINTS dynamic profiling strategy for now! Current strategy: {}".format(
-        #                 dynamic_profiling_strategy
-        #             )
-        #         )
-        #     self._profile_dynamic_dim(workdir)
+        if self._has_dynamic_input_dims():
+            if dynamic_profiling_strategy != DynamicProfileStrategy.HINTS:
+                raise NotImplementedError(
+                    "conv2d only supports HINTS dynamic profiling strategy for now! Current strategy: {}".format(
+                        dynamic_profiling_strategy
+                    )
+                )
+            self._profile_dynamic_dim(workdir)
         return
 
     def _profile_static(self, workdir, devices):
@@ -683,7 +700,7 @@ class conv2d_cnhw_pruning(Operator):
         if target.use_dummy_profiling_results():
             return
 
-        profiler_prefix = os.path.join(workdir, "profiler", self._attrs["op"])
+        profiler_prefix = os.path.join("profiler", self._attrs["op"])
         runner = backend.profiler_runner.Runner([0], self._attrs["name"])
         # generate region
         regions = []  # lb, ub, lb_algos, ub_algos
@@ -751,29 +768,6 @@ class conv2d_cnhw_pruning(Operator):
             )
             new_exec_paths[lo_region_key] = lb_algo
             new_exec_paths[up_region_key] = ub_algo
-            # find special cases
-            # This code is kept in case need fully tested dynamic code
-            # So far I find binary search works well.
-            # def _find_special_case(lb, ub, algo):
-            #     for i in range(lb + 1, ub + 1):
-            #         x_shape = [i, dim1, dim2, dim3]
-            #         cmd = self._gen_profile_cmd(profiler_prefix, str(algo), x_shape)
-            #         runner.push(0, cmd)
-            #         runner.join()
-            #         out = runner.pull()
-            #         if len(out) == 0:
-            #             _LOGGER.info("Find specail case: batch=%d" % i)
-            #             algo = self._profile_single_workload(profiler_prefix, x_shape, [0])
-            #             special_cases[self._gen_exec_key(x_shape)] = algo
-
-            # _LOGGER.info(
-            #     "Searching for specail cases between [{lb}, {ub}]".format(lb=origin_lb,
-            #         ub=last_mid))
-            # _find_special_case(origin_lb, last_mid, lb_algo)
-            # _LOGGER.info(
-            #     "Searching for specail cases between [{lb}, {ub}]".format(lb=last_mid + 1,
-            #         ub=origin_ub))
-            # _find_special_case(last_mid, origin_ub, ub_algo)
         special_cases.update(new_exec_paths)
         self._attrs["exec_path"] = special_cases
 
