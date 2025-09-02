@@ -28,7 +28,7 @@ def conv2d_bias_config(
 ):
     """Populates all available conv2d configs into the op_instance field."""
     import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2dPruningBias
+    op_kind = cpu_lib.library.Conv2dPruningKind.Conv2dPruningBias
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
     Layout = cpu_lib.library.LayoutType.CNHW
@@ -64,7 +64,7 @@ def conv2d_bias_gen_function(
 ):
     """Codegen for conv2d function."""
     import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2dPruningBias
+    op_kind = cpu_lib.library.Conv2dPruningKind.Conv2dPruningBias
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
     Layout = cpu_lib.library.LayoutType.CNHW

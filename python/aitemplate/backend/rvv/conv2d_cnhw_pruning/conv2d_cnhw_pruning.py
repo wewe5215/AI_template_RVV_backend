@@ -28,7 +28,7 @@ def conv2d_cnhw_pruning_config(
 ):
     """Populates conv2d_cnhw_pruning cutlass configs into 'op_instance' field."""
     import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2dPruning
+    op_kind = cpu_lib.library.Conv2dPruningKind.Conv2dPruning
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
     Layout = cpu_lib.library.LayoutType.CNHW
@@ -64,7 +64,7 @@ def conv2d_cnhw_pruning_gen_function(
 ):
     """Codegen for conv2d_cnhw_pruning function."""
     import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2dPruning
+    op_kind = cpu_lib.library.Conv2dPruningKind.Conv2dPruning
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
     Layout = cpu_lib.library.LayoutType.CNHW

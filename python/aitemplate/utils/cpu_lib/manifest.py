@@ -149,3 +149,18 @@ class Manifest:
 
             self.operations[operation.operation_kind][operation.extra_kind][operation.A.layout][configuration_name].append(operation)
             self.operation_count += 1
+
+if __name__ == "__main__":
+    from aitemplate.backend.rvv.utils import Args
+    from aitemplate.utils.cpu_lib.generator import GenerateRV64GCV_ZVFH
+    from aitemplate.utils.cpu_lib.library import Conv2dPruningKind, TensorOperation, LayoutType
+    arch="rv64gcv1_zfh_zvfh"
+    args = Args(arch)
+    manifest = Manifest(args)
+    GenerateRV64GCV_ZVFH(manifest, args.rvv_version)
+    operations = manifest.operations[Conv2dPruningKind.Conv2dPruningBias][TensorOperation.PassThrough][LayoutType.CNHW]
+    for instance_idx, (op_name, op_list) in enumerate(operations.items()):
+        for op in op_list:                          # op is now a single object
+            LMUL = op.LMUL
+            tile_size=op.tile_size
+            print(f"{op} with LMUL = {LMUL}, tile_size = {tile_size}")

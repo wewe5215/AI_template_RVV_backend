@@ -41,12 +41,11 @@ from aitemplate.utils.cpu_lib.conv2d_common import Conv2DSpecialization, Conv2DS
                         BIAS_KINDS, DEPTHWISE_KINDS, RELU_KINDS, RELU6_KINDS, BINARY_OP_KIND, BINARY_FLAG_OP_KIND, \
                         NHWC_KINDS, CNHW_KINDS, TRANSPOSE_AFTER_CONV_KINDS, PRUNING_KINDS
 
-# TODO : revise min/max for relu
 
 
 @dataclass
 class Conv2D_Pruning_Operation:
-    operation_kind: library.Conv2dKind
+    operation_kind: library.Conv2dPruningKind
     extra_kind: library.TensorOperation
     A: library.TensorDesc
     B: library.TensorDesc
@@ -59,8 +58,8 @@ class Conv2D_Pruning_Operation:
     tile_size: int
 
     def __str__(self) -> str:
-        io_name = "{conv2d_kind}_{conv2d_specialization}_{a_dtype}_{b_dtype}_{c_dtype}_{tile_size}x{LMUL}v".format(
-            conv2d_kind=library.Conv2dKindNames[self.operation_kind],
+        io_name = "{conv2d_kind}_{conv2d_specialization}_{a_dtype}_{tile_size}x{LMUL}v".format(
+            conv2d_kind=library.Conv2dPruningKindNames[self.operation_kind],
             conv2d_specialization=self.conv2d_specialization.value,
             a_dtype=library.DataTypeNames[self.A.element],
             b_dtype=library.DataTypeNames[self.B.element],
@@ -206,7 +205,7 @@ if __name__ == "__main__":
     B = library.TensorDesc(library.DataType.f32, library.LayoutType.CNHW)
     C = library.TensorDesc(library.DataType.f32, library.LayoutType.CNHW)
     Conv2DOp = Conv2D_Pruning_Operation(
-        operation_kind=library.Conv2dKind.Conv2dPruningBiasAdd,
+        operation_kind=library.Conv2dPruningKind.Conv2dPruningBiasAdd,
         extra_kind=library.TensorOperation.PassThrough,
         A=A,
         B=B,

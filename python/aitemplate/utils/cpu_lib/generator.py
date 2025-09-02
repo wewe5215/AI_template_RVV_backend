@@ -307,55 +307,55 @@ def GenerateTensorOp(manifest):
 
     CreateConv2dPruningFwdOperator(
         manifest,
-        library.Conv2dKind.Conv2dPruning,
+        library.Conv2dPruningKind.Conv2dPruning,
         library.TensorOperation.PassThrough,
     )
 
     CreateConv2dPruningFwdOperator(
         manifest,
-        library.Conv2dKind.Conv2dPruningBias,
+        library.Conv2dPruningKind.Conv2dPruningBias,
         library.TensorOperation.PassThrough,
     )
 
     CreateConv2dPruningFwdOperator(
         manifest,
-        library.Conv2dKind.Conv2dPruningBiasAdd,
+        library.Conv2dPruningKind.Conv2dPruningBiasAdd,
         library.TensorOperation.Add,
     )
 
     CreateConv2dPruningFwdOperator(
         manifest,
-        library.Conv2dKind.Conv2dPruningBiasRelu,
+        library.Conv2dPruningKind.Conv2dPruningBiasRelu,
         library.TensorOperation.PassThrough,
     )
 
     CreateConv2dPruningFwdOperator(
         manifest,
-        library.Conv2dKind.Conv2dPruningBiasRelu6,
+        library.Conv2dPruningKind.Conv2dPruningBiasRelu6,
         library.TensorOperation.PassThrough,
     )
 
     CreateConv2dPruningFwdOperator(
         manifest,
-        library.Conv2dKind.Conv2dPruningBiasAddRelu,
+        library.Conv2dPruningKind.Conv2dPruningBiasAddRelu,
         library.TensorOperation.Add,
     )
 
     CreateConv2dPruningFwdOperator(
         manifest,
-        library.Conv2dKind.Conv2dPruningBiasAddRelu6,
+        library.Conv2dPruningKind.Conv2dPruningBiasAddRelu6,
         library.TensorOperation.Add,
     )
 
     CreateConv2dPruningFwdOperator(
         manifest,
-        library.Conv2dKind.Conv2dPruningBiasReluAdd,
+        library.Conv2dPruningKind.Conv2dPruningBiasReluAdd,
         library.TensorOperation.Add,
     )
 
     CreateConv2dPruningFwdOperator(
         manifest,
-        library.Conv2dKind.Conv2dPruningBiasRelu6Add,
+        library.Conv2dPruningKind.Conv2dPruningBiasRelu6Add,
         library.TensorOperation.Add,
     )
     # # Conv2dBiasSigmoid

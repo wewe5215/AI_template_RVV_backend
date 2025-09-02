@@ -30,15 +30,15 @@ CNHW_KINDS = {
 }
 
 PRUNING_KINDS = {
-    library.Conv2dKind.Conv2dPruning,
-    library.Conv2dKind.Conv2dPruningBias,
-    library.Conv2dKind.Conv2dPruningBiasAdd,
-    library.Conv2dKind.Conv2dPruningBiasRelu,
-    library.Conv2dKind.Conv2dPruningBiasRelu6,
-    library.Conv2dKind.Conv2dPruningBiasAddRelu,
-    library.Conv2dKind.Conv2dPruningBiasAddRelu6,
-    library.Conv2dKind.Conv2dPruningBiasReluAdd,
-    library.Conv2dKind.Conv2dPruningBiasRelu6Add,
+    library.Conv2dPruningKind.Conv2dPruning,
+    library.Conv2dPruningKind.Conv2dPruningBias,
+    library.Conv2dPruningKind.Conv2dPruningBiasAdd,
+    library.Conv2dPruningKind.Conv2dPruningBiasRelu,
+    library.Conv2dPruningKind.Conv2dPruningBiasRelu6,
+    library.Conv2dPruningKind.Conv2dPruningBiasAddRelu,
+    library.Conv2dPruningKind.Conv2dPruningBiasAddRelu6,
+    library.Conv2dPruningKind.Conv2dPruningBiasReluAdd,
+    library.Conv2dPruningKind.Conv2dPruningBiasRelu6Add,
 }
 BIAS_KINDS = {
     library.Conv2dKind.Conv2dBias,
@@ -62,14 +62,14 @@ BIAS_KINDS = {
     library.Conv2dKind.Conv2dDepthwiseBiasTranspose,
     library.Conv2dKind.Conv2dDepthwiseBiasReluTranspose,
     library.Conv2dKind.Conv2dDepthwiseBiasRelu6Transpose,
-    library.Conv2dKind.Conv2dPruningBias,
-    library.Conv2dKind.Conv2dPruningBiasAdd,
-    library.Conv2dKind.Conv2dPruningBiasRelu,
-    library.Conv2dKind.Conv2dPruningBiasRelu6,
-    library.Conv2dKind.Conv2dPruningBiasAddRelu,
-    library.Conv2dKind.Conv2dPruningBiasAddRelu6,
-    library.Conv2dKind.Conv2dPruningBiasReluAdd,
-    library.Conv2dKind.Conv2dPruningBiasRelu6Add,
+    library.Conv2dPruningKind.Conv2dPruningBias,
+    library.Conv2dPruningKind.Conv2dPruningBiasAdd,
+    library.Conv2dPruningKind.Conv2dPruningBiasRelu,
+    library.Conv2dPruningKind.Conv2dPruningBiasRelu6,
+    library.Conv2dPruningKind.Conv2dPruningBiasAddRelu,
+    library.Conv2dPruningKind.Conv2dPruningBiasAddRelu6,
+    library.Conv2dPruningKind.Conv2dPruningBiasReluAdd,
+    library.Conv2dPruningKind.Conv2dPruningBiasRelu6Add,
 }
 
 TRANSPOSE_AFTER_CONV_KINDS = {
@@ -102,9 +102,9 @@ RELU_KINDS = {
     library.Conv2dKind.Conv2dDepthwiseBiasAddRelu,
     library.Conv2dKind.Conv2dBiasReluTranspose,
     library.Conv2dKind.Conv2dDepthwiseBiasReluTranspose,
-    library.Conv2dKind.Conv2dPruningBiasRelu,
-    library.Conv2dKind.Conv2dPruningBiasAddRelu,
-    library.Conv2dKind.Conv2dPruningBiasReluAdd,
+    library.Conv2dPruningKind.Conv2dPruningBiasRelu,
+    library.Conv2dPruningKind.Conv2dPruningBiasAddRelu,
+    library.Conv2dPruningKind.Conv2dPruningBiasReluAdd,
 }
 
 RELU6_KINDS = {
@@ -115,9 +115,9 @@ RELU6_KINDS = {
     library.Conv2dKind.Conv2dDepthwiseBiasAddRelu6,
     library.Conv2dKind.Conv2dBiasRelu6Transpose,
     library.Conv2dKind.Conv2dDepthwiseBiasRelu6Transpose,
-    library.Conv2dKind.Conv2dPruningBiasRelu6,
-    library.Conv2dKind.Conv2dPruningBiasAddRelu6,
-    library.Conv2dKind.Conv2dPruningBiasRelu6Add,
+    library.Conv2dPruningKind.Conv2dPruningBiasRelu6,
+    library.Conv2dPruningKind.Conv2dPruningBiasAddRelu6,
+    library.Conv2dPruningKind.Conv2dPruningBiasRelu6Add,
 }
 
 BINARY_OP_KIND = {

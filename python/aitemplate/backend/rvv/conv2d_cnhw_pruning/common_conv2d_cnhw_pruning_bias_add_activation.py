@@ -37,9 +37,9 @@ def extract_config(
 ):
     import cpu_lib
     if unary_op_name == "ReLu":
-        op_kind = cpu_lib.library.Conv2dKind.Conv2dPruningBiasAddRelu
+        op_kind = cpu_lib.library.Conv2dPruningKind.Conv2dPruningBiasAddRelu
     elif unary_op_name == "Identity":
-        op_kind = cpu_lib.library.Conv2dKind.Conv2dPruningBiasAdd
+        op_kind = cpu_lib.library.Conv2dPruningKind.Conv2dPruningBiasAdd
     extra_kind = cpu_lib.library.TensorOperation.Add
     # if dtype == "float32": --> TODO: uncomment later
     Layout = cpu_lib.library.LayoutType.CNHW

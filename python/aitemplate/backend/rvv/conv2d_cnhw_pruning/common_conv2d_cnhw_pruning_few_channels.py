@@ -23,9 +23,9 @@ from aitemplate.utils import alignment
 def extract_config(func_attrs, dtype="float16", unary_op_name="Identity"):
     import cpu_lib
     if unary_op_name == "ReLu":
-        op_kind = cpu_lib.library.Conv2dKind.Conv2dPruningBiasRelu
+        op_kind = cpu_lib.library.Conv2dPruningKind.Conv2dPruningBiasRelu
     elif unary_op_name == "Identity":
-        op_kind = cpu_lib.library.Conv2dKind.Conv2dPruningBias
+        op_kind = cpu_lib.library.Conv2dPruningKind.Conv2dPruningBias
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
     Layout = cpu_lib.library.LayoutType.CNHW

@@ -27,7 +27,7 @@ def conv2d_bias_relu_config(
     dtype="float16",
 ):
     import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2dPruningBiasRelu6
+    op_kind = cpu_lib.library.Conv2dPruningKind.Conv2dPruningBiasRelu6
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
     Layout = cpu_lib.library.LayoutType.CNHW
@@ -61,7 +61,7 @@ def conv2d_bias_relu_gen_function(
     shape_save_template,
 ):
     import cpu_lib
-    op_kind = cpu_lib.library.Conv2dKind.Conv2dPruningBiasRelu6
+    op_kind = cpu_lib.library.Conv2dPruningKind.Conv2dPruningBiasRelu6
     extra_kind = cpu_lib.library.TensorOperation.PassThrough
     # if dtype == "float32": --> TODO: uncomment later
     Layout = cpu_lib.library.LayoutType.CNHW
