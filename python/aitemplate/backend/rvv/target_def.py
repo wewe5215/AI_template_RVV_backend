@@ -117,7 +117,7 @@ class RVV(Target):
 
     def _build_include_directories(self) -> List[str]:
         xnnpack_path = [
-            os.path.join(self._xnnpack_path, "/home/riscv/Desktop/XNNPACK/include"),
+            os.path.join(self._xnnpack_path, f"{self._xnnpack_path}/include"),
             os.path.join(self._pkg_path(), "pthreadpool-source/include"),
         ]
         return xnnpack_path
