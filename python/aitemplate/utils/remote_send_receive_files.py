@@ -6,6 +6,8 @@ import paramiko
 import getpass
 TARGET_USER = "riscv"                # Your RISC-V board username
 TARGET_IP   = "192.168.33.96"        # Your RISC-V board IP address
+REMOTE_PROFILE_FOLDER = "~/Desktop/AITemplate_Profile"
+REMOTE_RUN_FOLDER = "~/Desktop/AITemplate_Benchmark_on_XNNPACK"
 SSH_CLIENT = None
 def transfer_folder(folder: str, target_user: str, target_ip: str, target_dir: str):
     """

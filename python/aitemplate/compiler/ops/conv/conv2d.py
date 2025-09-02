@@ -469,7 +469,7 @@ class conv2d(Operator):
             )
 
     def _gen_profile_cmd(self, profiler_prefix, cfg, x_shape):
-        from aitemplate.backend.builder import REMOTE_PROFILE_FOLDER
+        from aitemplate.utils.remote_send_receive_files import REMOTE_PROFILE_FOLDER
         from aitemplate.compiler.compiler import IS_REMOTE_COMPILE
         ssh_client = self.ssh_client
         if IS_REMOTE_COMPILE and ssh_client is not None:

@@ -48,9 +48,7 @@ from aitemplate.utils.misc import is_debug, is_windows
 
 _LOGGER = logging.getLogger(__name__)
 _DEBUG_SETTINGS = AITDebugSettings()
-REMOTE_PROFILE_FOLDER = "~/Desktop/AITemplate_Profile"
-REMOTE_RUN_FOLDER = "~/Desktop/AITemplate_Benchmark_on_XNNPACK"
-from aitemplate.utils.remote_send_receive_files import TARGET_USER, TARGET_IP
+from aitemplate.utils.remote_send_receive_files import TARGET_USER, TARGET_IP, REMOTE_PROFILE_FOLDER, REMOTE_RUN_FOLDER
 
 def _augment_for_trace(cmd):
     return (
@@ -990,8 +988,8 @@ clean:
 class RemoteBuilder(Builder):
     def __init__(self, ssh_client, n_jobs: int = -1, timeout: int = 1200):
         super().__init__(n_jobs=n_jobs, timeout=timeout)  # inherits _n_jobs, _timeout, runner, etc.
-        self.remote_user     = "riscv"
-        self.remote_host     = "192.168.33.96"
+        self.remote_user     = TARGET_USER
+        self.remote_host     = TARGET_IP
         self.remote_base_dir = REMOTE_PROFILE_FOLDER
         self.remote_run_dir = REMOTE_RUN_FOLDER
         self.ssh_client = ssh_client
