@@ -1,4 +1,543 @@
 #include "rvv_utils.h"
+void f32_data_pruning_column_wise(float* weight, int output_channel, int input_channel, \
+    float* pruned_weight, uint16_t* indice, size_t mr, float pruning_ratio) {
+    int pruned_weight_idx = 0;
+    int indice_idx = 0;
+    int remainder = output_channel % mr;
+    int end_offset = mr;
+    const int keep_cols = static_cast<int>(input_channel * (1 - pruning_ratio));
+    int threshold_num = (int)(input_channel * pruning_ratio);
+    for (int i = 0; i < output_channel * input_channel; i += mr * input_channel) {
+        if(i + end_offset * input_channel > output_channel * input_channel)
+            end_offset = remainder;
+        std::vector<float> accumulator(input_channel, 0);
+        for(int j = 0; j < end_offset; j ++){
+            for(int k = 0; k < input_channel; k ++){
+                accumulator[k] += weight[i + j * input_channel + k];
+            }
+        }
+        std::vector<int> idx(input_channel);
+        std::iota(idx.begin(), idx.end(), 0);            // 0 … IC-1
+        std::partial_sort(
+            idx.begin(), idx.begin() + keep_cols, idx.end(),
+            [&](int a, int b) { return accumulator[a] > accumulator[b]; } // bigger sum first
+        );
+        std::vector<float> sorted_idx(idx.data(), idx.data() + keep_cols);
+        std::sort(sorted_idx.begin(), sorted_idx.end());
+        for (int t = 0; t < keep_cols; ++t)
+            indice[indice_idx++] = static_cast<uint16_t>(sorted_idx[t]);
+        for (int j = 0; j < end_offset; ++j) {
+            for (int t = 0; t < keep_cols; ++t) {
+                int k = sorted_idx[t];
+                pruned_weight[pruned_weight_idx++] = weight[i + j * input_channel + k];
+            }
+        }
+    }
+}
+
+void xnn_x32_packa_gemm_ukernel_x1v__rvv_u8(
+  size_t g,
+  size_t nc,
+  size_t kc,
+  size_t nr,
+  size_t kr,
+  size_t sr,
+  const uint32_t* weights,
+  const void* scale,
+  uint32_t* packed_weights,
+  size_t extra_bytes,
+  const void* params)
+{
+  assert(g != 0);
+  assert(nc != 0);
+  assert(kc != 0);
+  assert(nr == __riscv_vsetvlmax_e32m1());
+  assert(kr == 1);
+  assert(sr == 1);
+  assert(weights != NULL);
+  assert(packed_weights != NULL);
+
+  uint32_t* out = packed_weights;
+  size_t kc_bstride = kc << 2;
+
+  do {
+    const uint32_t* w0 = weights;
+    const uint32_t* w1 = w0 + kc;
+    const uint32_t* w2 = w1 + kc;
+    const uint32_t* w3 = w2 + kc;
+    const uint32_t* w4 = w3 + kc;
+    const uint32_t* w5 = w4 + kc;
+    const uint32_t* w6 = w5 + kc;
+    const uint32_t* w7 = w6 + kc;
+    long int k = kc;
+    uint32_t* out0 = out;
+    do {
+      size_t vl;
+      size_t vlmax = __riscv_vsetvlmax_e32m1();
+      if LIKELY(k >= vlmax) {
+        vl = vlmax;
+      } else {
+        vl = __riscv_vsetvl_e32m1(k);
+      }
+      size_t n = nc;
+      const uint32_t* w_ptr0 = w0;
+      const uint32_t* w_ptr1 = w1;
+      const uint32_t* w_ptr2 = w2;
+      const uint32_t* w_ptr3 = w3;
+      const uint32_t* w_ptr4 = w4;
+      const uint32_t* w_ptr5 = w5;
+      const uint32_t* w_ptr6 = w6;
+      const uint32_t* w_ptr7 = w7;
+      for (; n >= 8; n -= 8) {
+        vuint32m1_t v_w0 = __riscv_vle32_v_u32m1(w_ptr0, vl);
+        __riscv_vse32_v_u32m1(out0, v_w0, vl);
+        out0 += vlmax;
+        vuint32m1_t v_w1 = __riscv_vle32_v_u32m1(w_ptr1, vl);
+        __riscv_vse32_v_u32m1(out0, v_w1, vl);
+        out0 += vlmax;
+        vuint32m1_t v_w2 = __riscv_vle32_v_u32m1(w_ptr2, vl);
+        __riscv_vse32_v_u32m1(out0, v_w2, vl);
+        out0 += vlmax;
+        vuint32m1_t v_w3 = __riscv_vle32_v_u32m1(w_ptr3, vl);
+        __riscv_vse32_v_u32m1(out0, v_w3, vl);
+        out0 += vlmax;
+        vuint32m1_t v_w4 = __riscv_vle32_v_u32m1(w_ptr4, vl);
+        __riscv_vse32_v_u32m1(out0, v_w4, vl);
+        out0 += vlmax;
+        vuint32m1_t v_w5 = __riscv_vle32_v_u32m1(w_ptr5, vl);
+        __riscv_vse32_v_u32m1(out0, v_w5, vl);
+        out0 += vlmax;
+        vuint32m1_t v_w6 = __riscv_vle32_v_u32m1(w_ptr6, vl);
+        __riscv_vse32_v_u32m1(out0, v_w6, vl);
+        out0 += vlmax;
+        vuint32m1_t v_w7 = __riscv_vle32_v_u32m1(w_ptr7, vl);
+        __riscv_vse32_v_u32m1(out0, v_w7, vl);
+        out0 += vlmax;
+        w_ptr0 += (kc << 3);
+        w_ptr1 += (kc << 3);
+        w_ptr2 += (kc << 3);
+        w_ptr3 += (kc << 3);
+        w_ptr4 += (kc << 3);
+        w_ptr5 += (kc << 3);
+        w_ptr6 += (kc << 3);
+        w_ptr7 += (kc << 3);
+      }
+
+      for (; n >= 4; n -= 4) {
+        vuint32m1_t v_w0 = __riscv_vle32_v_u32m1(w_ptr0, vl);
+        __riscv_vse32_v_u32m1(out0, v_w0, vl);
+        out0 += vlmax;
+        vuint32m1_t v_w1 = __riscv_vle32_v_u32m1(w_ptr1, vl);
+        __riscv_vse32_v_u32m1(out0, v_w1, vl);
+        out0 += vlmax;
+        vuint32m1_t v_w2 = __riscv_vle32_v_u32m1(w_ptr2, vl);
+        __riscv_vse32_v_u32m1(out0, v_w2, vl);
+        out0 += vlmax;
+        vuint32m1_t v_w3 = __riscv_vle32_v_u32m1(w_ptr3, vl);
+        __riscv_vse32_v_u32m1(out0, v_w3, vl);
+        out0 += vlmax;
+        w_ptr0 += (kc << 2);
+        w_ptr1 += (kc << 2);
+        w_ptr2 += (kc << 2);
+        w_ptr3 += (kc << 2);
+      }
+
+      for (; n >= 1; n -= 1) {
+        vuint32m1_t v_w0 = __riscv_vle32_v_u32m1(w_ptr0, vl);
+        __riscv_vse32_v_u32m1(out0, v_w0, vl);
+        out0 += vlmax;
+        w_ptr0 += kc;
+      }
+      k -= nr;
+      w0 += nr;
+      w1 += nr;
+      w2 += nr;
+      w3 += nr;
+      w4 += nr;
+      w5 += nr;
+      w6 += nr;
+      w7 += nr;
+    } while(k > 0);
+  } while (--g != 0);
+}
+
+void xnn_x32_packa_gemm_ukernel_x2v__rvv_u8(
+  size_t g,
+  size_t nc,
+  size_t kc,
+  size_t nr,
+  size_t kr,
+  size_t sr,
+  const uint32_t* weights,
+  const void* scale,
+  uint32_t* packed_weights,
+  size_t extra_bytes,
+  const void* params)
+{
+  assert(g != 0);
+  assert(nc != 0);
+  assert(kc != 0);
+  assert(nr == __riscv_vsetvlmax_e32m2());
+  assert(kr == 1);
+  assert(sr == 1);
+  assert(weights != NULL);
+  assert(packed_weights != NULL);
+
+  uint32_t* out = packed_weights;
+  size_t kc_bstride = kc << 2;
+
+  do {
+    const uint32_t* w0 = weights;
+    const uint32_t* w1 = w0 + kc;
+    const uint32_t* w2 = w1 + kc;
+    const uint32_t* w3 = w2 + kc;
+    const uint32_t* w4 = w3 + kc;
+    const uint32_t* w5 = w4 + kc;
+    const uint32_t* w6 = w5 + kc;
+    const uint32_t* w7 = w6 + kc;
+    long int k = kc;
+    uint32_t* out0 = out;
+    do {
+      size_t vl;
+      size_t vlmax = __riscv_vsetvlmax_e32m2();
+      if LIKELY(k >= vlmax) {
+        vl = vlmax;
+      } else {
+        vl = __riscv_vsetvl_e32m2(k);
+      }
+      size_t n = nc;
+      const uint32_t* w_ptr0 = w0;
+      const uint32_t* w_ptr1 = w1;
+      const uint32_t* w_ptr2 = w2;
+      const uint32_t* w_ptr3 = w3;
+      const uint32_t* w_ptr4 = w4;
+      const uint32_t* w_ptr5 = w5;
+      const uint32_t* w_ptr6 = w6;
+      const uint32_t* w_ptr7 = w7;
+      for (; n >= 8; n -= 8) {
+        vuint32m2_t v_w0 = __riscv_vle32_v_u32m2(w_ptr0, vl);
+        __riscv_vse32_v_u32m2(out0, v_w0, vl);
+        out0 += vlmax;
+        vuint32m2_t v_w1 = __riscv_vle32_v_u32m2(w_ptr1, vl);
+        __riscv_vse32_v_u32m2(out0, v_w1, vl);
+        out0 += vlmax;
+        vuint32m2_t v_w2 = __riscv_vle32_v_u32m2(w_ptr2, vl);
+        __riscv_vse32_v_u32m2(out0, v_w2, vl);
+        out0 += vlmax;
+        vuint32m2_t v_w3 = __riscv_vle32_v_u32m2(w_ptr3, vl);
+        __riscv_vse32_v_u32m2(out0, v_w3, vl);
+        out0 += vlmax;
+        vuint32m2_t v_w4 = __riscv_vle32_v_u32m2(w_ptr4, vl);
+        __riscv_vse32_v_u32m2(out0, v_w4, vl);
+        out0 += vlmax;
+        vuint32m2_t v_w5 = __riscv_vle32_v_u32m2(w_ptr5, vl);
+        __riscv_vse32_v_u32m2(out0, v_w5, vl);
+        out0 += vlmax;
+        vuint32m2_t v_w6 = __riscv_vle32_v_u32m2(w_ptr6, vl);
+        __riscv_vse32_v_u32m2(out0, v_w6, vl);
+        out0 += vlmax;
+        vuint32m2_t v_w7 = __riscv_vle32_v_u32m2(w_ptr7, vl);
+        __riscv_vse32_v_u32m2(out0, v_w7, vl);
+        out0 += vlmax;
+        w_ptr0 += (kc << 3);
+        w_ptr1 += (kc << 3);
+        w_ptr2 += (kc << 3);
+        w_ptr3 += (kc << 3);
+        w_ptr4 += (kc << 3);
+        w_ptr5 += (kc << 3);
+        w_ptr6 += (kc << 3);
+        w_ptr7 += (kc << 3);
+      }
+
+      for (; n >= 4; n -= 4) {
+        vuint32m2_t v_w0 = __riscv_vle32_v_u32m2(w_ptr0, vl);
+        __riscv_vse32_v_u32m2(out0, v_w0, vl);
+        out0 += vlmax;
+        vuint32m2_t v_w1 = __riscv_vle32_v_u32m2(w_ptr1, vl);
+        __riscv_vse32_v_u32m2(out0, v_w1, vl);
+        out0 += vlmax;
+        vuint32m2_t v_w2 = __riscv_vle32_v_u32m2(w_ptr2, vl);
+        __riscv_vse32_v_u32m2(out0, v_w2, vl);
+        out0 += vlmax;
+        vuint32m2_t v_w3 = __riscv_vle32_v_u32m2(w_ptr3, vl);
+        __riscv_vse32_v_u32m2(out0, v_w3, vl);
+        out0 += vlmax;
+        w_ptr0 += (kc << 2);
+        w_ptr1 += (kc << 2);
+        w_ptr2 += (kc << 2);
+        w_ptr3 += (kc << 2);
+      }
+
+      for (; n >= 1; n -= 1) {
+        vuint32m2_t v_w0 = __riscv_vle32_v_u32m2(w_ptr0, vl);
+        __riscv_vse32_v_u32m2(out0, v_w0, vl);
+        out0 += vlmax;
+        w_ptr0 += kc;
+      }
+      k -= nr;
+      w0 += nr;
+      w1 += nr;
+      w2 += nr;
+      w3 += nr;
+      w4 += nr;
+      w5 += nr;
+      w6 += nr;
+      w7 += nr;
+    } while(k > 0);
+  } while (--g != 0);
+}
+
+void xnn_x32_packa_gemm_ukernel_x4v__rvv_u8(
+  size_t g,
+  size_t nc,
+  size_t kc,
+  size_t nr,
+  size_t kr,
+  size_t sr,
+  const uint32_t* weights,
+  const void* scale,
+  uint32_t* packed_weights,
+  size_t extra_bytes,
+  const void* params)
+{
+  assert(g != 0);
+  assert(nc != 0);
+  assert(kc != 0);
+  assert(nr == __riscv_vsetvlmax_e32m4());
+  assert(kr == 1);
+  assert(sr == 1);
+  assert(weights != NULL);
+  assert(packed_weights != NULL);
+
+  uint32_t* out = packed_weights;
+  size_t kc_bstride = kc << 2;
+
+  do {
+    const uint32_t* w0 = weights;
+    const uint32_t* w1 = w0 + kc;
+    const uint32_t* w2 = w1 + kc;
+    const uint32_t* w3 = w2 + kc;
+    const uint32_t* w4 = w3 + kc;
+    const uint32_t* w5 = w4 + kc;
+    const uint32_t* w6 = w5 + kc;
+    const uint32_t* w7 = w6 + kc;
+    long int k = kc;
+    uint32_t* out0 = out;
+    do {
+      size_t vl;
+      size_t vlmax = __riscv_vsetvlmax_e32m4();
+      if LIKELY(k >= vlmax) {
+        vl = vlmax;
+      } else {
+        vl = __riscv_vsetvl_e32m4(k);
+      }
+      size_t n = nc;
+      const uint32_t* w_ptr0 = w0;
+      const uint32_t* w_ptr1 = w1;
+      const uint32_t* w_ptr2 = w2;
+      const uint32_t* w_ptr3 = w3;
+      const uint32_t* w_ptr4 = w4;
+      const uint32_t* w_ptr5 = w5;
+      const uint32_t* w_ptr6 = w6;
+      const uint32_t* w_ptr7 = w7;
+      for (; n >= 8; n -= 8) {
+        vuint32m4_t v_w0 = __riscv_vle32_v_u32m4(w_ptr0, vl);
+        __riscv_vse32_v_u32m4(out0, v_w0, vl);
+        out0 += vlmax;
+        vuint32m4_t v_w1 = __riscv_vle32_v_u32m4(w_ptr1, vl);
+        __riscv_vse32_v_u32m4(out0, v_w1, vl);
+        out0 += vlmax;
+        vuint32m4_t v_w2 = __riscv_vle32_v_u32m4(w_ptr2, vl);
+        __riscv_vse32_v_u32m4(out0, v_w2, vl);
+        out0 += vlmax;
+        vuint32m4_t v_w3 = __riscv_vle32_v_u32m4(w_ptr3, vl);
+        __riscv_vse32_v_u32m4(out0, v_w3, vl);
+        out0 += vlmax;
+        vuint32m4_t v_w4 = __riscv_vle32_v_u32m4(w_ptr4, vl);
+        __riscv_vse32_v_u32m4(out0, v_w4, vl);
+        out0 += vlmax;
+        vuint32m4_t v_w5 = __riscv_vle32_v_u32m4(w_ptr5, vl);
+        __riscv_vse32_v_u32m4(out0, v_w5, vl);
+        out0 += vlmax;
+        vuint32m4_t v_w6 = __riscv_vle32_v_u32m4(w_ptr6, vl);
+        __riscv_vse32_v_u32m4(out0, v_w6, vl);
+        out0 += vlmax;
+        vuint32m4_t v_w7 = __riscv_vle32_v_u32m4(w_ptr7, vl);
+        __riscv_vse32_v_u32m4(out0, v_w7, vl);
+        out0 += vlmax;
+        w_ptr0 += (kc << 3);
+        w_ptr1 += (kc << 3);
+        w_ptr2 += (kc << 3);
+        w_ptr3 += (kc << 3);
+        w_ptr4 += (kc << 3);
+        w_ptr5 += (kc << 3);
+        w_ptr6 += (kc << 3);
+        w_ptr7 += (kc << 3);
+      }
+
+      for (; n >= 4; n -= 4) {
+        vuint32m4_t v_w0 = __riscv_vle32_v_u32m4(w_ptr0, vl);
+        __riscv_vse32_v_u32m4(out0, v_w0, vl);
+        out0 += vlmax;
+        vuint32m4_t v_w1 = __riscv_vle32_v_u32m4(w_ptr1, vl);
+        __riscv_vse32_v_u32m4(out0, v_w1, vl);
+        out0 += vlmax;
+        vuint32m4_t v_w2 = __riscv_vle32_v_u32m4(w_ptr2, vl);
+        __riscv_vse32_v_u32m4(out0, v_w2, vl);
+        out0 += vlmax;
+        vuint32m4_t v_w3 = __riscv_vle32_v_u32m4(w_ptr3, vl);
+        __riscv_vse32_v_u32m4(out0, v_w3, vl);
+        out0 += vlmax;
+        w_ptr0 += (kc << 2);
+        w_ptr1 += (kc << 2);
+        w_ptr2 += (kc << 2);
+        w_ptr3 += (kc << 2);
+      }
+
+      for (; n >= 1; n -= 1) {
+        vuint32m4_t v_w0 = __riscv_vle32_v_u32m4(w_ptr0, vl);
+        __riscv_vse32_v_u32m4(out0, v_w0, vl);
+        out0 += vlmax;
+        w_ptr0 += kc;
+      }
+      k -= nr;
+      w0 += nr;
+      w1 += nr;
+      w2 += nr;
+      w3 += nr;
+      w4 += nr;
+      w5 += nr;
+      w6 += nr;
+      w7 += nr;
+    } while(k > 0);
+  } while (--g != 0);
+}
+
+void xnn_x32_packa_gemm_ukernel_x8v__rvv_u8(
+  size_t g,
+  size_t nc,
+  size_t kc,
+  size_t nr,
+  size_t kr,
+  size_t sr,
+  const uint32_t* weights,
+  const void* scale,
+  uint32_t* packed_weights,
+  size_t extra_bytes,
+  const void* params)
+{
+  assert(g != 0);
+  assert(nc != 0);
+  assert(kc != 0);
+  assert(nr == __riscv_vsetvlmax_e32m8());
+  assert(kr == 1);
+  assert(sr == 1);
+  assert(weights != NULL);
+  assert(packed_weights != NULL);
+
+  uint32_t* out = packed_weights;
+  size_t kc_bstride = kc << 2;
+
+  do {
+    const uint32_t* w0 = weights;
+    const uint32_t* w1 = w0 + kc;
+    const uint32_t* w2 = w1 + kc;
+    const uint32_t* w3 = w2 + kc;
+    const uint32_t* w4 = w3 + kc;
+    const uint32_t* w5 = w4 + kc;
+    const uint32_t* w6 = w5 + kc;
+    const uint32_t* w7 = w6 + kc;
+    long int k = kc;
+    uint32_t* out0 = out;
+    do {
+      size_t vl;
+      size_t vlmax = __riscv_vsetvlmax_e32m8();
+      if LIKELY(k >= vlmax) {
+        vl = vlmax;
+      } else {
+        vl = __riscv_vsetvl_e32m8(k);
+      }
+      size_t n = nc;
+      const uint32_t* w_ptr0 = w0;
+      const uint32_t* w_ptr1 = w1;
+      const uint32_t* w_ptr2 = w2;
+      const uint32_t* w_ptr3 = w3;
+      const uint32_t* w_ptr4 = w4;
+      const uint32_t* w_ptr5 = w5;
+      const uint32_t* w_ptr6 = w6;
+      const uint32_t* w_ptr7 = w7;
+      for (; n >= 8; n -= 8) {
+        vuint32m8_t v_w0 = __riscv_vle32_v_u32m8(w_ptr0, vl);
+        __riscv_vse32_v_u32m8(out0, v_w0, vl);
+        out0 += vlmax;
+        vuint32m8_t v_w1 = __riscv_vle32_v_u32m8(w_ptr1, vl);
+        __riscv_vse32_v_u32m8(out0, v_w1, vl);
+        out0 += vlmax;
+        vuint32m8_t v_w2 = __riscv_vle32_v_u32m8(w_ptr2, vl);
+        __riscv_vse32_v_u32m8(out0, v_w2, vl);
+        out0 += vlmax;
+        vuint32m8_t v_w3 = __riscv_vle32_v_u32m8(w_ptr3, vl);
+        __riscv_vse32_v_u32m8(out0, v_w3, vl);
+        out0 += vlmax;
+        vuint32m8_t v_w4 = __riscv_vle32_v_u32m8(w_ptr4, vl);
+        __riscv_vse32_v_u32m8(out0, v_w4, vl);
+        out0 += vlmax;
+        vuint32m8_t v_w5 = __riscv_vle32_v_u32m8(w_ptr5, vl);
+        __riscv_vse32_v_u32m8(out0, v_w5, vl);
+        out0 += vlmax;
+        vuint32m8_t v_w6 = __riscv_vle32_v_u32m8(w_ptr6, vl);
+        __riscv_vse32_v_u32m8(out0, v_w6, vl);
+        out0 += vlmax;
+        vuint32m8_t v_w7 = __riscv_vle32_v_u32m8(w_ptr7, vl);
+        __riscv_vse32_v_u32m8(out0, v_w7, vl);
+        out0 += vlmax;
+        w_ptr0 += (kc << 3);
+        w_ptr1 += (kc << 3);
+        w_ptr2 += (kc << 3);
+        w_ptr3 += (kc << 3);
+        w_ptr4 += (kc << 3);
+        w_ptr5 += (kc << 3);
+        w_ptr6 += (kc << 3);
+        w_ptr7 += (kc << 3);
+      }
+
+      for (; n >= 4; n -= 4) {
+        vuint32m8_t v_w0 = __riscv_vle32_v_u32m8(w_ptr0, vl);
+        __riscv_vse32_v_u32m8(out0, v_w0, vl);
+        out0 += vlmax;
+        vuint32m8_t v_w1 = __riscv_vle32_v_u32m8(w_ptr1, vl);
+        __riscv_vse32_v_u32m8(out0, v_w1, vl);
+        out0 += vlmax;
+        vuint32m8_t v_w2 = __riscv_vle32_v_u32m8(w_ptr2, vl);
+        __riscv_vse32_v_u32m8(out0, v_w2, vl);
+        out0 += vlmax;
+        vuint32m8_t v_w3 = __riscv_vle32_v_u32m8(w_ptr3, vl);
+        __riscv_vse32_v_u32m8(out0, v_w3, vl);
+        out0 += vlmax;
+        w_ptr0 += (kc << 2);
+        w_ptr1 += (kc << 2);
+        w_ptr2 += (kc << 2);
+        w_ptr3 += (kc << 2);
+      }
+
+      for (; n >= 1; n -= 1) {
+        vuint32m8_t v_w0 = __riscv_vle32_v_u32m8(w_ptr0, vl);
+        __riscv_vse32_v_u32m8(out0, v_w0, vl);
+        out0 += vlmax;
+        w_ptr0 += kc;
+      }
+      k -= nr;
+      w0 += nr;
+      w1 += nr;
+      w2 += nr;
+      w3 += nr;
+      w4 += nr;
+      w5 += nr;
+      w6 += nr;
+      w7 += nr;
+    } while(k > 0);
+  } while (--g != 0);
+}
 
 void xnn_x32_pack_transpose_ukernel_x4v__rvv_u8(
   size_t g,
@@ -133,7 +672,7 @@ void xnn_x32_pack_transpose_ukernel_x4v__rvv_u8(
         size_t remaining_n = n;
         do {
           size_t vl;
-          if XNN_LIKELY(remaining_n >= vlmax) {
+          if LIKELY(remaining_n >= vlmax) {
             vl = vlmax;
           } else {
             vl = __riscv_vsetvl_e32m1(remaining_n);
@@ -175,7 +714,7 @@ void xnn_x32_pack_transpose_ukernel_x4v__rvv_u8(
         size_t remaining_n = n;
         do {
           size_t vl;
-          if XNN_LIKELY(remaining_n >= vlmax) {
+          if LIKELY(remaining_n >= vlmax) {
             vl = vlmax;
           } else {
             vl = __riscv_vsetvl_e32m2(remaining_n);
@@ -215,6 +754,7 @@ void xnn_x32_pack_transpose_ukernel_x4v__rvv_u8(
     weights += nc * kc;
   } while (--g != 0);
 }
+
 void im2col_local_avgpool_s2_d1_p0_with_pack_1x(uint32_t batch_size, const size_t input_height, const size_t input_width, size_t group_input_channels, \
   const int output_height, const int output_width,
   const size_t kernel_height, const size_t kernel_width, const size_t stride_height, const size_t stride_width, \

@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
+#include <numeric>
 #if defined(__has_builtin)
   #define COMPILER_HAS_BUILTIN(builtin) __has_builtin(builtin)
 #else
@@ -58,6 +59,81 @@ static inline int zero_max(int x) {
  static size_t round_up(size_t n, size_t q) {
   return divide_round_up(n, q) * q;
 }
+
+ static bool is_po2(size_t n) {
+  return (n != 0) && ((n & (n - 1)) == 0);
+}
+ static size_t round_down_po2(size_t n, size_t q) {
+  assert(is_po2(q));
+  return n & -q;
+}
+
+ static size_t round_up_po2(size_t n, size_t q) {
+  return round_down_po2(n + q - 1, q);
+}
+
+void f32_data_pruning_column_wise(
+  float* weight,
+  int output_channel,
+  int input_channel,
+  float* pruned_weight,
+  uint16_t* indice,
+  size_t mr,
+  float pruning_ratio
+);
+
+void xnn_x32_packa_gemm_ukernel_x1v__rvv_u8(
+  size_t g,
+  size_t nc,
+  size_t kc,
+  size_t nr,
+  size_t kr,
+  size_t sr,
+  const uint32_t* weights,
+  const void* scale,
+  uint32_t* packed_weights,
+  size_t extra_bytes,
+  const void* params);
+
+void xnn_x32_packa_gemm_ukernel_x2v__rvv_u8(
+  size_t g,
+  size_t nc,
+  size_t kc,
+  size_t nr,
+  size_t kr,
+  size_t sr,
+  const uint32_t* weights,
+  const void* scale,
+  uint32_t* packed_weights,
+  size_t extra_bytes,
+  const void* params);
+
+void xnn_x32_packa_gemm_ukernel_x4v__rvv_u8(
+  size_t g,
+  size_t nc,
+  size_t kc,
+  size_t nr,
+  size_t kr,
+  size_t sr,
+  const uint32_t* weights,
+  const void* scale,
+  uint32_t* packed_weights,
+  size_t extra_bytes,
+  const void* params);
+
+void xnn_x32_packa_gemm_ukernel_x8v__rvv_u8(
+  size_t g,
+  size_t nc,
+  size_t kc,
+  size_t nr,
+  size_t kr,
+  size_t sr,
+  const uint32_t* weights,
+  const void* scale,
+  uint32_t* packed_weights,
+  size_t extra_bytes,
+  const void* params);
+
 typedef void (*f32_gemm_input_T_N_M_pruning)(
     size_t mr/*mr_block_size*/,
     size_t nc/*nr_block_size*/,
@@ -69,8 +145,15 @@ typedef void (*f32_gemm_input_T_N_M_pruning)(
     float*  c,
     size_t cm_stride/*batch_size * height * width << 2*/,
     size_t cn_stride/*nr << 2*/,
-    uint16_t* indice,
-    size_t nr);
+    const uint16_t* indice,
+    const void* param);
+
+union xnn_f32_minmax_params {
+  struct {
+    float min;
+    float max;
+  } scalar;
+};
 
 struct function_context {
     float* input;
@@ -92,25 +175,35 @@ struct function_context {
     const size_t cn_stride;
     const size_t k_scaled;
     const size_t w_stride;
+    const void* params;
 };
 
-void conv2d_columnwise_pruning_vector(function_context* context, \
+static inline size_t xnn_init_f32_minmax_scalar_params(
+  union xnn_f32_minmax_params params[(1)],
+  float output_min,
+  float output_max)
+{
+  params->scalar.min = output_min;
+  params->scalar.max = output_max;
+  return sizeof(params->scalar);
+}
+static inline void conv2d_columnwise_pruning_vector(function_context* context, \
     size_t mr_block_start, size_t nr_block_start, size_t mr_block_size, size_t nr_block_size){
     uint32_t nr = context->nr;
     uint32_t w_stride = context->w_stride;
     context->microkernel(
         mr_block_size,
         nr_block_size,
-        context->k_scaled, // group_input_channels << log2(float)
+        context->k_scaled,
         (const float*) ((uintptr_t) context->im2col_packing + nr_block_start * context->a_stride),
-        w_stride, // group_input_channels) << log2(4) = group_input_channels * 4
+        w_stride,
         (const float*) ((uintptr_t) context->pruned_weight + mr_block_start * context->w_stride),
         (const float*)((uintptr_t) context->bias + (mr_block_start << 2)),
         (float*) ((uintptr_t) context->output + mr_block_start * context->cm_stride + (nr_block_start << 2/*=log2_output_element_size*/)),
         context->cm_stride, // group_output_channels << log2_output_element_size
         context->cn_stride, // nr << log2_output_element_size
         (uint16_t*)((uintptr_t) context->indice + (mr_block_start / context->mr) * (w_stride >> 1)),
-        nr
+        context->params
     );
 }
 
