@@ -103,12 +103,20 @@ template_choose_merge_im2col_packing_setting_x1v = jinja2.Template("""
 {{indent}}    }
 {{indent}}  }
 {{indent}}else if(SH == 1){
-{{indent}}  	xnn_x32_packa_in_T_gemm_im2col_s1_d1_1x1v(i32_batch, i32_in_h, i32_in_w, i32_in_ch, \
-{{indent}}        i32_out_h, i32_out_w,
-{{indent}}        i32_kernel_h, i32_kernel_w, SH, SW, \
-{{indent}}        DH, DW, PH, PW, \
-{{indent}}        reinterpret_cast<uint32_t*>(in_ptr), input_packed_ptr
+{{indent}}    if(PH){
+{{indent}}  	  xnn_x32_packa_in_T_gemm_im2col_s1_d1_1x1v(i32_batch, i32_in_h, i32_in_w, i32_in_ch, \
+{{indent}}          i32_out_h, i32_out_w,
+{{indent}}          i32_kernel_h, i32_kernel_w, SH, SW, \
+{{indent}}          DH, DW, PH, PW, \
+{{indent}}          reinterpret_cast<uint32_t*>(in_ptr), input_packed_ptr
 {{indent}}      );
+{{indent}}    }
+{{indent}}    else{
+{{indent}}      xnn_x32_packa_gemm_ukernel_x1v__rvv_u8(
+{{indent}}        1, CI, batch_output_size, nr, 1, 1, 
+{{indent}}        reinterpret_cast<uint32_t*>(in_ptr), NULL, input_packed_ptr, 0, NULL
+{{indent}}      );
+{{indent}}    }
 {{indent}}}
 {{microkernel_computation}}
 """
@@ -127,9 +135,9 @@ template_choose_merge_im2col_packing_setting_x2v = jinja2.Template("""
 {{indent}}    else{
 {{indent}}      xnn_pack_f32_with_im2col_input_T_nr pack;
 {{indent}}      if (i32_out_w >= (3 * nr) >> 2)
-{{indent}}        pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x2v
+{{indent}}        pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x2v;
 {{indent}}      else
-{{indent}}        pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x1v
+{{indent}}        pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x1v;
 {{indent}}
 {{indent}}      pack(i32_batch, i32_in_h, i32_in_w, i32_in_ch, \
 {{indent}}        i32_out_h, i32_out_w,
@@ -140,17 +148,25 @@ template_choose_merge_im2col_packing_setting_x2v = jinja2.Template("""
 {{indent}}    }
 {{indent}}  }
 {{indent}}else if(SH == 1){
-{{indent}}  xnn_pack_f32_with_im2col_input_T pack;
-{{indent}}  if (i32_out_w >= (3 * nr) >> 2)
-{{indent}}      pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_2x2v
-{{indent}}  else
-{{indent}}      pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_1x2v
-{{indent}}  pack(i32_batch, i32_in_h, i32_in_w, i32_in_ch,
-{{indent}}      i32_out_h, i32_out_w,
-{{indent}}      i32_kernel_h, i32_kernel_w, SH, SW,
-{{indent}}      DH, DW, PH, PW,
-{{indent}}      reinterpret_cast<uint32_t*>(in_ptr), input_packed_ptr
-{{indent}}  );
+{{indent}}    if(PH){
+{{indent}}        xnn_pack_f32_with_im2col_input_T pack;
+{{indent}}        if (i32_out_w >= (3 * nr) >> 2)
+{{indent}}          pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_2x2v;
+{{indent}}        else
+{{indent}}          pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_1x2v;
+{{indent}}        pack(i32_batch, i32_in_h, i32_in_w, i32_in_ch,
+{{indent}}          i32_out_h, i32_out_w,
+{{indent}}          i32_kernel_h, i32_kernel_w, SH, SW,
+{{indent}}          DH, DW, PH, PW,
+{{indent}}          reinterpret_cast<uint32_t*>(in_ptr), input_packed_ptr
+{{indent}}        );
+{{indent}}    }
+{{indent}}    else{
+{{indent}}      xnn_x32_packa_gemm_ukernel_x2v__rvv_u8(
+{{indent}}        1, CI, batch_output_size, nr, 1, 1,
+{{indent}}        reinterpret_cast<uint32_t*>(in_ptr), NULL, input_packed_ptr, 0, NULL
+{{indent}}      );
+{{indent}}    }
 {{indent}}}
 {{microkernel_computation}}
 """
@@ -161,11 +177,11 @@ template_choose_merge_im2col_packing_setting_x4v = jinja2.Template("""
 {{indent}}    if(PH){
 {{indent}}        xnn_pack_f32_with_im2col_input_T pack;
 {{indent}}        if (i32_out_w >= (3 * nr) >> 2)
-{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1
+{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1;
 {{indent}}        else if (i32_out_w >= (3 * nr) >> 3)
-{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_2x4v
+{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_2x4v;
 {{indent}}        else
-{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_1x4v
+{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_1x4v;
 {{indent}}
 {{indent}}        pack(i32_batch, i32_in_h, i32_in_w, i32_in_ch, \
 {{indent}}            i32_out_h, i32_out_w,
@@ -177,11 +193,11 @@ template_choose_merge_im2col_packing_setting_x4v = jinja2.Template("""
 {{indent}}    else{
 {{indent}}        xnn_pack_f32_with_im2col_input_T_nr pack;
 {{indent}}        if (i32_out_w >= (3 * nr) >> 2)
-{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x4v
+{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x4v;
 {{indent}}        else if (i32_out_w >= (3 * nr) >> 3)
-{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x2v
+{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x2v;
 {{indent}}        else
-{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x1v
+{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x1v;
 {{indent}}
 {{indent}}        pack(i32_batch, i32_in_h, i32_in_w, i32_in_ch, \
 {{indent}}            i32_out_h, i32_out_w,
@@ -192,20 +208,28 @@ template_choose_merge_im2col_packing_setting_x4v = jinja2.Template("""
 {{indent}}    }
 {{indent}}  }
 {{indent}}else if(SH == 1){
-{{indent}}    xnn_pack_f32_with_im2col_input_T pack;
-{{indent}}    if (i32_out_w >= (3 * nr) >> 2)
-{{indent}}        pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_4x4v
-{{indent}}    else if (i32_out_w >= (3 * nr) >> 3)
-{{indent}}        pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_2x4v
-{{indent}}    else
-{{indent}}        pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_1x4v
+{{indent}}    if(PH){
+{{indent}}      xnn_pack_f32_with_im2col_input_T pack;
+{{indent}}      if (i32_out_w >= (3 * nr) >> 2)
+{{indent}}          pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_4x4v;
+{{indent}}      else if (i32_out_w >= (3 * nr) >> 3)
+{{indent}}          pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_2x4v;
+{{indent}}      else
+{{indent}}          pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_1x4v;
 {{indent}}
-{{indent}}    pack(i32_batch, i32_in_h, i32_in_w, i32_in_ch, \
-{{indent}}        i32_out_h, i32_out_w,
-{{indent}}        i32_kernel_h, i32_kernel_w, SH, SW, \
-{{indent}}        DH, DW, PH, PW, \
-{{indent}}        reinterpret_cast<uint32_t*>(in_ptr), input_packed_ptr
-{{indent}}    );
+{{indent}}      pack(i32_batch, i32_in_h, i32_in_w, i32_in_ch, \
+{{indent}}          i32_out_h, i32_out_w,
+{{indent}}          i32_kernel_h, i32_kernel_w, SH, SW, \
+{{indent}}          DH, DW, PH, PW, \
+{{indent}}          reinterpret_cast<uint32_t*>(in_ptr), input_packed_ptr
+{{indent}}      );
+{{indent}}    }
+{{indent}}    else{
+{{indent}}      xnn_x32_packa_gemm_ukernel_x4v__rvv_u8(
+{{indent}}        1, CI, batch_output_size, nr, 1, 1,
+{{indent}}        reinterpret_cast<uint32_t*>(in_ptr), NULL, input_packed_ptr, 0, NULL
+{{indent}}      );
+{{indent}}    }
 {{indent}}}
 {{microkernel_computation}}
 """
@@ -224,11 +248,11 @@ template_choose_merge_im2col_packing_setting_x8v = jinja2.Template("""
 {{indent}}    else{
 {{indent}}        xnn_pack_f32_with_im2col_input_T_nr pack;
 {{indent}}        if (i32_out_w >= (3 * nr) >> 3)
-{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x4v
+{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x4v;
 {{indent}}        else if (i32_out_w >= (3 * nr) >> 4)
-{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x2v
+{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x2v;
 {{indent}}        else
-{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x1v
+{{indent}}            pack = xnn_x32_packa_in_T_gemm_im2col_s2_d1_p0_x1v;
 {{indent}}
 {{indent}}        pack(i32_batch, i32_in_h, i32_in_w, i32_in_ch, \
 {{indent}}            i32_out_h, i32_out_w,
@@ -239,22 +263,30 @@ template_choose_merge_im2col_packing_setting_x8v = jinja2.Template("""
 {{indent}}    }
 {{indent}}}
 {{indent}}else if(SH == 1){
-{{indent}}    xnn_pack_f32_with_im2col_input_T pack;
-{{indent}}    if (i32_out_w >= (3 * nr) >> 2)
-{{indent}}        pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_8x8v
-{{indent}}    else if (i32_out_w >= (3 * nr) >> 3)
-{{indent}}        pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_4x8v
-{{indent}}    else if (i32_out_w >= (3 * nr) >> 4)
-{{indent}}        pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_2x8v
-{{indent}}    else
-{{indent}}        pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_1x4v
+{{indent}}    if(PH){
+{{indent}}      xnn_pack_f32_with_im2col_input_T pack;
+{{indent}}      if (i32_out_w >= (3 * nr) >> 2)
+{{indent}}          pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_8x8v;
+{{indent}}      else if (i32_out_w >= (3 * nr) >> 3)
+{{indent}}          pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_4x8v;
+{{indent}}      else if (i32_out_w >= (3 * nr) >> 4)
+{{indent}}          pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_2x8v;
+{{indent}}      else
+{{indent}}          pack = xnn_x32_packa_in_T_gemm_im2col_s1_d1_1x4v;
 {{indent}}
-{{indent}}    pack(i32_batch, i32_in_h, i32_in_w, i32_in_ch, \
+{{indent}}      pack(i32_batch, i32_in_h, i32_in_w, i32_in_ch, \
 {{indent}}        i32_out_h, i32_out_w,
 {{indent}}        i32_kernel_h, i32_kernel_w, SH, SW, \
 {{indent}}        DH, DW, PH, PW, \
 {{indent}}        reinterpret_cast<uint32_t*>(in_ptr), input_packed_ptr
-{{indent}}    );
+{{indent}}      );
+{{indent}}    }
+{{indent}}    else{
+{{indent}}      xnn_x32_packa_gemm_ukernel_x8v__rvv_u8(
+{{indent}}        1, CI, batch_output_size, nr, 1, 1,
+{{indent}}        reinterpret_cast<uint32_t*>(in_ptr), NULL, input_packed_ptr, 0, NULL
+{{indent}}      );
+{{indent}}    }
 {{indent}}}
 {{microkernel_computation}}
 """
@@ -264,31 +296,35 @@ microkernel_computation = jinja2.Template(
     """
 {{indent}}const size_t num_threads = std::thread::hardware_concurrency();
 {{indent}}uint32_t kernel_size = i32_kernel_h * i32_kernel_w;
-{{indent}}uint32_t batch_output_size = i32_batch * i32_out_h * i32_out_w * i32_out_ch;
+{{indent}}uint32_t batch_output_size = i32_batch * i32_out_h * i32_out_w;
 {{indent}}uint32_t nr = __riscv_vsetvlmax_e32m{{LMUL}}();
-{{indent}}uint32_t* input_packed_ptr = (uint32_t*)malloc(kernel_size * i32_in_ch * round_up(batch_output_size, nr));
+{{indent}}uint32_t* input_packed_ptr = (uint32_t*)malloc(kernel_size * i32_in_ch * round_up(batch_output_size, nr) * sizeof(uint32_t));
 {{indent}}{{merge_im2col_packing}}
 {{indent}}{{microkernel_lambda_func}}
 {{indent}}const size_t im2col_row_cnt = kernel_size * CI;
+{{indent}}const size_t pruned_group_input_channels = (size_t)(im2col_row_cnt * (1.0f - pruning_ratio));
+{{indent}}union xnn_f32_minmax_params gemm_params;
+{{indent}}xnn_init_f32_minmax_scalar_params(&gemm_params, {{output_min}}, {{output_max}});
 {{indent}}struct function_context context = (struct function_context){
 {{indent}}{{indent}}.input = (float*)(in_ptr),
 {{indent}}{{indent}}.bias = (float*)(bias_ptr),
 {{indent}}{{indent}}.pruned_weight = (float*)(weight_ptr),
 {{indent}}{{indent}}.output = (float*)(out_ptr),
-{{indent}}{{indent}}.input_channel = CI,
-{{indent}}{{indent}}.output_channel = CO,
-{{indent}}{{indent}}.output_height = i32_out_h,
-{{indent}}{{indent}}.output_width = i32_out_w,
+{{indent}}{{indent}}.input_channel = static_cast<size_t>(CI),
+{{indent}}{{indent}}.output_channel = static_cast<size_t>(CO),
+{{indent}}{{indent}}.output_height = static_cast<size_t>(i32_out_h),
+{{indent}}{{indent}}.output_width = static_cast<size_t>(i32_out_w),
 {{indent}}{{indent}}.mr = {{MR}},
 {{indent}}{{indent}}.nr = nr,
 {{indent}}{{indent}}.im2col_packing = input_packed_ptr,
 {{indent}}{{indent}}.indice = (uint16_t*)(weight_indice_ptr),
-{{indent}}{{indent}}.microkernel = xnn_f32_gemm_ukernel_{{MR}}x{{LMUL}}v_columnwise_pruned__rvv,
+{{indent}}{{indent}}.microkernel = (f32_gemm_input_T_N_M_pruning)xnn_f32_gemm_ukernel_{{MR}}x{{LMUL}}v_columnwise_pruned__rvv,
 {{indent}}{{indent}}.a_stride  = (im2col_row_cnt << 2),
 {{indent}}{{indent}}.cm_stride = (batch_output_size << 2),
 {{indent}}{{indent}}.cn_stride = (nr << 2),
-{{indent}}{{indent}}.k_scaled = (im2col_row_cnt << 2),
-{{indent}}{{indent}}.w_stride = ((round_up_po2(im2col_row_cnt, 1 * 1)) << 2),// bias + transposed weight[out_ch][in_ch]
+{{indent}}{{indent}}.k_scaled = (pruned_group_input_channels << 2),
+{{indent}}{{indent}}.w_stride = (pruned_group_input_channels << 2),// bias + transposed weight[out_ch][in_ch]
+{{indent}}{{indent}}.params = static_cast<void*>(&gemm_params),
 {{indent}}};
 {{indent}}const size_t num_other_tiles = 1 * divide_round_up(CO, {{MR}});
 {{indent}}const size_t target_tiles_per_thread = 5;
@@ -297,13 +333,6 @@ microkernel_computation = jinja2.Template(
 {{indent}}if (max_nc < nc) {
 {{indent}}  nc = min(nc, divide_round_up(nc, max_nc * nr) * nr);
 {{indent}}}
-
-{{indent}}void conv2d_columnwise_pruning_vector = [](function_context* context, \
-{{indent}}    size_t mr_block_start, size_t nr_block_start, size_t mr_block_size, size_t nr_block_size){
-{{indent}}    uint32_t nr = context->nr;
-{{indent}}    uint32_t w_stride = context->w_stride;
-{{indent}}};
-
 {{indent}}pthreadpool_parallelize_2d_tile_2d(
 {{indent}}    pthreadpool_,
 {{indent}}    (pthreadpool_task_2d_tile_2d_t)conv2d_columnwise_pruning_vector,
@@ -312,13 +341,15 @@ microkernel_computation = jinja2.Template(
 {{indent}}    {{MR}}, nc,
 {{indent}}    0x00000001);
 
+{{extra_kind_code}}
+{{indent}}free(input_packed_ptr);
 """
 )
 
 microkernel_lambda_func = jinja2.Template(
     """
 {% set PARAMS = {"LINEAR":"union xnn_f32_default_params", "RELU": "union xnn_f32_relu_params", "MINMAX": "union xnn_f32_minmax_params"}[ACTIVATION] %}
-void xnn_f32_gemm_ukernel_{{MR}}x{{LMUL}}v_columnwise_pruned__rvv = [](
+auto xnn_f32_gemm_ukernel_{{MR}}x{{LMUL}}v_columnwise_pruned__rvv = +[](
     size_t mr,
     size_t nc,
     size_t kc,
