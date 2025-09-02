@@ -80,7 +80,11 @@ class Conv2D_Pruning_Operation:
             raise RuntimeError("sparse convolution only supports cnhw layout")
         if (library.LayoutTag[self.A.layout] != "cnhw" or library.LayoutTag[self.B.layout] != "cnhw" or library.LayoutTag[self.C.layout] != "cnhw"):
             raise RuntimeError(
-                f"data type mismatch, with data type of A is {library.LayoutTag[self.A.layout]}, B is {library.LayoutTag[self.B.layout]}, C is {library.LayoutTag[self.C.layout]}"
+                f"data layout is not supported, with data layout of A is {library.LayoutTag[self.A.layout]}, B is {library.LayoutTag[self.B.layout]}, C is {library.LayoutTag[self.C.layout]}"
+            )
+        if (self.A.element != library.DataType.f32 or self.B.element != library.DataType.f32 or self.C.element != library.DataType.f32):
+            raise RuntimeError(
+                f"data type is not supported, with data type of A is {library.LayoutTag[self.A.element]}, B is {library.LayoutTag[self.B.element]}, C is {library.LayoutTag[self.C.element]}"
             )
         def generate_binary_op(operation_kind, operation_type, element, template_kind):
             return template_kind.render(
@@ -164,10 +168,16 @@ class Conv2D_Pruning_Operation:
                     raise ValueError(f"Unsupported LMUL value: {self.LMUL}")
                 if self.operation_kind in RELU_KINDS:
                     ACTIVATION = "RELU"
+                    output_min = "0"
+                    output_max = "std::numeric_limits<float>::infinity()"
                 elif self.operation_kind in RELU6_KINDS:
                     ACTIVATION = "MINMAX"
+                    output_min = "0"
+                    output_max = "6"
                 else:
                     ACTIVATION = "LINEAR"
+                    output_min = "-std::numeric_limits<float>::infinity()"
+                    output_max = "std::numeric_limits<float>::infinity()"
                 log_nr = _LOG_NR_LMUL[self.LMUL]
                 microkernel_func = microkernel_lambda_func.render(
                     ACTIVATION = ACTIVATION,
@@ -175,12 +185,16 @@ class Conv2D_Pruning_Operation:
                     LMUL = self.LMUL,
                     log_nr = log_nr
                 )
+                extra_kind_code = generate_tensorOP(self.operation_kind, self.extra_kind, self.A.element)
                 program = microkernel_computation.render(
                     MR = self.tile_size,
                     LMUL = self.LMUL,
                     microkernel_lambda_func = microkernel_func,
                     merge_im2col_packing = merge_im2col_packing,
-                    indent="  "
+                    indent="  ",
+                    extra_kind_code=extra_kind_code,
+                    output_min=output_min,
+                    output_max=output_max,
                 )
         else:
             raise RuntimeError("only operation with pruning is supported")
@@ -193,7 +207,7 @@ if __name__ == "__main__":
     C = library.TensorDesc(library.DataType.f32, library.LayoutType.CNHW)
     Conv2DOp = Conv2D_Pruning_Operation(
         operation_kind=library.Conv2dKind.Conv2dPruningBiasAdd,
-        extra_kind=library.TensorOperation.Add,
+        extra_kind=library.TensorOperation.PassThrough,
         A=A,
         B=B,
         C=C,
@@ -202,7 +216,7 @@ if __name__ == "__main__":
         epilogue_functor=library.TensorOperation.PassThrough,
         conv2d_specialization=Conv2DSpecialization.ConvCNHWF32, # must match the dataType of A, B, C
         LMUL=2,
-        tile_size=8
+        tile_size=7
     )
     output = jinja2.Template(
         """

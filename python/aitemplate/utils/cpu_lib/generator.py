@@ -72,7 +72,7 @@ def CreateConv2dFwdOperator(manifest, operation_kind, out_element_op, out_data_o
         operations.append(new_operation)
 
     return operations
-def CreateConv2dPruningFwdOperator(manifest, operation_kind, out_element_op, out_data_op=""):
+def CreateConv2dPruningFwdOperator(manifest, operation_kind, out_element_op):
     in_element_op = library.TensorOperation.PassThrough
     conv2d_spec = conv_prune.Conv2DSpecialization.ConvCNHWF32
 
@@ -89,19 +89,24 @@ def CreateConv2dPruningFwdOperator(manifest, operation_kind, out_element_op, out
     c_element_desc = library.TensorDesc(
         data_type, layout_type
     )
-    new_operation = conv_prune.Conv2D_Pruning_Operation(
-        operation_kind=operation_kind,
-        extra_kind=out_element_op,
-        A=a_element_desc,
-        B=b_element_desc,
-        C=c_element_desc,
-        a_elem_op=in_element_op,
-        b_elem_op=in_element_op,
-        epilogue_functor=out_element_op,
-        conv2d_specialization=conv2d_spec,
-    )
-    manifest.append(new_operation)
-    operations.append(new_operation)
+    LMUL_Setting = [1, 2, 4, 8]
+    for LMUL in LMUL_Setting:
+        for tile_size in range(3, 13):
+            new_operation = conv_prune.Conv2D_Pruning_Operation(
+                operation_kind=operation_kind,
+                extra_kind=out_element_op,
+                A=a_element_desc,
+                B=b_element_desc,
+                C=c_element_desc,
+                a_elem_op=in_element_op,
+                b_elem_op=in_element_op,
+                epilogue_functor=out_element_op,
+                conv2d_specialization=conv2d_spec,
+                LMUL=LMUL,
+                tile_size=tile_size
+            )
+            manifest.append(new_operation)
+            operations.append(new_operation)
 
     return operations
 # Gemm Fwd operations (Layout : RCR)
