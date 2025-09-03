@@ -290,7 +290,7 @@ class Target:
         bool
             Whether to force profile.
         """
-        return os.environ.get("FORCE_PROFILE", None) == "1"
+        return os.environ.get("FORCE_PROFILE", True) == "1"
 
     def use_dummy_profiling_results(self) -> bool:
         """Whether to use dummy profiling results."""
@@ -376,6 +376,8 @@ class Target:
             return self._profile_cache.conv_cache_version
         elif op_class == "conv3d":
             return self._profile_cache.conv3d_cache_version
+        elif op_class == "conv_cnhw_pruning":
+            return self._profile_cache.conv_cnhw_pruning_cache_version
         raise NotImplementedError
 
     def query_profile_cache(
@@ -404,6 +406,8 @@ class Target:
             return self._profile_cache.query_gemm(args)
         if op_class == "conv":
             return self._profile_cache.query_conv(args)
+        if op_class == "conv_cnhw_pruning":
+            return self._profile_cache.query_conv_pruned(args)
         if op_class == "conv3d":
             return self._profile_cache.query_conv3d(args)
         if op_class == "normalization":
@@ -416,6 +420,8 @@ class Target:
             self._profile_cache.insert_gemm(args)
         elif op_class == "conv":
             self._profile_cache.insert_conv(args)
+        elif op_class == "conv_cnhw_pruning":
+            self._profile_cache.insert_conv_pruned(args)
         elif op_class == "conv3d":
             self._profile_cache.insert_conv3d(args)
         elif op_class == "normalization":
@@ -469,10 +475,17 @@ class Target:
                 if ext != ".h":
                     continue
                 if "logging" not in fname:
-                    continue
+                    if self.name() == "rvv" and "rvv_utils" not in fname:
+                        continue
                 fname_src = os.path.join(include, fname)
                 fname_dst = os.path.join(workdir, fname)
                 shutil.copyfile(fname_src, fname_dst)
+                if "rvv_utils" in fname:
+                    csrc = os.path.join(self.static_files_path, "csrc")
+                    fname_src = os.path.join(csrc, "rvv_utils.cpp")
+                    fname_dst = os.path.join(workdir, "rvv_utils.cpp")
+                    shutil.copyfile(fname_src, fname_dst)
+                    sources.append(fname_dst)
                 headers.append(fname_dst)
         return sources
 
