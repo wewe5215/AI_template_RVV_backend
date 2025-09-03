@@ -569,7 +569,7 @@ clean_constants:
     @staticmethod
     def _combine_profiler_multi_sources():
         """Whether to combine multiple profiler sources per target."""
-        return bool(int(os.environ.get("COMBINE_PROFILER_MULTI_SOURCES", 1)))
+        return bool(int(os.environ.get("COMBINE_PROFILER_MULTI_SOURCES", 0)))
 
     @staticmethod
     def _force_one_profiler_source_per_target():
@@ -597,13 +597,19 @@ clean_constants:
             return next(iter(sources))
 
         file_lines = []
+        flag = False
         for source in sources:
             with open(source, "r") as f:
                 lines = f.readlines()
             for line in lines:
                 if line.strip():
                     # collect the original non-empty lines
-                    file_lines.append(line)
+                    if flag == False:
+                        file_lines.append(line)
+                    else:
+                        if 'include' not in line:
+                            file_lines.append(line)
+            flag = True
             # the last line might not end with "\n"
             file_lines.append("\n")
 
@@ -1040,7 +1046,7 @@ class RemoteBuilder(Builder):
         err = stderr.read().decode()
         exit_status = stdout.channel.recv_exit_status()
         if exit_status != 0:
-            raise RuntimeError(f"Remote build failed:\n{err.decode()}")
+            raise RuntimeError(f"Remote build failed:\n{err}")
 
     def make(
         self,
