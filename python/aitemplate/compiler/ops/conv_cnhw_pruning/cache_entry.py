@@ -76,6 +76,64 @@ class ConvRecordEntry:
     workspace: int
     split_k: int
 
+@dataclass
+class ConvPrunedQueryEntry:
+    """Query Entry"""
+
+    dtype_a: int
+    dtype_b: int
+    dtype_c: int
+    dtype_acc: int
+    major_a: int
+    major_b: int
+    major_c: int
+    kh: int
+    kw: int
+    co: int
+    strideh: int
+    stridew: int
+    padh: int
+    padw: int
+    dilateh: int
+    dilatew: int
+    op_type: str
+    device: str
+    epilogue: int
+    split_k: int
+    exec_entry_sha1: str
+    pruning_ratio: float
+
+
+@dataclass
+class ConvPrunedRecordEntry:
+    """Record Entry"""
+
+    exec_entry: str
+    exec_entry_sha1: str
+    dtype_a: int
+    dtype_b: int
+    dtype_c: int
+    dtype_acc: int
+    major_a: int
+    major_b: int
+    major_c: int
+    kh: int
+    kw: int
+    co: int
+    strideh: int
+    stridew: int
+    padh: int
+    padw: int
+    dilateh: int
+    dilatew: int
+    op_type: str
+    epilogue: int
+    device: str
+    algo: str
+    workspace: int
+    split_k: int
+    pruning_ratio: float
+
 
 @dataclass
 class Conv3dQueryEntry:
