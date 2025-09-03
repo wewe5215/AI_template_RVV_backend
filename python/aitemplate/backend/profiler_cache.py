@@ -252,6 +252,131 @@ VALUES (
 """
 )
 
+CONV_PRUNED_INIT_TEMPLATE = jinja2.Template(
+    """
+ CREATE TABLE IF NOT EXISTS {{dev}}_conv_sparse_{{version}} (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  exec_entry VARCHAR(8192) NOT NULL,
+  exec_entry_sha1 VARCHAR(64) NOT NULL,
+  dtype_a INTEGER NOT NULL,
+  dtype_b INTEGER NOT NULL,
+  dtype_c INTEGER NOT NULL,
+  dtype_acc INTEGER NOT NULL,
+  major_a INTEGER NOT NULL,
+  major_b INTEGER NOT NULL,
+  major_c INTEGER NOT NULL,
+  kh INTEGER NOT NULL,
+  kw INTEGER NOT NULL,
+  co INTEGER NOT NULL,
+  strideh INTEGER NOT NULL,
+  padh INTEGER NOT NULL,
+  dilateh INTEGER NOT NULL,
+  stridew INTEGER NOT NULL,
+  padw INTEGER NOT NULL,
+  dilatew INTEGER NOT NULL,
+  op_type VARCHAR(512) NOT NULL,
+  epilogue VARCHAR(512) NOT NULL,
+  device VARCHAR(16) NOT NULL,
+  algo VARCHAR(512) NOT NULL,
+  workspace INTEGER DEFAULT 0,
+  duration FLOAT DEFAULT -1,
+  split_k INTEGER DEFAULT 1,
+  template_ver INTEGER NOT NULL DEFAULT 290,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  pruning_ratio FLOAT DEFAULT 0
+);
+"""
+)
+
+CONV_PRUNED_QUERY_TEMPLATE = jinja2.Template(
+    """
+SELECT algo, workspace
+FROM {{dev}}_conv_sparse_{{version}}
+WHERE
+dtype_a={{dtype_a}} AND
+dtype_b={{dtype_b}} AND
+dtype_c={{dtype_c}} AND
+dtype_acc={{dtype_acc}} AND
+major_a={{major_a}} AND
+major_b={{major_b}} AND
+major_c={{major_c}} AND
+kh={{kh}} AND
+kw={{kw}} AND
+co={{co}} AND
+strideh={{strideh}} AND
+padh={{padh}} AND
+dilateh={{dilateh}} AND
+stridew={{stridew}} AND
+padw={{padw}} AND
+dilatew={{dilatew}} AND
+op_type='{{op_type}}' AND
+device='{{device}}' AND
+epilogue={{epilogue}} AND
+split_k={{split_k}} AND
+exec_entry_sha1='{{exec_entry_sha1}}' AND
+pruning_ratio={{pruning_ratio}};
+"""
+)
+
+CONV_PRUNED_INSERT_TEMPLATE = jinja2.Template(
+    """
+INSERT INTO {{dev}}_conv_sparse_{{version}} (
+    exec_entry,
+    exec_entry_sha1,
+    dtype_a,
+    dtype_b,
+    dtype_c,
+    dtype_acc,
+    major_a,
+    major_b,
+    major_c,
+    kh,
+    kw,
+    co,
+    strideh,
+    padh,
+    dilateh,
+    stridew,
+    padw,
+    dilatew,
+    op_type,
+    epilogue,
+    device,
+    algo,
+    workspace,
+    split_k,
+    pruning_ratio
+)
+VALUES (
+    '{{exec_entry}}',
+    '{{exec_entry_sha1}}',
+    {{dtype_a}},
+    {{dtype_b}},
+    {{dtype_c}},
+    {{dtype_acc}},
+    {{major_a}},
+    {{major_b}},
+    {{major_c}},
+    {{kh}},
+    {{kw}},
+    {{co}},
+    {{strideh}},
+    {{padh}},
+    {{dilateh}},
+    {{stridew}},
+    {{padw}},
+    {{dilatew}},
+    '{{op_type}}',
+    {{epilogue}},
+    '{{device}}',
+    '{{algo}}',
+    {{workspace}},
+    {{split_k}},
+    {{pruning_ratio}}
+);
+"""
+)
+
 CONV3D_INIT_TEMPLATE = jinja2.Template(
     """
  CREATE TABLE IF NOT EXISTS {{dev}}_conv3d_{{version}} (
@@ -518,6 +643,7 @@ class ProfileCacheDB:
         self._gemm_cache_version = ait_cache_version()
         self._conv_cache_version = ait_cache_version()
         self._conv3d_cache_version = ait_cache_version()
+        self._conv_cnhw_pruning_cache_version = ait_cache_version()
         if uri is not None:
             self._mode = CacheMode.REMOTE
         if self._mode == CacheMode.LOCAL:
@@ -532,6 +658,7 @@ class ProfileCacheDB:
         """Creates table in cache."""
         self._create_gemm_table()
         self._create_conv_table()
+        self._create_conv_pruned_table()
         self._create_conv3d_table()
         self._create_norm_table()
 
@@ -546,6 +673,10 @@ class ProfileCacheDB:
     @property
     def conv3d_cache_version(self) -> int:
         return self._conv3d_cache_version
+
+    @property
+    def conv_cnhw_pruning_cache_version(self) -> int:
+        return self._conv_cnhw_pruning_cache_version
 
     def _create_gemm_table(self):
         """Creates gemm table."""
@@ -581,6 +712,26 @@ class ProfileCacheDB:
                 f"Creating a new conv table with {version=}",
             )
             sql = CONV_INIT_TEMPLATE.render(
+                dev=self._target,
+                version=version,
+            )
+            self._cur.execute(sql)
+            self._con.commit()
+
+    def _create_conv_pruned_table(self):
+        """Creates sparse conv table."""
+        version = self.conv_cnhw_pruning_cache_version
+        if not self._table_exists("conv_sparse", version):
+            _LOGGER.info(
+                "Temporarily keeping the old conv cache versions if exist",
+            )
+            # FIXME: will delete unmatched version once we get into production
+            # self._delete_existing_table("conv")
+
+            _LOGGER.info(
+                f"Creating a new conv table with {version=}",
+            )
+            sql = CONV_PRUNED_INIT_TEMPLATE.render(
                 dev=self._target,
                 version=version,
             )
@@ -719,6 +870,27 @@ class ProfileCacheDB:
         )
         return self._query(sql)
 
+    def query_conv_pruned(self, args: Dict[str, Any]) -> Tuple[str, int]:
+        """a function to query conv op epilogue from cache,
+        here we use the same sql table for conv and gemm
+
+        Parameters
+        ----------
+        args : Dict
+            Conv query entry
+
+        Returns
+        -------
+        Tuple
+            profiling results
+        """
+        sql = CONV_PRUNED_QUERY_TEMPLATE.render(
+            dev=self._target,
+            version=self.conv_cnhw_pruning_cache_version,
+            **args,
+        )
+        return self._query(sql)
+
     def query_conv3d(self, args: Dict[str, Any]) -> Tuple[str, int]:
         """a function to query conv op epilogue from cache,
         here we use the same sql table for conv and gemm
@@ -845,6 +1017,49 @@ class ProfileCacheDB:
         insert_sql = CONV_INSERT_TEMPLATE.render(
             dev=self._target,
             version=self.conv_cache_version,
+            **args,
+        )
+        self._insert(query_sql, insert_sql)
+
+    def insert_conv_pruned(self, args: Dict[str, Any]) -> None:
+        """a function to insert conv op epilogue into cache,
+        here we use the same sql table for conv and gemm
+
+        Parameters
+        ----------
+        args : Dict
+            Conv Record Entry
+
+        """
+        query_sql = CONV_PRUNED_QUERY_TEMPLATE.render(
+            dev=self._target,
+            version=self.conv_cnhw_pruning_cache_version,
+            dtype_a=args["dtype_a"],
+            dtype_b=args["dtype_b"],
+            dtype_c=args["dtype_c"],
+            dtype_acc=args["dtype_acc"],
+            major_a=args["major_a"],
+            major_b=args["major_b"],
+            major_c=args["major_c"],
+            kh=args["kh"],
+            kw=args["kw"],
+            co=args["co"],
+            strideh=args["strideh"],
+            padh=args["padh"],
+            dilateh=args["dilateh"],
+            stridew=args["stridew"],
+            padw=args["padw"],
+            dilatew=args["dilatew"],
+            op_type=args["op_type"],
+            device=args["device"],
+            epilogue=args["epilogue"],
+            split_k=args["split_k"],
+            exec_entry_sha1=args["exec_entry_sha1"],
+            pruning_ratio=args["pruning_ratio"],
+        )
+        insert_sql = CONV_PRUNED_INSERT_TEMPLATE.render(
+            dev=self._target,
+            version=self.conv_cnhw_pruning_cache_version,
             **args,
         )
         self._insert(query_sql, insert_sql)
