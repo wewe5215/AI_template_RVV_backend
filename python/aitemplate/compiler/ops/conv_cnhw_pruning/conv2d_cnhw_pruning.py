@@ -36,7 +36,7 @@ from aitemplate.compiler.base import (
     Operator,
     Tensor,
 )
-from aitemplate.compiler.ops.conv_cnhw_pruning.cache_entry import ConvQueryEntry, ConvRecordEntry
+from aitemplate.compiler.ops.conv_cnhw_pruning.cache_entry import ConvPrunedQueryEntry, ConvPrunedRecordEntry
 from aitemplate.compiler.ops.conv_cnhw_pruning.conv_cnhw_pruning_common import (
     filter_op_instances,
     generate_profiler_sources,
@@ -188,7 +188,7 @@ class conv2d_cnhw_pruning(Operator):
         self._attrs["pad"] = pad
         self._attrs["dilate"] = dilate
         self._attrs["group"] = group
-        self._attrs["has_profiler"] = False
+        self._attrs["has_profiler"] = True
         self._attrs["epilogue_alignment"] = 1
         self._attrs["epilogue"] = "LinearCombination"
         self._attrs["workspace"] = 0
@@ -199,10 +199,6 @@ class conv2d_cnhw_pruning(Operator):
         self.exec_key_template = EXEC_KEY_TEMPLATE
         self.exec_dyn_key_template = EXEC_DYN_KEY_TEMPLATE
         self.exec_cond_template = EXEC_COND_TEMPLATE
-        self.remote_user     = "riscv"
-        self.remote_host     = "192.168.33.96"
-        self.remote_base_dir = "~/Desktop/AITemplate_Profile"
-        self._timeout = 180
 
     def _get_params_factory(self):
         params_factory = {}
@@ -403,7 +399,7 @@ class conv2d_cnhw_pruning(Operator):
                 split_k = (
                     1 if self._attrs["split_k"] is None else self._attrs["split_k"]
                 )
-                query = ConvQueryEntry(
+                query = ConvPrunedQueryEntry(
                     dtype_a=tmp_op.A.element.value - 1,
                     dtype_b=tmp_op.B.element.value - 1,
                     dtype_c=tmp_op.C.element.value - 1,
@@ -419,9 +415,10 @@ class conv2d_cnhw_pruning(Operator):
                     epilogue=tmp_op.epilogue_functor.value,
                     split_k=split_k,
                     exec_entry_sha1=exec_entry_sha1,
+                    pruning_ratio=self._attrs["pruning_ratio"],
                     **self._get_params_factory(),
                 )
-                cache_value = target.query_profile_cache("conv", query.__dict__)
+                cache_value = target.query_profile_cache("conv_cnhw_pruning", query.__dict__)
                 if cache_value is not None and not target.force_profile():
                     _LOGGER.info(
                         f'Load profiling result for {self._attrs["name"]} '
@@ -468,13 +465,13 @@ class conv2d_cnhw_pruning(Operator):
             )
             return generate_profiler_sources(
                 func_attrs=self._attrs,
-                op_class="conv",
+                op_class="conv_cnhw_pruning",
                 workdir=workdir,
                 shape_template=self.shape_eval_template,
             )
         return
     def _gen_profile_cmd(self, profiler_prefix, cfg, x_shape):
-        from aitemplate.backend.builder import REMOTE_PROFILE_FOLDER
+        from aitemplate.utils.remote_send_receive_files import REMOTE_PROFILE_FOLDER
         from aitemplate.compiler.compiler import IS_REMOTE_COMPILE
         ssh_client = self.ssh_client
         if IS_REMOTE_COMPILE and ssh_client is not None:
@@ -515,7 +512,7 @@ class conv2d_cnhw_pruning(Operator):
         tmp_op = self._attrs["op_instance"][tmp_key]
         exec_entry_sha1 = sha1(exec_key.encode("utf-8")).hexdigest()
         split_k = 1 if self._attrs["split_k"] is None else self._attrs["split_k"]
-        query = ConvQueryEntry(
+        query = ConvPrunedQueryEntry(
             dtype_a=tmp_op.A.element.value - 1,
             dtype_b=tmp_op.B.element.value - 1,
             dtype_c=tmp_op.C.element.value - 1,
@@ -531,9 +528,10 @@ class conv2d_cnhw_pruning(Operator):
             epilogue=tmp_op.epilogue_functor.value,
             split_k=split_k,
             exec_entry_sha1=exec_entry_sha1,
+            pruning_ratio=self._attrs["pruning_ratio"],
             **self._get_params_factory(),
         )
-        cache_value = target.query_profile_cache("conv", query.__dict__)
+        cache_value = target.query_profile_cache("conv_cnhw_pruning", query.__dict__)
         if cache_value is not None and not target.force_profile():
             _LOGGER.info("Load profiling result from cache.")
             return cache_value
@@ -552,7 +550,7 @@ class conv2d_cnhw_pruning(Operator):
                 "Please adjust target.select_minimal_algo function.",
             )
 
-        profiler_filename = get_profiler_filename(self._attrs, "conv")
+        profiler_filename = get_profiler_filename(self._attrs, "conv_cnhw_pruning")
         runner = backend.profiler_runner.Runner(
             devices, self._attrs["name"], timeout=180
         )
@@ -569,7 +567,7 @@ class conv2d_cnhw_pruning(Operator):
         best_algo = out[1].op_config
         workspace = out[1].workspace
         ## cache
-        cache_record = ConvRecordEntry(
+        cache_record = ConvPrunedRecordEntry(
             exec_entry=exec_key,
             exec_entry_sha1=exec_entry_sha1,
             dtype_a=tmp_op.A.element.value - 1,
@@ -588,9 +586,10 @@ class conv2d_cnhw_pruning(Operator):
             algo=best_algo,
             workspace=workspace,
             split_k=split_k,  # todo add into profile
+            pruning_ratio=self._attrs["pruning_ratio"],
             **self._get_params_factory(),
         )
-        Target.current().insert_profile_cache("conv", cache_record.__dict__)
+        Target.current().insert_profile_cache("conv_cnhw_pruning", cache_record.__dict__)
         return (best_algo, workspace)
 
     def _has_dynamic_input_dims(self):
@@ -727,7 +726,7 @@ class conv2d_cnhw_pruning(Operator):
 
                 # run the profiler binary with all ops on the mid_shape
                 # and fetch the results only for the lb_algo and ub_algo
-                profiler_filename = get_profiler_filename(self._attrs, "conv")
+                profiler_filename = get_profiler_filename(self._attrs, "conv_cnhw_pruning")
                 profiler_cmd = self._gen_profile_cmd(
                     profiler_prefix, profiler_filename, mid_shape
                 )
