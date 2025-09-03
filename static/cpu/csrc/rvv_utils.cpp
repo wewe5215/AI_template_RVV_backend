@@ -1,4 +1,6 @@
 #include "rvv_utils.h"
+std::mt19937 rnd_generator(1234);
+std::uniform_real_distribution<> dist(-10, 10);
 void f32_data_pruning_column_wise(float* weight, int output_channel, int input_channel, \
     float* pruned_weight, uint16_t* indice, size_t mr, float pruning_ratio) {
     int pruned_weight_idx = 0;

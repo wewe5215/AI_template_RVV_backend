@@ -17,6 +17,7 @@
 #include <vector>
 #include <cstring>
 #include <bitset>
+#include <memory>
 #include <time.h>
 #include <fstream>
 #include <assert.h>
@@ -46,29 +47,48 @@
   #define LIKELY(condition) (!!(condition))
   #define UNLIKELY(condition) (!!(condition))
 #endif
+using Ptr = std::unique_ptr<void, std::function<void(void*)>>;
+inline Ptr RAII_DeviceMalloc(
+    size_t num_bytes) {
+  auto* output = malloc(num_bytes);
+  if (!output) {
+    throw std::bad_alloc();
+  }
+  auto deleter = [](void* ptr) { free(ptr); };
+  return Ptr(output, deleter);
+}
+
+#pragma once
+extern std::mt19937 rnd_generator;
+extern std::uniform_real_distribution<> dist;
+template<typename T>
+void fill_random(T* data, std::size_t size) { // define template here
+  for (std::size_t i = 0; i < size; ++i)
+    data[i] = static_cast<T>(dist(rnd_generator));
+}
 static size_t min(size_t a, size_t b) {
   return UNPREDICTABLE(b < a) ? b : a;
 }
 static inline int zero_max(int x) {
     return x & ~(x >> 31);
 }
- static size_t divide_round_up(size_t n, size_t q) {
+static inline size_t divide_round_up(size_t n, size_t q) {
   return UNPREDICTABLE(n % q == 0) ? n / q : n / q + 1;
 }
 
- static size_t round_up(size_t n, size_t q) {
+static inline size_t round_up(size_t n, size_t q) {
   return divide_round_up(n, q) * q;
 }
 
- static bool is_po2(size_t n) {
+static inline bool is_po2(size_t n) {
   return (n != 0) && ((n & (n - 1)) == 0);
 }
- static size_t round_down_po2(size_t n, size_t q) {
+static inline size_t round_down_po2(size_t n, size_t q) {
   assert(is_po2(q));
   return n & -q;
 }
 
- static size_t round_up_po2(size_t n, size_t q) {
+static inline size_t round_up_po2(size_t n, size_t q) {
   return round_down_po2(n + q - 1, q);
 }
 
