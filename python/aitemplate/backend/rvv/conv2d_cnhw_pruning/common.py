@@ -135,7 +135,8 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
 {{indent}}      {{stridew}},
 {{indent}}      {{dilationw}},
 {{indent}}      {{padw}},
-{{indent}}      global_workspace_
+{{indent}}      global_workspace_,
+{{indent}}      {{pruning_ratio}}
 {{indent}}    );
 {{indent}}  } catch (...) {
 {{indent}}    runtime = 0;
@@ -143,6 +144,7 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
 {{indent}}  }
 {{indent}}  if (ret != 0)
 {{indent}}    return ret;
+{{indent}}  std::cout << "(repeat 100 times)" << std::endl;
 {{indent}}  std::cout << "OP:{{conv_op_name}},"
 {{indent}}            << "TIME:" << runtime << ","
 {{indent}}            << "WS:" << workspace_size << std::endl;
@@ -171,31 +173,14 @@ int benchmark_{{function_name}} (
   int,
   int,
   int,
-  uint8_t*
+  uint8_t*,
+  float
 );
 """
 )
 
 BENCHMARK_TEMPLATE = jinja2.Template(
     """
-using Ptr = std::unique_ptr<void, std::function<void(void*)>>;
-inline Ptr RAII_DeviceMalloc(
-    size_t num_bytes) {
-  auto* output = malloc(num_bytes);
-  if (!output) {
-    throw std::bad_alloc();
-  }
-  auto deleter = [](void* ptr) { free(ptr); };
-  return Ptr(output, deleter);
-}
-std::mt19937 rnd_generator(1234);
-std::uniform_real_distribution<> dist(-10, 10);
-template<typename T>
-void fill_random(T* data, size_t size) {
-  for (size_t i = 0; i < size; ++i) {
-    data[i] = static_cast<T>(dist(rnd_generator));
-  }
-}
 int benchmark_{{function_name}} (
   float* runtime,
   size_t* workspace_size,
@@ -215,19 +200,25 @@ int benchmark_{{function_name}} (
   int stridew,
   int dilationw,
   int padw,
-  float pruning_ratio,
-  uint8_t* global_workspace_
+  uint8_t* global_workspace_,
+  float pruning_ratio
 ) {
-  Ptr in_data = RAII_DeviceMalloc(NI*HI*WI*CI*2);
-  Ptr weight_data = RAII_DeviceMalloc(CO*KH*KW*CI*2);
-  Ptr weight_indice_data = RAII_DeviceMalloc((CO >> 3)*KH*KW*CI*pruning_ratio*2);
+  {% if is_f16 %}
+  uint32_t vlen = __riscv_vsetvlmax_e16m1();
+  {% elif is_f32 %}
+  uint32_t vlen = __riscv_vsetvlmax_e32m1();
+  {% endif %}
+  Ptr in_data = RAII_DeviceMalloc(NI*HI*WI*CI << 2);
+  Ptr weight_data = RAII_DeviceMalloc(CO*KH*KW*CI << 2);
+  Ptr pruned_weight_data = RAII_DeviceMalloc(CO*KH*KW*CI << 2);
+  Ptr weight_indice_data = RAII_DeviceMalloc(((int)(CO / {{tile_size}} + 1) * (int)(KH * KW * CI * (1 - pruning_ratio)) << 1));
 {% if is_bias %}
-  Ptr bias_data = RAII_DeviceMalloc(CO*2);
+  Ptr bias_data = RAII_DeviceMalloc(CO << 2);
 {% elif is_bias_add %}
-  Ptr bias_data = RAII_DeviceMalloc(CO*2);
-  Ptr res_data = RAII_DeviceMalloc(NO*HO*WO*CO*2);
+  Ptr bias_data = RAII_DeviceMalloc(CO << 2);
+  Ptr res_data = RAII_DeviceMalloc(NO*HO*WO*CO << 2);
 {% endif %}
-  Ptr out_data = RAII_DeviceMalloc(NO*HO*WO*CO*2);
+  Ptr out_data = RAII_DeviceMalloc(NO*HO*WO*CO << 2);
 {% if is_f16 %}
   auto* input = static_cast<__fp16*>(in_data.get());
   auto* weight = static_cast<__fp16*>(weight_data.get());
@@ -241,6 +232,7 @@ int benchmark_{{function_name}} (
 {% elif is_f32 %}
   auto* input = static_cast<float*>(in_data.get());
   auto* weight = static_cast<float*>(weight_data.get());
+  auto* pruned_weight = static_cast<float*>(pruned_weight_data.get());
   auto* weight_indice = static_cast<uint16_t*>(weight_indice_data.get());
   auto* output = static_cast<float*>(out_data.get());
     {% if is_bias %}
@@ -252,13 +244,15 @@ int benchmark_{{function_name}} (
 {% endif %}
   fill_random(input, NI * HI * WI * CI);
   fill_random(weight, CO * KH * KW * CI);
-  std::memset(output, 0, NO*HO*WO*CO*2);
+  std::memset(output, 0, NO * HO * WO * CO);
     {% if is_bias %}
   fill_random(bias, CO);
     {% elif is_bias_add %}
   fill_random(bias, CO);
   fill_random(res, NO*HO*WO*CO);
     {% endif %}
+  f32_data_pruning_column_wise(weight, CO, KH * KW * CI, pruned_weight, weight_indice, {{tile_size}}, pruning_ratio);
+  const xnn_status status_init = xnn_initialize(nullptr);
   size_t num_threads = std::thread::hardware_concurrency();
   std::unique_ptr<pthreadpool, decltype(&pthreadpool_destroy)> threadpool_(
       pthreadpool_create(num_threads), pthreadpool_destroy);
@@ -266,13 +260,12 @@ int benchmark_{{function_name}} (
 {{func_call}}
   struct timespec start, end;
   clock_gettime(CLOCK_MONOTONIC, &start);
-  for (int i = 0; i < 5; ++i) {
+  for (int i = 0; i < 100; ++i) {
 {{func_call}}
   }
   clock_gettime(CLOCK_MONOTONIC, &end);
-  float runtime_ms = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e6;
+  double runtime_ms = (end.tv_sec  - start.tv_sec) * 1000.0 + (end.tv_nsec - start.tv_nsec) / 1e6;
 
-  // TODO: output workspace
   if (runtime_ms < 0.00001) {
       throw std::runtime_error(
       "OOB in xnnpack."
@@ -296,6 +289,7 @@ PROFILER_BENCHMARK_TEMPLATE = jinja2.Template(
 #include <random>
 #include "xnnpack.h"
 #include "logging.h"
+#include "rvv_utils.h"
 #include <pthreadpool.h>
 #include <thread>
 {{extra_header}}
@@ -308,10 +302,8 @@ static size_t GLOBAL_WORKSPACE_SIZE_{{instance_name}} = 0;
 
 PROFILER_MAIN_TEMPLATE = jinja2.Template(
     """
-#include <iostream>
-#include <string>
-#include <time.h>
 #include "xnnpack.h"
+#include "rvv_utils.h"
 {{benchmark_decls}}
 
 int main(int argc, char** argv) {
@@ -445,8 +437,8 @@ def extract_config(
         for op in value:
             if lib_dtype == cpu_lib.library.DataTypeNames[op.A.element]:
                     conv2d_ops[key] = value[0]
-        _LOGGER.info(f"key = {key}, value =  {value}")
-    _LOGGER.debug(f"conv2d_ops = {conv2d_ops}, value =  {value}")
+        # _LOGGER.info(f"key = {key}, value =  {value}")
+    # _LOGGER.debug(f"conv2d_ops = {conv2d_ops}, value =  {value}")
     return conv2d_ops
 
 
@@ -493,8 +485,11 @@ def gen_profiler(
     for instance_idx, (op_name, op) in enumerate(op_instance.items()):
         instance_name = f"{instance_name_base}_{instance_idx}"
         function_name = f"{op_type}_{op_name}"
-
+        # todo : add LMUL and tile size here !!!
         exec_program = emit_instance(op)
+        import cpu_lib
+        LMUL = op.LMUL
+        tile_size = op.tile_size
         shape_func = shape_template.render(
             indent="  ",
             dtype="int64_t ",
@@ -529,7 +524,7 @@ def gen_profiler(
             is_bias_add=is_bias_add,
             func_name=function_name,
             in_ptr="(void*)input",
-            weight_ptr="(void*)weight",
+            weight_ptr="(void*)pruned_weight",
             out_ptr="(void*)output",
             **func_call_extra_args,
             p_batch="&NI",
@@ -548,6 +543,7 @@ def gen_profiler(
             stridew="stridew",
             dilationw="dilationw",
             padw="padw",
+            pruning_ratio=func_attrs["pruning_ratio"],
         )
         benchmark = BENCHMARK_TEMPLATE.render(
             is_bias=is_bias,
@@ -558,6 +554,7 @@ def gen_profiler(
             function_name=function_name,
             func_call=func_call,
             instance_name=instance_name,
+            tile_size=tile_size
         )
 
         profiler_benchmarks[function_name] = PROFILER_BENCHMARK_TEMPLATE.render(
@@ -587,6 +584,7 @@ def gen_profiler(
             stridew="SW",
             dilationw="DW",
             padw="PW",
+            pruning_ratio=func_attrs["pruning_ratio"],
         )
         benchmark_instances.append(benchmark_instance)
 
