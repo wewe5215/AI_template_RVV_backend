@@ -250,6 +250,7 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
 {{indent}}{
 {{indent}}
 {{indent}}int ret = 0;
+{{indent}}const xnn_status status_init = xnn_initialize(nullptr);
 {{indent}}try {
 {{indent}}ret = {{func_name}}(
 {{indent}}    memory_pool.get(),
@@ -264,6 +265,7 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
 {% endfor %}
 {{indent}});
 {{indent}}} catch (...) {}
+{{indent}}xnn_deinitialize();
 {{indent}}if (ret != 0)
 {{indent}}  return ret;
 {{indent}}
@@ -469,7 +471,7 @@ def extract_config(
                     cpu_lib.library.LayoutTag[op.C.layout] == "row" and \
                     lib_dtype == cpu_lib.library.DataTypeNames[op.A.element]:
                     gemm_ops[key] = value[0]
-    _LOGGER.info(f"gemm_ops = {gemm_ops}, value =  {value}")
+    # _LOGGER.info(f"gemm_ops = {gemm_ops}, value =  {value}")
     return gemm_ops
 
 def gen_function(
@@ -498,7 +500,7 @@ def gen_function(
     func_name = func_attrs["name"]
     exec_path = func_attrs["exec_path"]
     op_instance = func_attrs["op_instance"]
-    _LOGGER.info(f"exec_path = {exec_path}, op_instance = {op_instance}")
+    # _LOGGER.info(f"exec_path = {exec_path}, op_instance = {op_instance}")
     for exec_item in exec_path.values():
         fname = "f" + sha1(exec_item.exec_cond.encode()).hexdigest()
         algo = exec_item.algo
@@ -563,7 +565,10 @@ def add_profiler(file_pairs, workdir, op_type, output_name, code):
     if os.path.exists(obj_path):
         return
     # add logging.h to file_pairs
-    file_pairs.extend(Target.current().copy_headers_and_csrc_to_workdir(prefix))
+    new_srcs = (Target.current().copy_headers_and_csrc_to_workdir(prefix))
+    for fname_dst in new_srcs:
+        file_pairs.append((fname_dst, obj_path))
+    _LOGGER.info(f"new_srcs = {new_srcs}")
     if isinstance(code, dict):
         # multi-source profiler
         src_paths = []
