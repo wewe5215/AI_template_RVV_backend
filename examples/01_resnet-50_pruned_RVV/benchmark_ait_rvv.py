@@ -84,7 +84,7 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True, depth=50):
     np_weights = {}
     for k, v in ait_params.items():
         np_weights[k] = v.detach().cpu().numpy().astype(np.float32)
-    new_np_weights = prune_model_weights(np_weights, pruning_ratio, batch_size=batch_size)
+    new_np_weights = prune_model_weights(np_weights, pruning_ratio, model_name=f"{model_name}_{batch_size}")
     np.savez_compressed(weights_file, **new_np_weights)
 
     torch_dtype = torch.float32
