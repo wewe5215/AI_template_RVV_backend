@@ -175,6 +175,10 @@ union xnn_f32_minmax_params {
   } scalar;
 };
 
+union xnn_f32_relu_params {
+  char _;  // Dummy member variable to comply with the C standard
+};
+
 struct function_context {
     float* input;
     float* bias;
