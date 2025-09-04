@@ -29,7 +29,7 @@ import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
+import math
 import jinja2
 
 from aitemplate.backend import registry
@@ -335,6 +335,7 @@ class ModelContainerGenerator:
         additional_unbound_constants: Optional[List[Tensor]] = None,
         debug_settings: Optional[AITDebugSettings] = None,
         model_dir: Optional[str] = None,
+        record_dictionary: Optional[Dict[str, Any]] = None,
     ):
         self.target = Target.current()
         self.f_var_decl = registry.get(self.target.name() + ".lib.var_decl")
@@ -422,6 +423,7 @@ class ModelContainerGenerator:
         self._rendered_func_code: Dict[Operator, str] = {}
         # This is a temporary list that holds rendered C++ code for checks.
         self._rendered_checks_func_code: List[str] = []
+        self._record_dictionary = record_dictionary
 
     def _tensor_slice_func(
         self,
@@ -440,18 +442,36 @@ class ModelContainerGenerator:
             else:
                 assert isinstance(var_or_imm, IntVar)
                 return var_or_imm.upper_bound()
-
-        shape_init = ", ".join(str(max_value(dim)) for dim in tensor._attrs["shape"])
+        name = tensor._attrs["name"]
+        is_weight_indice = "weight_indice" in name
+        tile_size = 8
+        if is_weight_indice and self._record_dictionary is not None:
+            tile_size = self._record_dictionary[name]
+            for i, dim in enumerate(tensor._attrs["shape"]):
+                if i == 0: # first dimension of weight_indice
+                    _LOGGER.info(f"original max_value(dim) =  {max_value(dim)}, tile_size = {tile_size}")
+                    shape_init = f"{str(math.ceil(max_value(dim) / tile_size))}"
+                else:
+                    shape_init += f", {str(max_value(dim))}"
+        else:
+            shape_init = ", ".join(str(max_value(dim)) for dim in tensor._attrs["shape"])
         param_shape_init = ", ".join(
             f'&{dim._attrs["name"]}' for dim in tensor._attrs["shape"]
         )
         self.set_up_output_shapes.append(
             set_value(f"max_param_shapes_[{idx}]", f"{{{shape_init}}}")
         )
-        param_shape_init = ", ".join(
-            f'ParamDim({dim.lower_bound()}, {dim.upper_bound()}, &{dim._attrs["name"]})'
-            for dim in tensor._attrs["shape"]
-        )
+        if is_weight_indice and self._record_dictionary is not None:
+            for i, dim in enumerate(tensor._attrs["shape"]):
+                if i == 0: # first dimension of weight_indice
+                    param_shape_init = f'ParamDim({math.ceil(dim.lower_bound() / tile_size)}, {math.ceil(dim.upper_bound() / tile_size)}, &{dim._attrs["name"]})'
+                else:
+                    param_shape_init += f', ParamDim({dim.lower_bound()}, {dim.upper_bound()}, &{dim._attrs["name"]})'
+        else:
+            param_shape_init = ", ".join(
+                f'ParamDim({dim.lower_bound()}, {dim.upper_bound()}, &{dim._attrs["name"]})'
+                for dim in tensor._attrs["shape"]
+            )
         self.set_up_param_dynamic_shapes.append(
             set_value(f"params_[{idx}].shape_ptrs", f"{{{param_shape_init}}}")
         )
@@ -1231,6 +1251,7 @@ def gen_library_src(  # noqa: C901
     model_name: str = "",
     debug_settings: AITDebugSettings = _DEBUG_SETTINGS,
     additional_unbound_constants: Optional[List[Tensor]] = None,
+    record_dictionary: Optional[Dict[str, Any]] = None
 ) -> List[Tuple[str, str]]:
     """Generate model driver source code files for the given graph
 
@@ -1274,6 +1295,7 @@ def gen_library_src(  # noqa: C901
         additional_unbound_constants=additional_unbound_constants,
         debug_settings=debug_settings,
         model_dir=prefix,
+        record_dictionary=record_dictionary,
     )
     model_container_generator.append_all_tensors()
     constants_data_file.close()

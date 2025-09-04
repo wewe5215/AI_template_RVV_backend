@@ -286,8 +286,9 @@ def compile_model(
                     profile_devs = [0]
                 else:
                     profile_devs = device_env.split(",")
-            compiler.transform.profile(
+            record_dictionary = compiler.transform.profile(
                 graph,
+                test_name,
                 profile_dir,
                 profile_devs,
                 dynamic_profiling_strategy,
@@ -348,6 +349,7 @@ def compile_model(
                 test_name,
                 additional_unbound_constants=constant_folding_inputs,
                 debug_settings=debug_settings,
+                record_dictionary=record_dictionary,
             )
             file_pairs.extend(main_pairs)
 

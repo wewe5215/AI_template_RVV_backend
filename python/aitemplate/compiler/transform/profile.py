@@ -22,6 +22,7 @@ from copy import deepcopy
 from datetime import datetime
 from typing import List
 import re, pathlib
+from pathlib import Path
 from aitemplate.backend import builder, codegen
 
 from aitemplate.backend.profiler_runner import ProfilerRunner
@@ -53,6 +54,7 @@ def _splitter(data, pred=bool):
 
 def profile(
     sorted_graph: List[Tensor],
+    test_name,
     workdir="./tmp",
     devices=None,
     dynamic_profiling_strategy=DynamicProfileStrategy.MAX,
@@ -122,6 +124,7 @@ def profile(
         f"ran {len(funcs_to_profile)} profilers elapsed time: {elapsed_dt_sec(start_t)}",
     )
     rows_for_record = []
+    record_dictionary = {}
     for node in sorted_graph:
         for func in node.src_ops():
             if func._attrs["has_profiler"]:
@@ -133,6 +136,7 @@ def profile(
                     _LOGGER.info(f"fetching profile result of {fname}")
                     workloads = list(func._attrs["exec_path"].keys())
                     for wkl in workloads:
+                        # record the profile summary
                         best_algo = func._attrs["exec_path"][wkl]
                         m = re.search(r'_(\d+)x(\d+)v$', best_algo)
                         tile_size, lmul = map(int, m.groups())
@@ -142,12 +146,16 @@ def profile(
                             f"{func._attrs['KW']}, {func._attrs['inputs'][0]._attrs['shape'][3]._attrs['symbolic_value']}|"
                             f"{lmul}|{tile_size}|\n")
                         rows_for_record.append(row)
-    md_path = pathlib.Path("profile_summary.md")
-    if not md_path.exists():
-        header = (
-            "|**Parameter**|operator|**Dimension**|lmul|tile_size|\n"
-            "|---|---|---|---|---|\n"
-        )
-        md_path.write_text(header, encoding="utf-8")
-    with md_path.open("a", encoding="utf-8") as fp:
-        fp.writelines(rows_for_record)
+                        record_dictionary[f"{func._attrs['inputs'][1]._attrs['name']}_indice"] = tile_size
+
+    if rows_for_record is not None:
+        md_path = pathlib.Path(f"profile_summary_{test_name}.md")
+        if not md_path.exists():
+            header = (
+                "|**Parameter**|operator|**Dimension**|lmul|tile_size|\n"
+                "|---|---|---|---|---|\n"
+            )
+            md_path.write_text(header, encoding="utf-8")
+        with md_path.open("a", encoding="utf-8") as fp:
+            fp.writelines(rows_for_record)
+    return record_dictionary
