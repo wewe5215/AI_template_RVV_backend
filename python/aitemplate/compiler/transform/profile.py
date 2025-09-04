@@ -21,7 +21,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from datetime import datetime
 from typing import List
-
+import re, pathlib
 from aitemplate.backend import builder, codegen
 
 from aitemplate.backend.profiler_runner import ProfilerRunner
@@ -121,9 +121,33 @@ def profile(
     _LOGGER.info(
         f"ran {len(funcs_to_profile)} profilers elapsed time: {elapsed_dt_sec(start_t)}",
     )
+    rows_for_record = []
     for node in sorted_graph:
         for func in node.src_ops():
             if func._attrs["has_profiler"]:
                 func._attrs["exec_path"] = deepcopy(
                     funcs_to_profile[func._attrs["name"]]._attrs["exec_path"]
                 )
+                fname = func._attrs["name"]
+                if "pruning" in fname:
+                    _LOGGER.info(f"fetching profile result of {fname}")
+                    workloads = list(func._attrs["exec_path"].keys())
+                    for wkl in workloads:
+                        best_algo = func._attrs["exec_path"][wkl]
+                        m = re.search(r'_(\d+)x(\d+)v$', best_algo)
+                        tile_size, lmul = map(int, m.groups())
+                        row = (f"|{func._attrs['inputs'][1]._attrs['name']}|"
+                            f"{func._attrs['name']}|"
+                            f"{func._attrs['CO']}, {func._attrs['KH']}, "
+                            f"{func._attrs['KW']}, {func._attrs['inputs'][0]._attrs['shape'][3]._attrs['symbolic_value']}|"
+                            f"{lmul}|{tile_size}|\n")
+                        rows_for_record.append(row)
+    md_path = pathlib.Path("profile_summary.md")
+    if not md_path.exists():
+        header = (
+            "|**Parameter**|operator|**Dimension**|lmul|tile_size|\n"
+            "|---|---|---|---|---|\n"
+        )
+        md_path.write_text(header, encoding="utf-8")
+    with md_path.open("a", encoding="utf-8") as fp:
+        fp.writelines(rows_for_record)
