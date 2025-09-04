@@ -155,3 +155,5 @@ teacher_code/
 output_dir/
 metadata_*/
 record_chosen_lmul/
+profile_summary.md
+profile_summary_*.md
