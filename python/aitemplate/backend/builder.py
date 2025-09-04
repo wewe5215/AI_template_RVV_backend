@@ -1090,15 +1090,11 @@ class RemoteBuilder(Builder):
             f"cd {self.remote_run_dir}",
             *cmds
         ])
-        proc = subprocess.Popen(
-            ["ssh", f"{self.remote_user}@{self.remote_host}", ssh_cmd],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=os.environ.copy()
-        )
-        out, err = proc.communicate(timeout=self._timeout)
-        if proc.returncode != 0:
-            raise RuntimeError(f"Remote build failed:\n{err.decode()}")
+        stdin, stdout, stderr = self.ssh_client.exec_command(ssh_cmd, timeout=self._timeout)
+        err = stderr.read().decode()
+        exit_status = stdout.channel.recv_exit_status()
+        if exit_status != 0:
+            raise RuntimeError(f"Remote build failed:\n{err}")
 
 def get_compile_engine():
     if is_cmake_compilation():
