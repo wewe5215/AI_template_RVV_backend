@@ -1,12 +1,44 @@
 # AI_template_RVV_backend
+**Implementation of the paper: [Efficient Column-Wise N:M Pruning on RISC-V CPU](https://arxiv.org/abs/2507.17301)**
 ## Setup
-1. **Open** `python/aitemplate/utils/remote_send_receive_files.py`, and set `TARGET_USER`, `TARGET_IP`, `REMOTE_PROFILE_DIR`, and `RUN_DIR` **before** using AI_template_RVV_backend.
-2. **Build** `3rdparty/XNNPACK_RVV` **first**
-3. **After the build completes,** edit `python/aitemplate/backend/rvv/target_def.py` so that `xnnpack_path` points to your freshly built XNNPACK library.
-4. **Warning:** the bare-metal cross-compiler `riscv64-unknown-elf-gcc` ships without `libpthread`, so multi-threading is unavailable; actual thread counts therefore depend on the device at run time. Consequently, AI_template_RVV_backend compiles and runs the program directly on the device.
-5. Python 3.11.10 runs without any problems; newer Python versions may have compatibility issues with dependent packages.
-6. **Compiler requirement:** compile the generated C++ with **Clang ≥ 17.0.2**; older versions lack several RVV v0.12 intrinsics used by the backend.
+1. **Open** `python/aitemplate/utils/remote_send_receive_files.py`, and set the following variables: 
+  - `TARGET_USER`
+  - `TARGET_IP`
+  - `REMOTE_PROFILE_DIR`
+  - `RUN_DIR` 
+  > ⚠️ **Note:** You must manually create the `REMOTE_PROFILE_DIR` and `RUN_DIR` directories on your remote device before proceeding.
+2. **Send the folder : `python/aitemplate/utils/static/` to the `RUN_DIR` directory on your remote device.
+3. **Build** `3rdparty/XNNPACK_RVV` **first**
+4. **After the build completes,** edit `python/aitemplate/backend/rvv/target_def.py` so that `xnnpack_path` points to your freshly built XNNPACK library.
+5. **Warning:** the bare-metal cross-compiler `riscv64-unknown-elf-gcc` ships without `libpthread`, so multi-threading is unavailable; actual thread counts therefore depend on the device at run time. Consequently, AI_template_RVV_backend compiles and runs the program directly on the device.
+6. Python 3.11.10 runs without any problems; newer Python versions may have compatibility issues with dependent packages.
+7. **Compiler requirement:** compile the generated C++ with **Clang ≥ 17.0.2**; older versions lack several RVV v0.12 intrinsics used by the backend.
 
+## Important Notices
+1. There will be four instances of remote access. Please check the content sent to the remote device before entering your password, for the sake of computer security. The text in parentheses indicates the file and location of the code that sends the remote access request:
+  - Set up ssh_client (`python/aitemplate/utils/remote_send_receive_files.py`)
+  - Send profile code to the remote device via scp (`python/aitemplate/backend/builder.py`, line 1038)
+  - Send generated function code to the remote device via scp (`python/aitemplate/backend/builder.py`, line 1086)
+  - Send metadata for code execution via scp (in each example folder’s `test_correctness.py` and `benchmark_ait_rvv.py`)
+2. If you have any questions, feel free to open an issue. I will respond as soon as possible.
+3. Currently, the CPU backend only supports f32. Support for f16 will be added in the future.
+
+## Steps for Replicating the End-to-End Experiment from Our Paper
+1. **Complete the Setup**
+  - Make sure you have followed all the steps in the [Setup](#setup) section.
+2. Navigate to the Example Folder and choose a folder corresponding to the model you want to evaluate::
+  - `example/01_resnet-50_pruned_RVV` -> ResNet 18, 34, 50, 101, 152
+  - `example/11_DenseNet_pruned` -> for DenseNet121
+  - `example/12_MobileNet_pruned` -> for MobileNet-V2
+3. Run the Benchmark Script: 
+  - Execute the following script with your desired batch size:
+  - `benchmark_ait_rvv.py --batch-size {batch_size you want}`
+  - This will generate a profile summary and the benchmark result.
+4. Retrain the Pruned Model:
+  - Use the profile summary to guide retraining of the pruned model.
+  - For ResNet models, retraining code is provided in: `example/01_resnet-50_pruned_RVV/retrain_code_resnet`
+  - For other models, follow the same pruning method as shown in ResNet's retraining code
+  - Detailed training recipes and hyperparameters are described in the *Performance Evaluation* Section of our paper.
 # AITemplate
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-brightgreen.svg)](https://github.com/facebookincubator/AITemplate/blob/main/LICENSE) |
