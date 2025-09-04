@@ -1,6 +1,6 @@
 import numpy as np
+from aitemplate.utils.fetch_Lmul_TileSize import fetch_lmul_and_tile
 import math
-# Fetch LMUL values for each op (used later for index scaling)
 vlen = 256
 def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
     """
@@ -48,7 +48,7 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
     indices = np.array(indices, dtype=np.uint16)
     return pruned_weight, indices
 
-def prune_model_weights(np_weights, pruning_ratio, batch_size):
+def prune_model_weights(np_weights, pruning_ratio, model_name):
     """
     Processes a dictionary of model weights (including both kernels and biases). For each weight
     kernel (key containing 'weight' and 'conv'), it prunes the weight column-wise according to the given ratio.
@@ -67,9 +67,10 @@ def prune_model_weights(np_weights, pruning_ratio, batch_size):
           - For each weight key: new entries for "layer_weight_pruned" and "layer_weight_indice"
           - For each bias key: the bias is retained unmodified.
     """
+    weight_to_lmul, weight_to_tile_size = fetch_lmul_and_tile(f"profile_summary_{model_name}")
     new_model = {}
     for key, value in np_weights.items():
-        if "fc" in key or "denseblock2" in key or "denseblock1" in key or "transition1" in key or "transition2" in key or "stem" in key:
+        if key not in weight_to_lmul and key not in weight_to_tile_size:
             print(f'key = {key}, value.ndim = {value.ndim} not being pruned')
             new_model[key] = value
         elif "weight" in key:
@@ -81,11 +82,9 @@ def prune_model_weights(np_weights, pruning_ratio, batch_size):
                     raise ValueError(f"Unsupported weight dimension {value.ndim} for key {key}")
             else:
                 weight_2d = value
-
-            lmul = 2
-            mr = 8
-            nr = vlen * lmul
-            # Apply column-wise pruning using the provided ratio.
+            lmul = int(weight_to_lmul[key])
+            nr = lmul * (vlen / 32)  # 32 for float32
+            mr = int(weight_to_tile_size[key])
             pruned_weight, indices = f32_data_pruning_column_wise_with_ratio(weight_2d, nr, mr, pruning_ratio)
             new_model[key] = pruned_weight
             new_model[key + "_indice"] = indices
@@ -95,18 +94,11 @@ def prune_model_weights(np_weights, pruning_ratio, batch_size):
                 new_model[bias_key] = np_weights[bias_key]
     return new_model
 
-# Example usage:
 if __name__ == "__main__":
-    # Example np_weights dictionary.
-    # For demonstration, let's create a 4D weight (conv) and a bias.
     np_weights = {
-        "stem_conv1_weight": np.random.randn(8, 3, 3, 6).astype(np.float32),  # Shape: (8, 3, 3, 6)
-        "stem_conv1_bias": np.random.randn(8).astype(np.float32),
+        "layer2_0_conv3_weight": np.random.randn(8, 3, 3, 6).astype(np.float32),  # Shape: (8, 3, 3, 6)
+        "layer2_0_conv3_bias": np.random.randn(8).astype(np.float32),
         # You can also include other layers...
     }
-    mr = 3                # tile size for pruning.
     pruning_ratio = 0.75  # For example, prune 75% of the columns.
-    new_model = prune_model_weights(np_weights, pruning_ratio)
-    # Display the new dictionary entries.
-    for k, v in new_model.items():
-        print(f"{k}:\n {v}\n")
+    new_model = prune_model_weights(np_weights, pruning_ratio, "cnhw_pruned_50_densenet121_1")

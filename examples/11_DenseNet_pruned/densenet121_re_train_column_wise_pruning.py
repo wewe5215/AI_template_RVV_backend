@@ -26,58 +26,14 @@ from accelerate.utils import set_seed
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from torchvision.models import densenet121, DenseNet121_Weights
+from aitemplate.utils.fetch_Lmul_TileSize import fetch_lmul_and_tile
 
 LOGGER = get_logger(__name__)
 pruning_ratio = 0.75
 result_file = f"results_prune_{int(pruning_ratio*100)}_densenet121.txt"
-# -----------------------------------------------------------------------------
-#  Original helper: column‑wise mask generator (unchanged)
-# -----------------------------------------------------------------------------
 vlen = 256
-mapping_denseblock3_data = {
-    (128, 1, 1, 256): 2,
-    (128, 1, 1, 288): 2,
-    (128, 1, 1, 320): 2,
-    (128, 1, 1, 352): 2,
-    (128, 1, 1, 384): 2,
-    (128, 1, 1, 416): 2,
-    (128, 1, 1, 448): 2,
-    (128, 1, 1, 480): 2,
-    (128, 1, 1, 512): 2,
-    (128, 1, 1, 544): 2,
-    (128, 1, 1, 576): 2,
-    (128, 1, 1, 608): 2,
-    (128, 1, 1, 640): 2,
-    (128, 1, 1, 672): 2,
-    (128, 1, 1, 704): 2,
-    (128, 1, 1, 736): 2,
-    (128, 1, 1, 768): 2,
-    (128, 1, 1, 800): 2,
-    (128, 1, 1, 832): 2,
-    (128, 1, 1, 864): 2,
-    (128, 1, 1, 896): 2,
-    (128, 1, 1, 928): 1,
-    (128, 1, 1, 960): 2,
-    (128, 1, 1, 992): 2,
-}
-mapping_denseblock4_data = {
-    (128, 1, 1, 512): 4,
-    (128, 1, 1, 544): 4,
-    (128, 1, 1, 576): 4,
-    (128, 1, 1, 608): 4,
-    (128, 1, 1, 640): 4,
-    (128, 1, 1, 672): 4,
-    (128, 1, 1, 704): 4,
-    (128, 1, 1, 736): 4,
-    (128, 1, 1, 768): 4,
-    (128, 1, 1, 800): 4,
-    (128, 1, 1, 832): 4,
-    (128, 1, 1, 864): 4,
-    (128, 1, 1, 896): 4,
-    (128, 1, 1, 928): 4,
-    (128, 1, 1, 960): 4,
-    (128, 1, 1, 992): 4,
-}
+batch_size = 1
+profile_summary_model_name = f"cnhw_pruned_{int(pruning_ratio*100)}_densenet121_{batch_size}"
 def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
     out_c, in_c = weight.shape
     mask = []
@@ -98,64 +54,22 @@ def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
         indices.extend(topk)
     return np.vstack(mask).flatten(), np.array(indices, dtype=np.uint16)
 
-# -----------------------------------------------------------------------------
-#  Original perform_pruning (adapted only for MobileNetV2 layer names ― keep logic)
-# -----------------------------------------------------------------------------
-_EXCLUDE_NAME_SUBSTR = [
-    "features.conv0.",   # stem
-    "features.denseblock1.",   # first inverted residual block
-    "features.transition1.",   # second inverted residual block
-    "features.denseblock2.",
-    "features.transition2.",  # first expansion conv of stage‑2
-    "classifier",           # generic fully‑connected layer
-]
-
-def _should_skip(name: str, module: nn.Module) -> bool:
-    # skip by explicit substrings
-    print(f'name = {name}, weight shape = {module.weight.shape}')
-    if any(sub in name for sub in _EXCLUDE_NAME_SUBSTR):
-        print(f'skip {name} because of _EXCLUDE_NAME_SUBSTR')
-        return True
-    return False
 
 def perform_pruning(model: nn.Module, pruning_ratio: float = 0.5):
     skipped, pruned = 0, 0
     for name, module in model.named_modules():
         if not isinstance(module, nn.Conv2d):
             continue
-        if _should_skip(name=name, module=module):
+        weight_to_lmul, weight_to_tile_size = fetch_lmul_and_tile(f"profile_summary_{profile_summary_model_name}")
+        key = f"{name}.weight".replace('.', '_')
+        if key not in weight_to_lmul and key not in weight_to_tile_size:
             skipped += 1
             continue
-        print(f"perform pruning on {name}")
         w = module.weight.detach().cpu().numpy().astype(np.float32)
         oc, ic, kh, kw = w.shape
-        # simple static params for demo
-        lmul = 2
-        if "denseblock3" in name:
-            if "conv2" in name:
-                lmul = 2
-            else:
-                dic_key = (oc, kh, kw, ic)
-                lmul = mapping_denseblock3_data[dic_key]
-        elif "denseblock4" in name:
-            if "conv2" in name:
-                lmul = 1
-            else:
-                dic_key = (oc, kh, kw, ic)
-                lmul = mapping_denseblock4_data[dic_key]
-        elif "transition3" in name:
-            lmul = 2
-        # Calculate nr based on your mapping (using weight_to_lmul) and vlen.
+        lmul = int(weight_to_lmul[key])
         nr = lmul * (vlen / 32)  # 32 for float32
-        # print(f'key = {key} being pruned with lmul = {weight_to_lmul[key]}, value.ndim = {value.ndim}')
-        if lmul == 1 or lmul == 4:
-            mr = 7
-        elif lmul == 2:
-            mr = 8
-        else:
-            mr = 3
-        print(f'using lmul = {lmul}')
-        
+        mr = int(weight_to_tile_size[key])
         mask_flat, _ = f32_data_pruning_column_wise_with_ratio(
             w.reshape(oc, ic * kh * kw), nr, mr, pruning_ratio)
         mask = torch.from_numpy(mask_flat.reshape(w.shape)).to(module.weight.device)
@@ -260,13 +174,9 @@ def train(args, accelerator, train_data, eval_data, model):
 
     accelerator.print(f"Best accuracy: {best:.2f}%")
 
-# -----------------------------------------------------------------------------
-#  Entrypoint (minimal args — other originals retained if desired)
-# -----------------------------------------------------------------------------
-
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    #p.add_argument("--data_dir", required=True, type=Path)
+    p.add_argument("--data_dir", required=True, type=Path)
     p.add_argument("--output_dir", required=True, type=Path)
     p.add_argument("--batch_size", default=32, type=int)
     p.add_argument("--epochs", default=200, type=int)
