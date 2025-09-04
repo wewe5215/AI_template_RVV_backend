@@ -152,7 +152,6 @@ class BottleneckBlock(CNNBlockBase):
                 self.downsample_0 = nn.Conv2dCNHWPruningBias(in_channels, out_channels, 1, stride, 0, dtype="float")
         else:
             self.downsample_0 = None
-        print(f'block_idx in bottleneck = {block_idx}, stride = {stride}')
         # The original MSRA ResNet models have stride in the first 1x1 conv
         # The subsequent fb.torch.resnet and Caffe2 ResNe[X]t implementations have
         # stride in the 3x3 conv

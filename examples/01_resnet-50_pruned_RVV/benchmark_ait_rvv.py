@@ -110,7 +110,7 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True, depth=50):
 )
 @click.option("--use-graph", type=bool, default=True, help="Whether to use CUDA graph")
 @click.option("--batch-size", type=int, default=0, help="Batch size")
-@click.option("--depth", type=int, default=0, help="depth")
+@click.option("--depth", type=int, default=50, help="depth")
 def main(use_fp16_acc=False, use_graph=True, batch_size=0, depth=50):
     use_graph = False
     model_name = f"cnhw_pruned_{int(pruning_ratio*100)}_resnet{depth}"

@@ -427,8 +427,6 @@ def extract_config(
         for op in value:
             if lib_dtype == cpu_lib.library.DataTypeNames[op.A.element]:
                     conv2d_ops[key] = value[0]
-        _LOGGER.info(f"key = {key}, value =  {value}")
-    _LOGGER.debug(f"conv2d_ops = {conv2d_ops}, value =  {value}")
     return conv2d_ops
 
 
