@@ -108,7 +108,7 @@ class Conv2dCNHWPruning(Module):
             dtype=dtype,
         )
         self.weight_indice = Parameter( # out_channels / 8 stands for each tile is with 8 rows
-            shape=[int(out_channels / 8), (kernel_size * kernel_size * int((in_channels // groups) * (1 - pruning_ratio)))],
+            shape=[out_channels, (kernel_size * kernel_size * int((in_channels // groups) * (1 - pruning_ratio)))],
             dtype="uint16_t"
         )
         self.op = conv2d_cnhw_pruning(stride=stride, pad=padding, dilate=dilation, group=groups, pruning_ratio=pruning_ratio)

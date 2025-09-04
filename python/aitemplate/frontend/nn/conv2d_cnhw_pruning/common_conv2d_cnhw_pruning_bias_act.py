@@ -69,7 +69,7 @@ class Conv2dCNHWPruningBiasAct(Module):
         )
         self.bias = Parameter(shape=[out_channels], dtype=dtype)
         self.weight_indice = Parameter( # out_channels / 8 stands for each tile is with 8 rows
-            shape=[int(out_channels / 8), (kernel_size * kernel_size * int((in_channels // groups) * (1 - pruning_ratio)))],
+            shape=[out_channels, (kernel_size * kernel_size * int((in_channels // groups) * (1 - pruning_ratio)))],
             dtype="uint16_t"
         )
         op_func = getattr(ops, op_name)
