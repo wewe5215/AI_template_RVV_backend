@@ -11,3 +11,6 @@
 [submodule "3rdparty/picojson"]
 	path = 3rdparty/picojson
 	url = https://github.com/kazuho/picojson.git
+[submodule "3rdparty/XNNPACK_RVV"]
+	path = 3rdparty/XNNPACK_RVV
+	url = https://github.com/wewe5215/XNNPACK_RVV.git
