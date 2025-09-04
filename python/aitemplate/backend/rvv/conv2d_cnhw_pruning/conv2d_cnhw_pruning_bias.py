@@ -63,23 +63,12 @@ def conv2d_bias_gen_function(
     shape_save_template,
 ):
     """Codegen for conv2d function."""
-    import cpu_lib
-    op_kind = cpu_lib.library.Conv2dPruningKind.Conv2dPruningBias
-    extra_kind = cpu_lib.library.TensorOperation.PassThrough
-    # if dtype == "float32": --> TODO: uncomment later
-    Layout = cpu_lib.library.LayoutType.CNHW
-    dtype=func_attrs["inputs"][0]._attrs["dtype"]
-    op_instance = common.extract_config(
-        dtype = dtype,
-        op_kind = op_kind,
-        extra_kind = extra_kind,
-        Layout = Layout)
     return cba.gen_function(
         func_attrs=func_attrs,
         exec_cond_template=exec_cond_template,
         shape_eval_template=shape_eval_template,
         shape_save_template=shape_save_template,
-        op_instance=op_instance,
+        op_instance=func_attrs["op_instance"],
     )
 
 

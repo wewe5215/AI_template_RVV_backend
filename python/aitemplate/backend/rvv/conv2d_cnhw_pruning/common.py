@@ -20,7 +20,7 @@ import os
 from collections import OrderedDict
 from hashlib import sha1
 from typing import List
-
+import itertools
 import jinja2
 import logging
 from aitemplate.backend.backend_spec import RVVSpec
@@ -45,8 +45,11 @@ SRC_TEMPLATE = jinja2.Template(
 #include <memory>
 #include <string>
 #include <vector>
+#include <thread>
+#include <pthreadpool.h>
 #include "xnnpack.h"
 #include "logging.h"
+#include "rvv_utils.h"
 {{extra_header}}
 
 {{functions}}
@@ -144,7 +147,6 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
 {{indent}}  }
 {{indent}}  if (ret != 0)
 {{indent}}    return ret;
-{{indent}}  std::cout << "(repeat 100 times)" << std::endl;
 {{indent}}  std::cout << "OP:{{conv_op_name}},"
 {{indent}}            << "TIME:" << runtime << ","
 {{indent}}            << "WS:" << workspace_size << std::endl;
@@ -677,9 +679,20 @@ def gen_function(
     )
     shape_func = shape_eval_func + shape_save_func
     program = ""
-    for instance_idx, (op_name, op) in enumerate(op_instance.items()):
-        program += emit_instance(op)
-    match = re.search(r'(\d+)$', func_name)
+    from aitemplate.compiler.ops.conv_cnhw_pruning.conv2d_cnhw_pruning import EXEC_KEY_TEMPLATE
+    x = func_attrs["inputs"][0]
+    in_n = x._attrs["shape"][0]._attrs["symbolic_value"]
+    in_h = x._attrs["shape"][1]._attrs["symbolic_value"]
+    in_w = x._attrs["shape"][2]._attrs["symbolic_value"]
+    in_ch = x._attrs["shape"][3]._attrs["symbolic_value"]
+
+    key = EXEC_KEY_TEMPLATE.render(
+        x_dim0=in_n, x_dim1=in_h, x_dim2=in_w, x_dim3=in_ch
+    ).replace("\n", "")
+    value = exec_path[key]
+    program = emit_instance(op_instance[value])
+    _LOGGER.info(f"using =  {value}")
+
     function = FUNCTION_TEMPLATE.render(
         is_bias=is_bias,
         is_bias_add=is_bias_add,
