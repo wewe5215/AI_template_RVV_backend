@@ -37,8 +37,20 @@
 4. Retrain the Pruned Model:
   - Use the profile summary to guide retraining of the pruned model.
   - For ResNet models, retraining code is provided in: `example/01_resnet-50_pruned_RVV/retrain_code_resnet`
-  - For other models, follow the same pruning method as shown in ResNet's retraining code
+  - For DenseNet121 models, retraining code is provided in: `example/11_DenseNet_pruned/densenet121_re_train_column_wise_pruning.py`
   - Detailed training recipes and hyperparameters are described in the *Performance Evaluation* Section of our paper.
+5. Other Notice: 
+  - If you want to use the CPU backend, set the `IS_CPU_BACKEND` flag before compiling or running your model:
+    ```python
+      import importlib
+      dt = importlib.import_module("aitemplate.testing.detect_target")
+      dt.IS_CPU_BACKEND = True
+    ```
+  - **NHWC Layout Support**: The dense CPU backend also supports the NHWC data layout. For the models discussed in the paper, this may result in generated code that calls low-level XNNPACK operators. These operators are compatible with various hardware backends.
+  - **Remote Compilation**: To enable remote compilation and execution, pass `remote_compile=True` to the `compile_model`,function. Otherwise, it defaults to `False`
+    ```python
+    module = compile_model(y, target, "./tmp", model_name, remote_compile=True)
+    ```
 # AITemplate
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-brightgreen.svg)](https://github.com/facebookincubator/AITemplate/blob/main/LICENSE) |
