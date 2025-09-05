@@ -7,7 +7,7 @@
   - `REMOTE_PROFILE_DIR`
   - `RUN_DIR` 
   > ⚠️ **Note:** You must manually create the `REMOTE_PROFILE_DIR` and `RUN_DIR` directories on your remote device before proceeding.
-2. **Send the folder : `python/aitemplate/utils/static/` to the `RUN_DIR` directory on your remote device.
+2. **Send the folder** : `python/aitemplate/utils/static/` to the `RUN_DIR` directory on your remote device.
 3. **Build** `3rdparty/XNNPACK_RVV` **first**
 4. **After the build completes,** edit `python/aitemplate/backend/rvv/target_def.py` so that `xnnpack_path` points to your freshly built XNNPACK library.
 5. **Warning:** the bare-metal cross-compiler `riscv64-unknown-elf-gcc` ships without `libpthread`, so multi-threading is unavailable; actual thread counts therefore depend on the device at run time. Consequently, AI_template_RVV_backend compiles and runs the program directly on the device.
