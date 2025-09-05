@@ -18,7 +18,7 @@ import os
 import time
 import click
 import numpy as np
-import torch
+import torch, importlib
 from aitemplate.compiler import compile_model, Model
 
 from aitemplate.frontend import Tensor
@@ -59,6 +59,8 @@ def mark_output(y):
 def compile_module(model_name, batch_size, **kwargs):
 
     model_name = f"{model_name}_{batch_size}"
+    dt = importlib.import_module("aitemplate.testing.detect_target")
+    dt.IS_CPU_BACKEND = True
     target = detect_target(**kwargs)
     # Create input tensor, need to specify the shape, dtype and is_input flag
     x = Tensor(

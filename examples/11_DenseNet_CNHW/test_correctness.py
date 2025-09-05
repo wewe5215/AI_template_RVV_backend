@@ -1,7 +1,7 @@
 import unittest
 import torch
 import numpy as np
-import os
+import os, importlib
 from aitemplate.compiler import compile_model
 import numpy as np
 from aitemplate.compiler.base import Tensor
@@ -38,6 +38,8 @@ def mark_output(y):
 
 class Densenet121Verification(unittest.TestCase):
     def test_densenet121(self):
+        dt = importlib.import_module("aitemplate.testing.detect_target")
+        dt.IS_CPU_BACKEND = True
         target = detect_target()
         batch_size = 2
         model_name = "densenet121"

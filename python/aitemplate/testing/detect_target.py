@@ -28,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 
 IS_CUDA = None
 FLAG = ""
-
+IS_CPU_BACKEND = None
 
 def _detect_cuda_with_nvidia_smi():
     try:
@@ -107,14 +107,15 @@ def detect_target(**kwargs):
 
     """
     global IS_CUDA, FLAG
-    _LOGGER.info("Set target to RVV")
-    return RVV(arch="rv64gcv_zvfh", **kwargs)
-
-    if FLAG:
-        if IS_CUDA:
-            return CUDA(arch=FLAG, **kwargs)
-        else:
-            return ROCM(arch=FLAG, **kwargs)
+    if IS_CPU_BACKEND:
+        _LOGGER.info("Set target to RVV")
+        return RVV(arch="rv64gcv_zvfh", **kwargs)
+    else:
+        if FLAG:
+            if IS_CUDA:
+                return CUDA(arch=FLAG, **kwargs)
+            else:
+                return ROCM(arch=FLAG, **kwargs)
     doc_flag = os.getenv("AIT_BUILD_DOCS", None)
     if doc_flag is not None:
         return CUDA(arch="80", **kwargs)

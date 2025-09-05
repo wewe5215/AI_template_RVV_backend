@@ -5,7 +5,7 @@ import os
 from aitemplate.compiler import compile_model
 from aitemplate.compiler.base import Tensor
 from aitemplate.testing import detect_target
-import subprocess
+import subprocess, importlib
 
 # Import your backbone builder and weight converter for MobileNetV2.
 from mobilenet_v2 import build_mobilenetv2_backbone
@@ -41,6 +41,8 @@ def mark_output(y):
 
 class MobileNetV2Verification(unittest.TestCase):
     def test_mobilenetv2(self):
+        dt = importlib.import_module("aitemplate.testing.detect_target")
+        dt.IS_CPU_BACKEND = True
         target = detect_target()
         batch_size = 1
         torch_dtype = torch.float32

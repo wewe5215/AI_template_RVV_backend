@@ -20,7 +20,7 @@ import click
 import numpy as np
 import torch
 from aitemplate.compiler import compile_model, Model
-
+import importlib
 from aitemplate.frontend import Tensor
 from aitemplate.testing import detect_target
 from modeling.resnet import build_resnet_backbone
@@ -55,6 +55,8 @@ def mark_output(y):
 
 
 def compile_module(model_name, batch_size, depth):
+    dt = importlib.import_module("aitemplate.testing.detect_target")
+    dt.IS_CPU_BACKEND = True
     target = detect_target()
     # Create input tensor, need to specify the shape, dtype and is_input flag
     x = Tensor(

@@ -16,7 +16,7 @@ import unittest
 import os
 import torch
 import numpy as np
-import subprocess
+import subprocess, importlib
 from aitemplate.compiler import compile_model
 from aitemplate.compiler.base import Tensor
 from aitemplate.testing import detect_target
@@ -50,6 +50,8 @@ def mark_output(y):
         print("output_{} shape: {}".format(i, y_shape))
 
 def compile_module(model_name, batch_size, depth):
+    dt = importlib.import_module("aitemplate.testing.detect_target")
+    dt.IS_CPU_BACKEND = True
     target = detect_target()
     # Create input tensor, need to specify the shape, dtype and is_input flag
     x = Tensor(
