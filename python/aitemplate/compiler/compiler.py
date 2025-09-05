@@ -40,7 +40,7 @@ from aitemplate.utils import graph_utils
 from aitemplate.utils.debug_settings import AITDebugSettings
 from aitemplate.utils.misc import callstack_stats
 from aitemplate.utils.serialization.serdes_code import dump_program
-from aitemplate.utils.remote_send_receive_files import TARGET_USER, TARGET_IP, set_up_ssh_client
+from aitemplate.utils.remote_send_receive_files import TARGET_USER, TARGET_IP, set_up_ssh_client, close_ssh_client
 # pylint: disable=W0102
 
 
@@ -369,4 +369,6 @@ def compile_model(
     else:
         # we’re in remote‐compile mode → return a dummy instead of a real .so
         module = DummyModule()
+    if IS_REMOTE_COMPILE:
+        close_ssh_client()
     return module

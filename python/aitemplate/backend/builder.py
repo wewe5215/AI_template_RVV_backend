@@ -1042,6 +1042,7 @@ class RemoteBuilder(Builder):
             f"cd {remote_build}",
             *cmds
         ])
+        _LOGGER.info("remote compile profilers")
         stdin, stdout, stderr = self.ssh_client.exec_command(ssh_cmd, timeout=self._timeout)
         err = stderr.read().decode()
         exit_status = stdout.channel.recv_exit_status()
@@ -1090,6 +1091,7 @@ class RemoteBuilder(Builder):
             f"cd {self.remote_run_dir}",
             *cmds
         ])
+        _LOGGER.info("remote compile function srcs")
         stdin, stdout, stderr = self.ssh_client.exec_command(ssh_cmd, timeout=self._timeout)
         err = stderr.read().decode()
         exit_status = stdout.channel.recv_exit_status()

@@ -23,7 +23,7 @@ def transfer_folder(folder: str, target_user: str, target_ip: str, target_dir: s
         ["scp", "-r", folder, f"{target_user}@{target_ip}:{target_dir}"],
         check=True
     )
-    print("[Host] Folder transferred successfully.")
+    print(f"[Host] {folder} folder transferred successfully.")
 
 def check_remote_file_exists(target_user: str, target_ip: str, remote_file: str) -> bool:
     """
@@ -40,6 +40,7 @@ def check_remote_file_exists(target_user: str, target_ip: str, remote_file: str)
     # The command returns "exists" if the file is found.
     command = f"ssh {target_user}@{target_ip} 'test -f {remote_file} && echo exists'"
     try:
+        print(f"[Remote] Execute command = {command} in remote device")
         result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
         return "exists" in result.stdout
     except subprocess.TimeoutExpired:
@@ -70,6 +71,7 @@ def remote_run_program_send_back_result(target_dir, script_run_program, model_na
         f"cd {target_dir}",
         f"python3 {script_run_program} --model-name {model_name} --batch-size {batch_size}"
     ])
+    print(f"[Remote] Remote execute command = {ssh_cmd} in remote device")
     proc = subprocess.Popen(
         ["ssh", f"{TARGET_USER}@{TARGET_IP}", ssh_cmd],
         stdout=subprocess.PIPE,
@@ -83,6 +85,7 @@ def remote_run_program_send_back_result(target_dir, script_run_program, model_na
         out = f"{model_name}_ait_benchmark.txt"
     else:
         out = f"output_file_{model_name}_{batch_size}.npz"
+    print(f"[Host] Fetching {out} from remote device")
     subprocess.run([
         "scp",
         f"{TARGET_USER}@{TARGET_IP}:{target_dir}/{out}",
@@ -124,3 +127,11 @@ def set_up_ssh_client():
     )
     global SSH_CLIENT
     SSH_CLIENT = ssh_client
+
+def close_ssh_client():
+    global SSH_CLIENT
+    try:
+        if SSH_CLIENT is not None:
+            SSH_CLIENT.close()
+    finally:
+        SSH_CLIENT = None
