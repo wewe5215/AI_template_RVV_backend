@@ -24,7 +24,7 @@ This is a project forked from [AITemplate](https://github.com/facebookincubator/
 6. **Build AITemplate** : Please note that Python 3.11.10 runs without any problems; newer Python versions may have compatibility issues with dependent packages.
   - When cloning the code, please use the following command to also clone the submodules:
     ```
-    git clone --recursive https://github.com/facebookincubator/AITemplate
+    git clone --recursive https://github.com/wewe5215/AI_template_RVV_backend.git
     ```
   - build AITemplate:
     ```
