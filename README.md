@@ -5,7 +5,7 @@ This is a project forked from [AITemplate](https://github.com/facebookincubator/
 - Added a CPU backend, which was not previously supported
 - Developed custom operations including:
   1. Sparse 2D convolution operators in CNHW layout (generate microkernel functions with different tile sizes and LMUL, and integrated them with functions defined in `static/cpu/include/rvv_utils.h`)
-  2. Dense 2D convolution operators in CNHW layout (generate code that utilizes custom XNNPACK neural network operators implemented by myself)
+  2. Dense 2D convolution operators in CNHW layout (generate code that utilizes custom XNNPACK neural network operators **implemented by myself**)
 - Enhanced profiling mechanisms to select optimal tile size and RISC-V Vector Length Multiplier (LMUL)
 - Extended AITemplate to support remote compilation and code execution on RISC-V devices
 ## Setup
