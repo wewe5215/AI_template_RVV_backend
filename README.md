@@ -3,7 +3,7 @@ This is a project forked from [AITemplate](https://github.com/facebookincubator/
 ## My Contributions
 - **Implemented the paper: [Efficient Column-Wise N:M Pruning on RISC-V CPU](https://arxiv.org/abs/2507.17301)**
 - Added a CPU backend, which was not previously supported
-- Developed custom operations including: (Developed custom operation with)
+- Developed custom operations including:
   1. Sparse 2D convolution operators in CNHW layout (generate microkernel functions with different tile sizes and LMUL, and integrated them with functions defined in `static/cpu/include/rvv_utils.h`)
   2. Dense 2D convolution operators in CNHW layout (generate code that utilizes custom XNNPACK neural network operators implemented by myself)
 - Enhanced profiling mechanisms to select optimal tile size and RISC-V Vector Length Multiplier (LMUL)
