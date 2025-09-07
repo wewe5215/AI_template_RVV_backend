@@ -1,5 +1,5 @@
 # AI_template_RVV_backend
-This is a project forked from [AITemplate](https://github.com/facebookincubator/AITemplate).
+AI_template_RVV_backend is based on [AITemplate](https://github.com/facebookincubator/AITemplate).
 ## My Contributions
 - **Implemented the paper: [Efficient Column-Wise N:M Pruning on RISC-V CPU](https://arxiv.org/abs/2507.17301)**
 - Added a CPU backend, which was not previously supported
