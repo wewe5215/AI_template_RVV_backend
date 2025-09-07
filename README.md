@@ -10,6 +10,15 @@ This is a project forked from [AITemplate](https://github.com/facebookincubator/
   2. Dense 2D convolution operators in CNHW layout (generate code that utilizes custom XNNPACK neural network operators **implemented by myself**)
 - Enhanced profiling mechanisms to select optimal tile size and RISC-V Vector Length Multiplier (LMUL)
 - Extended AITemplate to support remote compilation and code execution on RISC-V devices
+## RVV Backend Integration Flow
+The diagram below illustrates how the new RVV backend and code generation flow have been integrated into the AITemplate framework:
+![RVV Backend Flow](RVV_backend.png)
+> **Legend:**  
+> 🟦 **Blue blocks** — Custom components implemented in this project (including new XNNPACK operators)  
+> ⚪️ **Gray blocks** — Upstream components from third-party libraries (e.g., XNNPACK)  
+> ◽️ **White blocks** — Existing AITemplate components reused or extended
+
+**For details on the custom XNNPACK operators developed for RVV, please see the related repository:[XNNPACK_RVV](https://github.com/wewe5215/XNNPACK_RVV)**
 ## Setup
 1. **Open** `python/aitemplate/utils/remote_send_receive_files.py`, and set the following variables: 
   - `TARGET_USER`
