@@ -32,12 +32,17 @@ from aitemplate.backend.target import Target
 FUNC_TEMPLATE = jinja2.Template(
     """
 #include "logging.h"
+#include "xnnpack.h"
+#include "rvv_utils.h"
 #include <assert.h>
 #include <cmath>
 #include <iostream>
 #include <vector>
 #include <cmath>
 #include <cassert>
+#include <riscv_vector.h>
+#include <thread>
+#include <pthreadpool.h>
 template<typename T>
 void layer_norm(
     T* input,
@@ -46,7 +51,8 @@ void layer_norm(
     const T* beta,
     int m,
     int hidden_size,
-    T epsilon = (T)1e-5
+    T epsilon = (T)1e-5,
+    pthreadpool* pthreadpool_ = nullptr
 ) {
     for (int b = 0; b < m; ++b) {
         T* in_ptr  = input  + (size_t)b * hidden_size;
@@ -73,6 +79,100 @@ void layer_norm(
     }
 }
 
+template<>
+void layer_norm<float>(
+    float* input,
+    float* output,
+    const float* gamma,
+    const float* beta,
+    int m,
+    int hidden_size,
+    float epsilon,
+    pthreadpool* pthreadpool_
+) {
+    uint32_t nr = __riscv_vsetvlmax_e32m8();
+    uint32_t nr_byte = nr << 2;
+    std::vector<float> kernel_packed(hidden_size * round_up(m, nr));
+    std::vector<float> output_T(m * hidden_size);
+    xnn_x32_pack_transpose_ukernel_x8v__rvv_u8(
+        /*g=*/1, m, hidden_size,
+        nr, 1, 1,
+        reinterpret_cast<uint32_t*>(input),
+        /*scale=*/nullptr,
+        reinterpret_cast<uint32_t*>(kernel_packed.data()),
+        /*extra_bytes=*/0,
+        /*params=*/nullptr
+    );
+    float* zero = (float*)malloc(nr_byte);
+    memset(zero, 0, nr_byte);
+    float* input_cur = kernel_packed.data();
+    float* output_T_cur = output_T.data();
+    size_t input_increment = 3 * nr;
+    size_t nc = m;
+    do {
+        size_t vl = nr;
+        if UNLIKELY(nc < nr) {
+            vl = __riscv_vsetvl_e32m8(nc);
+        }
+        nc -= vl;
+        float* i0 = input_cur;
+        {%- for M in range(1, 3) %}
+        float* i{{ M }} = (float*) ((uintptr_t) i{{ M-1 }} + nr_byte);
+        {%- endfor %}
+        vfloat32m8_t acc_f32v = __riscv_vfmv_v_f_f32m8(0.f, nr);
+        for (int r = hidden_size; r > 0; r -= 3) {
+            if UNPREDICTABLE(r < 2) {
+                i1 = zero;
+            }
+            if UNPREDICTABLE(r <= 2) {
+                i2 = zero;
+            }
+            {%- for M in range(0, 3) %}
+            vfloat32m8_t in{{ M }}_f32v = __riscv_vle32_v_f32m8(i{{ M }}, vl);
+            acc_f32v = __riscv_vfadd_vv_f32m8(acc_f32v, in{{ M }}_f32v, vl);
+            {%- endfor %}
+            {%- for M in range(0, 3) %}
+            i{{M}} += input_increment;
+            {%- endfor %}
+        }
+        vfloat32m8_t mean = __riscv_vfdiv_vf_f32m8(acc_f32v, (float)hidden_size, vl);
+        vfloat32m8_t var = __riscv_vfmv_v_f_f32m8(0.f, vl);
+        vfloat32m8_t diff;
+        i0 = input_cur;
+        for (int i = 0; i < hidden_size; ++i) {
+            vfloat32m8_t in0_f32v = __riscv_vle32_v_f32m8(i0, vl);
+            diff = __riscv_vfsub_vv_f32m8(in0_f32v, mean, vl);
+            var = __riscv_vfadd_vv_f32m8(var, __riscv_vfmul_vv_f32m8(diff, diff, vl), vl);
+            i0 += nr;
+        }
+        var = __riscv_vfdiv_vf_f32m8(var, (float)hidden_size, vl);
+        vfloat32m8_t one = __riscv_vfmv_v_f_f32m8(1.f, vl);
+        vfloat32m8_t inv_std = __riscv_vfdiv_vv_f32m8(one, __riscv_vfsqrt_v_f32m8(__riscv_vfadd_vf_f32m8(var, epsilon, vl), vl), vl);
+        i0 = input_cur;
+        for (int i = 0; i < hidden_size; ++i) {
+            vfloat32m8_t in0_f32v = __riscv_vle32_v_f32m8(i0, vl);
+            vfloat32m8_t normalized = __riscv_vfmul_vv_f32m8(__riscv_vfsub_vv_f32m8(in0_f32v, mean, vl), inv_std, vl);
+            vfloat32m8_t out = __riscv_vfadd_vf_f32m8(__riscv_vfmul_vf_f32m8(normalized, gamma[i], vl), beta[i], vl);
+            __riscv_vse32_v_f32m8(output_T_cur + i * m, out, vl);
+            i0 += nr;
+        }
+        input_cur = (float*) ((uintptr_t) input_cur + hidden_size * nr_byte);
+        output_T_cur = (float*) ((uintptr_t) output_T_cur + nr_byte);
+    } while (nc != 0);
+    free(zero);
+    xnn_operator_t transpose_op = nullptr;
+    std::vector<size_t> shape = { (size_t)hidden_size, (size_t)m};
+    std::vector<size_t> perm = {1, 0};
+    CHECK_EQ(xnn_status_success, xnn_create_transpose_nd_x32(0, &transpose_op));
+    CHECK_NE(nullptr, transpose_op);
+    CHECK_EQ(
+    xnn_status_success, xnn_reshape_transpose_nd_x32(
+    transpose_op, shape.size(), shape.data(), perm.data(), pthreadpool_));
+    CHECK_EQ(
+    xnn_status_success, xnn_setup_transpose_nd_x32(transpose_op, output_T.data(), output));
+    CHECK_EQ(xnn_status_success, xnn_run_operator(transpose_op, /*threadpool=*/pthreadpool_));
+}
+
 {{func_signature}}
 {
     float* in = static_cast<float*>(input);
@@ -80,7 +180,7 @@ void layer_norm(
     layer_norm<float>(
       in, out,
       gamma, beta,
-      m, n, eps
+      m, n, eps, pthreadpool_
     );
 
     return;
@@ -96,7 +196,8 @@ void {{func_name}}(void* output,
                    const float* beta,
                    int m,
                    int n,
-                   const float eps)
+                   const float eps,
+                   pthreadpool* pthreadpool_)
     """
 )
 
@@ -112,7 +213,7 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {{indent}}  {{m_n_shape_func}}
 {{indent}}  {{func_name}}(
 {{indent}}     {{output}}, {{input}}, static_cast<const float*>({{gamma}}), static_cast<const float*>({{beta}}),
-{{indent}}     {{m}}, {{n}}, {{eps}}
+{{indent}}     {{m}}, {{n}}, {{eps}}, threadpool_.get()
 {{indent}}  );
 {{indent}}}
     """
