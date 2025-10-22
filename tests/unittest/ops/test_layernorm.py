@@ -17,16 +17,25 @@ Unittests for LayerNorm Operator.
 """
 import logging
 import unittest
-
+import importlib
 import torch
-
+import numpy as np
+import os
 from aitemplate.compiler import compile_model, ops
 from aitemplate.compiler.base import IntImm, IntVar
 from aitemplate.frontend import Tensor
 from aitemplate.testing import detect_target
 from aitemplate.testing.test_utils import filter_test_cases_by_test_env
 from aitemplate.utils.torch_utils import string_to_torch_dtype
-
+from aitemplate.utils.remote_send_receive_files import (
+    transfer_folder, 
+    check_remote_file_exists, 
+    retrieve_confirmation_file, 
+    poll_for_confirmation,
+    TARGET_USER,
+    TARGET_IP,
+    remote_run_program_send_back_result
+)
 
 class LayernormTestCase(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -131,6 +140,127 @@ class LayernormTestCase(unittest.TestCase):
             torch.testing.assert_close(x4, x4_pt, atol=atol, rtol=rtol)
             self.test_count += 1
 
+    def _test_layernorm_remote_compile(
+        self,
+        MS=(),
+        NS=(1496,),
+        gamma_is_none=False,
+        beta_is_none=False,
+        use_size_op=False,
+        eps=1e-5,
+        atol=1e-3,
+        rtol=1e-3,
+        dtype="float32",
+        use_welford_algorithm=False,
+    ):
+        torch_dtype = string_to_torch_dtype(dtype)
+        BS = [1, 1024]
+        input_shapes = ((BS), *MS, *NS)
+        logging.info(
+            f"input shapes: {input_shapes}"
+            f"gamma_is_none: {gamma_is_none}, beta_is_none: {beta_is_none}, "
+            f"use_size_op: {use_size_op}"
+            f"dtype: {dtype}"
+        )
+        assert isinstance(MS, (list, tuple))
+        assert isinstance(NS, (list, tuple))
+
+        X1 = Tensor(
+            shape=[IntVar(name="input_batch", values=BS), *MS, *NS],
+            dtype=dtype,
+            name="X",
+            is_input=True,
+        )
+        if gamma_is_none:
+            X2 = None
+        else:
+            X2 = Tensor(
+                shape=NS,
+                dtype=dtype,
+                name="gamma",
+                is_input=True,
+            )
+        if beta_is_none:
+            X3 = None
+        else:
+            X3 = Tensor(
+                shape=NS,
+                dtype=dtype,
+                name="beta",
+                is_input=True,
+            )
+        if use_size_op:
+            norm_shapes = [
+                ops.getitem()(ops.size()(X1), i) for i in range(1 + len(MS), X1._rank())
+            ]
+        else:
+            norm_shapes = [IntImm(n) for n in NS]
+
+        X4 = (
+            ops.layernorm()(X1, X2, X3, NS, eps)
+            if not use_size_op
+            else ops.layernorm()(X1, X2, X3, norm_shapes, eps)
+        )
+        X4._attrs["is_output"] = True
+        X4._attrs["name"] = "output"
+
+        target = detect_target(
+            layernorm_use_welford_algorithm=use_welford_algorithm,
+        )
+        dll_name = f"test.so"
+        module = compile_model(
+            X4,
+            target,
+            "./tmp",
+            f"layernorm_{dtype}",
+            dll_name=dll_name,
+            remote_compile=True
+        )
+
+        batch_size = 1024
+        x1_pt = torch.randn(batch_size, *MS, *NS, dtype=torch_dtype)
+        if gamma_is_none:
+            x2_pt = None
+        else:
+            x2_pt = torch.randn(NS, dtype=torch_dtype)
+        if beta_is_none:
+            x3_pt = None
+        else:
+            x3_pt = torch.randn(NS, dtype=torch_dtype)
+        x4_pt = torch.nn.functional.layer_norm(x1_pt, NS, x2_pt, x3_pt, eps=eps)
+        x4 = torch.empty([batch_size, *MS, *NS], dtype=torch_dtype)
+        inputs = {"X": x1_pt}
+        if not gamma_is_none:
+            inputs["gamma"] = x2_pt
+        if not beta_is_none:
+            inputs["beta"] = x3_pt
+        x4 = torch.empty([batch_size, *MS, *NS], dtype=torch_dtype)
+        io_data = {}
+        io_data["X"] = x1_pt.cpu().numpy()
+        if not gamma_is_none:
+            io_data["gamma"] = x2_pt.cpu().numpy()
+        if not beta_is_none:
+            io_data["beta"] = x3_pt.cpu().numpy()
+        io_data["x4"] = x4.cpu().numpy()
+        metadata_folder = f"metadata_layernorm_{dtype}_{batch_size}"
+        if not os.path.exists(metadata_folder):
+            os.makedirs(metadata_folder, exist_ok=True)
+            print(f"Created directory: {metadata_folder}")
+        else:
+            print(f"Directory already exists: {metadata_folder}")
+        target_dir  = f"/home/{TARGET_USER}/Desktop/AITemplate_Benchmark_on_XNNPACK"
+        io_file = f"{metadata_folder}/io_tensors_{batch_size}.npz"
+        np.savez_compressed(io_file, **io_data)
+        transfer_folder(metadata_folder, TARGET_USER, TARGET_IP, target_dir)
+        remote_run_program_send_back_result(target_dir, "static/test_correctness_normalization_on_riscv.py", f"layernorm_{dtype}", batch_size)
+        output_file = f"output_file_layernorm_{dtype}_{batch_size}.npz"
+        output_np = np.load(output_file, allow_pickle=True)
+        y_ait = torch.from_numpy(output_np["y_output"].reshape([batch_size, *MS, *NS]))
+        torch.testing.assert_close(y_ait, x4_pt, atol=atol, rtol=rtol)
+    def test_layernorm_rvv(self):
+        self._test_layernorm_remote_compile(use_size_op=False, MS=(256,), NS=(768,))
+        self._test_layernorm_remote_compile(use_size_op=False, MS=(), NS=(768,))
+        self._test_layernorm_remote_compile(use_size_op=False, MS=(256, 3), NS=(256,))
     def test_layernorm_fp16(self):
         for use_size_op in (True, False):
             self._test_layernorm(use_size_op=use_size_op)
@@ -204,7 +334,8 @@ class LayernormTestCase(unittest.TestCase):
                 use_welford_algorithm=use_welford_algorithm,
             )
 
-
+dt = importlib.import_module("aitemplate.testing.detect_target")
+dt.IS_CPU_BACKEND = True
 filter_test_cases_by_test_env(LayernormTestCase)
 
 
