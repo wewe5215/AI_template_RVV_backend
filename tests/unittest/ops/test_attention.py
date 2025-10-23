@@ -194,7 +194,134 @@ def ref_attention_bmhk(q, k, v, attn_bias):
     out = out.reshape([q.shape[0], q.shape[2], q.shape[1], v.shape[3]])
     return out.permute((0, 2, 1, 3))
 
+def test_flash_attention_rvv(
+        batch_size=16,
+        nheads=16,
+        seqlen=1024,
+        n=1024,
+        dropout_p=0.0,
+        causal=False,
+        dtype="float32",
+        test_name="flash_attention",
+        rebuild=True,
+        benchmark_pt=False,
+        copy_op=False,
+    ):
+        torch_dtype = string_to_torch_dtype(dtype)
+        d = n // nheads
 
+        with torch.no_grad():
+            x = torch.randn(
+                batch_size,
+                seqlen,
+                n,
+
+                dtype=torch_dtype,
+            )
+            Wqkv = torch.nn.Linear(
+                nheads * d,
+                3 * nheads * d,
+                dtype=torch_dtype,
+            )
+
+            lengths = torch.tensor(
+                [seqlen] * batch_size, dtype=torch.int
+            ).reshape(-1, 1)
+            attention_mask_bool = (
+                repeat(torch.arange(seqlen), "s -> b s", b=batch_size)
+                < lengths
+            )
+            attention_mask = torch.zeros(
+                batch_size,
+                seqlen,
+                dtype=torch_dtype,
+            )
+            attention_mask = rearrange(attention_mask, "b s -> b 1 1 s")
+
+            x_unpad, indices, cu_seqlens, max_seqlen_in_batch = unpad_input(
+                x, attention_mask_bool
+            )
+            qkv_unpad = rearrange(
+                Wqkv(x_unpad), "nnz (t h d) -> nnz t h d", t=3, h=nheads
+            )
+            qkv = rearrange(Wqkv(x), "b s (t h d) -> b s t h d", t=3, h=nheads)
+            y_pt = attention_ref(qkv, attention_mask_bool, dropout_p, causal=causal)
+
+            total, _, num_heads, head_size = qkv_unpad.shape
+
+            X1 = Tensor(
+                shape=[total, 3, num_heads, head_size],
+                dtype=dtype,
+                name="qkv",
+                is_input=True,
+            )
+            X2 = Tensor(
+                shape=[batch_size + 1],
+                dtype="int32",
+                name="cu_seqlens",
+                is_input=True,
+            )
+
+            flash_attention_op = ops.flash_attention(
+                batch_size=batch_size,
+                dropout=dropout_p,
+                max_seq_len=max_seqlen_in_batch,
+                causal=causal,
+            )
+            if copy_op:
+                flash_attention_op = ops.flash_attention(
+                    **flash_attention_op._get_op_attributes()
+                )
+            Y = flash_attention_op(X1, X2)
+            Y._attrs["is_output"] = True
+            Y._attrs["name"] = "output"
+
+            if rebuild:
+                target = detect_target()
+                module = compile_model(Y, target, "./tmp", test_name)
+            else:
+                module = Model(os.path.join("./tmp", test_name, "test.so"))
+
+            x1 = qkv_unpad.to(torch_dtype)
+            x2 = cu_seqlens.to(torch.int32)
+            inputs = {"qkv": x1, "cu_seqlens": x2}
+            y = torch.empty(
+                [total, num_heads, head_size],
+                dtype=torch_dtype,
+            )
+            module.run_with_tensors(inputs, [y])
+
+            # # Warm up.
+            # for _ in range(5):
+            #     module.run_with_tensors(inputs, [y])
+            # # Benchmark.
+            # time_per_iter_ms, time_std, _ = module.benchmark_with_tensors(
+            #     inputs,
+            #     [y],
+            #     count=100,
+            # )
+            # _LOGGER.info(f"benchmark flash-attn time: {time_per_iter_ms}")
+
+            y = y.reshape((batch_size, -1, nheads, d))
+            torch.testing.assert_close(y, y_pt, atol=1e-3, rtol=1e-3)
+            if benchmark_pt:
+                from aitemplate.testing.benchmark_pt import benchmark_torch_function
+
+                func = attention_ref
+                args = (
+                    qkv.to(torch_dtype),
+                    attention_mask_bool,
+                    dropout_p,
+                    False,
+                    False,
+                )
+                duration = benchmark_torch_function(100, func, *args)
+                print(
+                    f"PT:  BS: {batch_size}, Time per iter: {duration:.2f}ms, QPS: {batch_size / duration:.2f}"
+                )
+import importlib
+dt = importlib.import_module("aitemplate.testing.detect_target")
+dt.IS_CPU_BACKEND = True
 class AttentionTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

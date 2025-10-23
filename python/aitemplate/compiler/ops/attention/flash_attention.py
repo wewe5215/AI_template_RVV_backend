@@ -134,7 +134,7 @@ class flash_attention(Operator):
         self._set_depth()
         self._extract_exec_path(x)
         output_shape = self._infer_shapes(x, cu_seqlens)
-        output = Tensor(output_shape, src_ops={self})
+        output = Tensor(output_shape, src_ops={self}, dtype=x._attrs["dtype"])
 
         batch_size = self._attrs["batch_size"]
         max_seq_len = self._attrs["max_seq_len"]
