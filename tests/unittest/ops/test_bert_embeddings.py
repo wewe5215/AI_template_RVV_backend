@@ -16,13 +16,15 @@
 import unittest
 
 import torch
-
-from aitemplate.compiler import compile_model, ops
+import os
+from aitemplate.compiler import compile_model, ops, Model
 from aitemplate.frontend import Tensor
 from aitemplate.testing import detect_target
 from aitemplate.testing.test_utils import get_random_torch_tensor
 from aitemplate.utils.torch_utils import string_to_torch_dtype
-
+import importlib
+dt = importlib.import_module("aitemplate.testing.detect_target")
+dt.IS_CPU_BACKEND = True
 
 def get_ait_inputs(
     batch_size=1,
@@ -88,6 +90,92 @@ def get_ait_params(
         is_input=True,
     )
     return (word_embeddings, token_type_embeddings, position_embeddings, gamma, beta)
+def test_bert_embeddings_rvv(
+        batch_size,
+        seq_len,
+        hidden_size,
+        vocab_size,
+        max_position_embeddings,
+        type_vocab_size,
+        test_name="bert_embeddings",
+        indices_type="int64",
+        input_type="float32",
+        rebuild=True,
+    ):
+        inputs = get_ait_inputs(
+            batch_size,
+            seq_len,
+            dtype=indices_type,
+        )
+        params = get_ait_params(
+            hidden_size,
+            vocab_size,
+            max_position_embeddings,
+            type_vocab_size,
+            dtype=input_type,
+        )
+        y = ops.bert_embeddings()(*(inputs + params), 1e-5)
+        y._attrs["is_output"] = True
+        y._attrs["name"] = "output"
+
+        target = detect_target()
+        if rebuild:
+            module = compile_model(
+                y,
+                target,
+                "./tmp",
+                f"{test_name}",
+            )
+        else:
+             module = Model(os.path.join("./tmp", test_name, "test.so"))
+        torch_indices_type = string_to_torch_dtype(indices_type)
+        input_ids = torch.randint(
+            0,
+            vocab_size,
+            (batch_size, seq_len),
+            dtype=torch_indices_type,
+        )
+        token_type_ids = torch.randint(
+            0,
+            type_vocab_size,
+            input_ids.size(),
+            dtype=torch_indices_type,
+        )
+        position_ids = (
+            torch.arange(seq_len, dtype=torch_indices_type)
+            .reshape((1, -1))
+            .expand(batch_size, -1)
+            .contiguous()
+        )
+        inputs = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "position_ids": position_ids,
+        }
+        for param in params:
+            name = param._attrs["name"]
+            shape = [shape.value() for shape in param.shape()]
+            w = get_random_torch_tensor(shape, dtype=input_type)
+            inputs[name] = w
+
+        word_embedding = torch.nn.functional.embedding(
+            input_ids, inputs["word_embeddings"]
+        )
+        token_type_embedding = torch.nn.functional.embedding(
+            token_type_ids, inputs["token_type_embeddings"]
+        )
+        position_embedding = torch.nn.functional.embedding(
+            position_ids, inputs["position_embeddings"]
+        )
+
+        pt_embedding = word_embedding + token_type_embedding + position_embedding
+        pt_embedding = torch.nn.functional.layer_norm(
+            pt_embedding, [hidden_size], inputs["gamma"], inputs["beta"], eps=1e-5
+        )
+
+        embedding = torch.empty_like(pt_embedding)
+        module.run_with_tensors(inputs, [embedding])
+        torch.testing.assert_close(embedding, pt_embedding, atol=1e-6, rtol=1e-6)
 
 
 @unittest.skipIf(detect_target().name() == "rocm", "Not supported by ROCM.")
