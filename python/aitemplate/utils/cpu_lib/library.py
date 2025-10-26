@@ -259,7 +259,7 @@ class GemmKind(enum.Enum):
     GemmBias = auto()
     GemmBiasAdd = auto()
     GemmBiasAddRelu = auto()
-    GemmBiasFastGelu = auto()
+    GemmBiasGelu = auto()
     DynamicGemm = auto()
     BatchGemm = auto()
 
@@ -269,7 +269,7 @@ GemmKindNames = {
     GemmKind.GemmBias: "gemm_bias",
     GemmKind.GemmBiasAdd: "gemm_bias_add",
     GemmKind.GemmBiasAddRelu: "gemm_bias_add_relu",
-    GemmKind.GemmBiasFastGelu: "gemm_bias_fast_gelu",
+    GemmKind.GemmBiasGelu: "gemm_bias_gelu",
     GemmKind.BatchGemm: "batch_gemm",
     GemmKind.DynamicGemm: "dynamic_gemm",
 }

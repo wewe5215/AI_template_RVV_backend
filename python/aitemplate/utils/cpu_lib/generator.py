@@ -389,6 +389,11 @@ def GenerateTensorOp(manifest):
          library.GemmKind.GemmBiasAdd,
          library.TensorOperation.Add,
     )
+    CreateGemmFwdOperator(
+         manifest,
+         library.GemmKind.GemmBiasGelu,
+         library.TensorOperation.PassThrough,
+    )
 
 
 def GenerateRV64GCV_ZVFH(manifest, rvv_version):

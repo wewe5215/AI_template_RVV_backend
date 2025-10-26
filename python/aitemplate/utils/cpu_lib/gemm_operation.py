@@ -27,7 +27,7 @@ template = jinja2.Template(
 """
 {{indent}}//{{name}}
 {{indent}}xnn_operator_t gemm_op = nullptr;
-{{indent}}const xnn_status status = xnn_create_{{GemmSpecialization}}(
+{{indent}}xnn_status status = xnn_create_{{GemmSpecialization}}(
 {{indent}}    K, N, K, N, 
 {{indent}}    ({{DataName}}*)(b_ptr), ({{DataName}}*)(bias_ptr), 
 {{indent}}    -std::numeric_limits<{{DataName}}>::infinity(), std::numeric_limits<{{DataName}}>::infinity(),
@@ -41,7 +41,23 @@ template = jinja2.Template(
 
 """
 )
+gelu_op = jinja2.Template(
+"""
+xnn_operator_t gelu_op = nullptr;
+  CHECK_EQ(xnn_status_success, xnn_create_gelu_nc_f32(/*flags=*/0, &gelu_op));
+  CHECK_NE(nullptr, gelu_op);
+  std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_op_activation(
+      gelu_op, xnn_delete_operator);
 
+  CHECK_EQ(
+      xnn_status_success,
+      xnn_reshape_gelu_nc_f32(gelu_op, M, N, N, N,
+                              /*threadpool=*/pthreadpool_));
+  CHECK_EQ(xnn_status_success,
+            xnn_setup_gelu_nc_f32(gelu_op, ({{DataName}}*)(c_ptr), ({{DataName}}*)(c_ptr)));
+  CHECK_EQ(xnn_status_success, xnn_run_operator(gelu_op, /*threadpool=*/pthreadpool_));
+"""
+)
 binary_func_minmax_flag_op = jinja2.Template(
 """
 {{indent}}xnn_operator_t binary_func_minmax_flag_op = nullptr;
@@ -170,9 +186,15 @@ class GemmOperation:
             epilogue_func=library.TensorOperationTag[self.epilogue_functor],
         )
         is_bias = False
-        if self.operation_kind == library.GemmKind.GemmBias or self.operation_kind == library.GemmKind.GemmBiasAdd:
+        if self.operation_kind == library.GemmKind.GemmBias or \
+            self.operation_kind == library.GemmKind.GemmBiasAdd or \
+            self.operation_kind == library.GemmKind.GemmBiasGelu:
           is_bias = True
         extra_kind_code = generate_tensorOP(self.operation_kind, self.extra_kind, self.A.element)
+        activation_code = gelu_op.render(
+            DataName = library.DataTypeTag[self.A.element])
+        if self.operation_kind == library.GemmKind.GemmBiasGelu:
+            extra_kind_code += activation_code
         program = code_snippet.render(
             is_bias = is_bias,
             DataName = library.DataTypeTag[self.A.element],

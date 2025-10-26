@@ -28,7 +28,11 @@ from aitemplate.testing.test_utils import (
     get_torch_empty_tensor,
 )
 from aitemplate.utils import shape_utils
-
+import importlib
+dt = importlib.import_module("aitemplate.testing.detect_target")
+dt.IS_CPU_BACKEND = True
+dt = importlib.import_module("aitemplate.compiler.compiler")
+dt.IS_REMOTE_COMPILE = True
 
 _TOLERANCE_LIMITS = {
     "float16": {"atol": 1e-1, "rtol": 1e-1},
@@ -102,6 +106,66 @@ class GEMMRcrBiasFastGeluTestCase(unittest.TestCase):
             )
             torch.testing.assert_close(Y_pt, y, **_TOLERANCE_LIMITS[dtype])
 
+    def _test_gemm_rcr_bias_fast_gelu_rvv(
+        self,
+        M,
+        test_name,
+        K=1024,
+        N=64,
+        use_fast_gelu=False,
+        dtype="float32",
+    ):
+        MDim = M
+        X = Tensor(
+            shape=[MDim, IntImm(K)],
+            dtype=dtype,
+            name="input_0",
+            is_input=True,
+        )
+        W = Tensor(
+            shape=[IntImm(N), IntImm(K)],
+            dtype=dtype,
+            name="input_1",
+            is_input=True,
+        )
+        B = Tensor(
+            shape=[IntImm(N)],
+            dtype=dtype,
+            name="input_2",
+            is_input=True,
+        )
+        OP = (
+            ops.gemm_rcr_bias_fast_gelu() if use_fast_gelu else ops.gemm_rcr_bias_gelu()
+        )
+        Y = OP(X, W, B)
+        Y._attrs["name"] = "output_0"
+        Y._attrs["is_output"] = True
+
+        module = compile_model(
+            Y,
+            detect_target(xnnpack_path="/Users/wewe5215/Desktop/XNNPACK", is_remote_compile=False),
+            "./tmp",
+            (
+                f"gemm_rcr_bias_fast_gelu_{test_name}"
+                if use_fast_gelu
+                else f"gemm_rcr_bias_gelu_{test_name}"
+            ),
+        )
+
+        # for M in Ms:
+        logging.info(f"Testing {M=}")
+
+        X_pt = get_random_torch_tensor([M, K], dtype)
+        W_pt = get_random_torch_tensor([N, K], dtype)
+        B_pt = get_random_torch_tensor([N], dtype)
+        Y_pt = torch.nn.GELU()(torch.nn.functional.linear(X_pt, W_pt, bias=B_pt))
+        y = get_torch_empty_tensor([M, N], dtype)
+        module.run_with_tensors(
+            {"input_0": X_pt, "input_1": W_pt, "input_2": B_pt},
+            [y],
+        )
+        torch.testing.assert_close(Y_pt, y, **_TOLERANCE_LIMITS[dtype])
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_gemm_rcr_bias_fast_gelu_fp16(self):
         self._test_gemm_rcr_bias_fast_gelu(
             Ms=[128],
@@ -127,7 +191,20 @@ class GEMMRcrBiasFastGeluTestCase(unittest.TestCase):
             use_fast_gelu=False,
             dtype="float16",
         )
-
+    def test_gemm_rcr_bias_fast_gelu_fp32_rvv(self):
+        self._test_gemm_rcr_bias_fast_gelu_rvv(
+            M=127,
+            test_name="dynamic_m_fp32_gelu",
+            use_fast_gelu=False,
+            dtype="float32",
+        )
+        self._test_gemm_rcr_bias_fast_gelu_rvv(
+            M=127,
+            test_name="dynamic_m_fp32_gelu",
+            use_fast_gelu=False,
+            dtype="float32",
+        )
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_gemm_rcr_bias_fast_gelu_fp16_rocm(self):
         self._test_gemm_rcr_bias_fast_gelu(
             Ms=[128],
@@ -135,7 +212,7 @@ class GEMMRcrBiasFastGeluTestCase(unittest.TestCase):
             use_fast_gelu=True,
             dtype="float16",
         )
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_gemm_rcr_bias_fast_gelu_fp32_sm80(self):
         self._test_gemm_rcr_bias_fast_gelu(
             Ms=[1, 7, 64, 127],
@@ -149,7 +226,7 @@ class GEMMRcrBiasFastGeluTestCase(unittest.TestCase):
             use_fast_gelu=False,
             dtype="float32",
         )
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_gemm_rcr_bias_fast_gelu_bf16(self):
         self._test_gemm_rcr_bias_fast_gelu(
             Ms=[1, 7, 64, 127],
@@ -163,7 +240,7 @@ class GEMMRcrBiasFastGeluTestCase(unittest.TestCase):
             use_fast_gelu=False,
             dtype="bfloat16",
         )
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_gemm_rcr_bias_fast_gelu_sm90(self):
         with env_variables(
             AIT_FORCE_CUTLASS_SM90_KERNELS="1",
