@@ -105,6 +105,7 @@ RELU_KINDS = {
     library.Conv2dPruningKind.Conv2dPruningBiasRelu,
     library.Conv2dPruningKind.Conv2dPruningBiasAddRelu,
     library.Conv2dPruningKind.Conv2dPruningBiasReluAdd,
+    library.GemmKind.GemmBiasAddRelu,
 }
 
 RELU6_KINDS = {

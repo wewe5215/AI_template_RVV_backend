@@ -27,7 +27,11 @@ from aitemplate.testing.test_utils import (
 )
 
 from parameterized import parameterized
-
+import importlib
+dt = importlib.import_module("aitemplate.testing.detect_target")
+dt.IS_CPU_BACKEND = True
+dt = importlib.import_module("aitemplate.compiler.compiler")
+dt.IS_REMOTE_COMPILE = True
 
 def custom_name_func_with_funcname(testcase_func, param_num, param):
     return "%s_%s_%s" % (
@@ -102,12 +106,12 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
             + self.D1_pt
         )
         self._test_and_verify(module, Y_pt, dtype, has_d1=True)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_mul_add(self):
         self._test_bias_rcr_mul_add(8, None, None, 8, 8)
         self._test_bias_rcr_mul_add(None, 2, 32, 256, 128)
         self._test_bias_rcr_mul_add(None, 21, 5, 1024, 512)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_mul_add_rocm(self):
         self._test_bias_rcr_mul_add(8, None, None, 8, 8, test_name_suffix="_rocm")
 
@@ -141,7 +145,7 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
             * self.D0_pt
         )
         self._test_and_verify(module, Y_pt, dtype)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_sigmoid_mul(self):
         self._test_bias_rcr_sigmoid_mul(8, None, None, 8, 8)
         self._test_bias_rcr_sigmoid_mul(None, 2, 32, 256, 128)
@@ -180,13 +184,13 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
             * self.D0_pt
         )
         self._test_and_verify(module, Y_pt, dtype)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_sigmoid_mul_tanh(self):
         self._test_bias_rcr_sigmoid_mul_tanh(8, None, None, 8, 8)
         self._test_bias_rcr_sigmoid_mul_tanh(None, 2, 32, 256, 128)
         self._test_bias_rcr_sigmoid_mul_tanh(None, 21, 5, 1024, 512)
         self._test_bias_rcr_sigmoid_mul_tanh(None, 21, 5, 1024, 0)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_sigmoid_mul_tanh_rocm(self):
         self._test_bias_rcr_sigmoid_mul_tanh(
             8, None, None, 8, 8, test_name_suffix="_rocm"
@@ -221,11 +225,46 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
         )
         self._test_and_verify(module, Y_pt, dtype)
 
+    def _test_bias_rcr_add_rvv(
+        self,
+        m,
+        m0,
+        m1,
+        k,
+        n,
+        dtype="float32",
+        test_name_suffix="",
+    ):
+        target = detect_target(xnnpack_path="/Users/wewe5215/Desktop/XNNPACK", is_remote_compile=False)
+        self._init_tensors(m, k, n, m0, m1, dtype)
+        OP = ops.gemm_rcr_bias_add()
+        Y = OP(self.X, self.W, self.B, self.D0)
+        Y._attrs["name"] = "output_0"
+        Y._attrs["is_output"] = True
+        module = compile_model(
+            Y,
+            target,
+            "./tmp",
+            f"gemm_rcr_bias_add_k_{k}_n_{n}_{dtype}{test_name_suffix}",
+        )
+
+        Y_pt = (
+            torch.nn.functional.linear(self.X_pt, self.W_pt, bias=self.B_pt)
+            + self.D0_pt
+        )
+        self._test_and_verify(module, Y_pt, dtype)
+
     def test_bias_rcr_add(self):
         self._test_bias_rcr_add(8, None, None, 8, 8)
         self._test_bias_rcr_add(None, 2, 32, 256, 128)
         self._test_bias_rcr_add(None, 21, 5, 1024, 512)
 
+    def test_bias_rcr_add_rvv(self):
+        self._test_bias_rcr_add_rvv(8, None, None, 8, 8)
+        self._test_bias_rcr_add_rvv(None, 2, 32, 256, 128)
+        self._test_bias_rcr_add_rvv(None, 21, 5, 1024, 512)
+
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_add_rocm(self):
         self._test_bias_rcr_add(8, None, None, 8, 8, test_name_suffix="_rocm")
 
@@ -257,12 +296,12 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
             + self.D0_pt
         )
         self._test_and_verify(module, Y_pt, dtype)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_add_relu(self):
         self._test_bias_rcr_add_relu(8, None, None, 8, 8)
         self._test_bias_rcr_add_relu(None, 2, 32, 256, 128)
         self._test_bias_rcr_add_relu(None, 21, 5, 1024, 512)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_add_relu_rocm(self):
         self._test_bias_rcr_add_relu(8, None, None, 8, 8, test_name_suffix="_rocm")
 
@@ -295,7 +334,7 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
             + self.D1_pt
         )
         self._test_and_verify(module, Y_pt, dtype, has_d1=True)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_add_add_relu(self):
         self._test_bias_rcr_add_add_relu(8, None, None, 8, 8)
         self._test_bias_rcr_add_add_relu(None, 2, 32, 256, 128)
@@ -307,7 +346,7 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
         target = detect_target()
         if type(target).__name__ != "FBCUDA":
             self._test_bias_rcr_add_add_relu(21, None, None, 0, 512)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_add_add_relu_rocm(self):
         self._test_bias_rcr_add_add_relu(8, None, None, 8, 8, test_name_suffix="_rocm")
 
@@ -340,12 +379,12 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
             * self.D0_pt
         )
         self._test_and_verify(module, Y_pt, dtype)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_mul(self):
         self._test_bias_rcr_mul(8, None, None, 8, 8)
         self._test_bias_rcr_mul(None, 2, 32, 256, 128)
         self._test_bias_rcr_mul(None, 21, 5, 1024, 512)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_mul_rocm(self):
         self._test_bias_rcr_mul(8, None, None, 8, 8, test_name_suffix="_rocm")
 
@@ -378,13 +417,13 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
             + self.D1_pt
         )
         self._test_and_verify(module, Y_pt, dtype, has_d1=True)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_add_add(self):
         self._test_bias_rcr_add_add(8, None, None, 8, 8)
         self._test_bias_rcr_add_add(None, 2, 32, 256, 128)
         self._test_bias_rcr_add_add(None, 21, 5, 1024, 512)
         self._test_bias_rcr_add_add(None, 0, 5, 1024, 512)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_add_add_rocm(self):
         self._test_bias_rcr_add_add(8, None, None, 8, 8, test_name_suffix="_rocm")
 
@@ -416,15 +455,15 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
             * self.D0_pt
         )
         self._test_and_verify(module, Y_pt, dtype)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_mul_tanh(self):
         self._test_bias_rcr_mul_tanh(8, None, None, 8, 8)
         self._test_bias_rcr_mul_tanh(None, 2, 32, 256, 128)
         self._test_bias_rcr_mul_tanh(None, 21, 5, 1024, 512)
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_bias_rcr_mul_tanh_rocm(self):
         self._test_bias_rcr_mul_tanh(8, None, None, 8, 8, test_name_suffix="_rocm")
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     @parameterized.expand(
         [
             (_test_bias_rcr_mul_add, None, 2, 32, 256, 128, "float32"),
@@ -449,7 +488,7 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
             n=n,
             dtype=dtype,
         )
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     @parameterized.expand(
         [
             (_test_bias_rcr_mul_add, None, 2, 32, 256, 128, "bfloat16"),
@@ -474,7 +513,7 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
             n=n,
             dtype=dtype,
         )
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     @parameterized.expand(
         [
             (_test_bias_rcr_mul_add, None, 2, 32, 256, 128),
@@ -547,7 +586,7 @@ class GEMMBiasBroadcastTestCase(unittest.TestCase):
                 dtype="bfloat16",
                 test_name_suffix="_force_sm90",
             )
-
+    @unittest.skipIf(detect_target().name() == "rvv", "Not supported by RVV.")
     def test_gemm_bias_broadcast_use_fp16_acc_sm80(self):
         self._test_bias_rcr_mul(
             m=None,

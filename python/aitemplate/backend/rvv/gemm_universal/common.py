@@ -192,6 +192,7 @@ EXEC_TEMPLATE = jinja2.Template(
     """
 
 //{{instance}}
+{{instances}}
 {{indent}}return;
 """
 )

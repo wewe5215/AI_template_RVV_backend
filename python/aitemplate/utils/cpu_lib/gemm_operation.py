@@ -19,9 +19,8 @@ from enum import auto
 from typing import List
 
 import jinja2
-
 from aitemplate.utils.cpu_lib import library
-
+from aitemplate.utils.cpu_lib.conv2d_common import BINARY_OP_KIND, RELU_KINDS, RELU6_KINDS
 # import library
 # TODO : flag should be enabled for transposed weight
 template = jinja2.Template(
@@ -43,6 +42,29 @@ template = jinja2.Template(
 """
 )
 
+binary_func_minmax_flag_op = jinja2.Template(
+"""
+{{indent}}xnn_operator_t binary_func_minmax_flag_op = nullptr;
+{% if is_relu %}
+{{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{operation}}_{{DataType}}(0, std::numeric_limits<{{DataName}}>::infinity(), 0, &binary_func_minmax_flag_op));
+{% elif is_relu6 %}
+{{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{operation}}_{{DataType}}(0, 6, 0, &binary_func_minmax_flag_op));
+{% else %}
+{{indent}}CHECK_EQ(xnn_status_success, xnn_create_{{operation}}_{{DataType}}(-std::numeric_limits<{{DataName}}>::infinity(), std::numeric_limits<{{DataName}}>::infinity(), 0, &binary_func_minmax_flag_op));
+{% endif %}
+{{indent}}std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_binary_func_minmax_flag_op(binary_func_minmax_flag_op, xnn_delete_operator);
+{{indent}}const size_t a_shape[] = { (size_t)M, (size_t)N};
+{{indent}}const size_t b_shape[] = { (size_t)M, (size_t)N};
+{{indent}}CHECK_EQ(
+{{indent}}xnn_status_success, xnn_reshape_{{operation}}_{{DataType}}(
+{{indent}}                        binary_func_minmax_flag_op, 2, a_shape, 2, b_shape,
+{{indent}}                        /*threadpool=*/pthreadpool_));
+{{indent}}CHECK_EQ(
+{{indent}}  xnn_status_success, xnn_setup_{{operation}}_{{DataType}}(binary_func_minmax_flag_op, ({{DataName}}*)(d0_ptr), ({{DataName}}*)(c_ptr), ({{DataName}}*)(c_ptr)));
+{{indent}}CHECK_EQ(xnn_status_success, xnn_run_operator(binary_func_minmax_flag_op, /*threadpool=*/pthreadpool_));
+"""
+)
+
 code_snippet = jinja2.Template(
 """
 {% if not is_bias %}
@@ -50,6 +72,7 @@ code_snippet = jinja2.Template(
 {{indent}}std::memset(bias_ptr, 0, N * sizeof({{DataName}}));
 {% endif %}
 {{gemm}}
+{{extra_kind}}
 {% if not is_bias %}
 {{indent}}free(bias_ptr);
 {% endif %}
@@ -122,7 +145,23 @@ class GemmOperation:
         return library.DataType.f32
 
     def emit(self) -> str:
-        
+        def generate_binary_op(operation_kind, operation_type, element, template_kind):
+            return template_kind.render(
+                indent="  ",
+                is_relu = (self.operation_kind in RELU_KINDS),
+                is_relu6 = (self.operation_kind in RELU6_KINDS),
+                operation = library.TensorOperationTag[operation_type],
+                DataType = library.DataTypeNames[element],
+                DataName = library.DataTypeTag[element],
+            )
+        def generate_tensorOP(operation_kind, operation_type, element):
+            code_gen = ""
+            if operation_type == library.TensorOperation.PassThrough:
+                code_gen = ""
+            # add, mul, div, sub without quantization
+            elif (operation_type in BINARY_OP_KIND) :
+                code_gen = generate_binary_op(operation_kind, operation_type, element, binary_func_minmax_flag_op)
+            return code_gen
         gemm = template.render(
             name=self.__str__(),
             gemm_kind=library.GemmKindNames[self.operation_kind],
@@ -131,12 +170,14 @@ class GemmOperation:
             epilogue_func=library.TensorOperationTag[self.epilogue_functor],
         )
         is_bias = False
-        if self.operation_kind == library.GemmKind.GemmBias:
+        if self.operation_kind == library.GemmKind.GemmBias or self.operation_kind == library.GemmKind.GemmBiasAdd:
           is_bias = True
+        extra_kind_code = generate_tensorOP(self.operation_kind, self.extra_kind, self.A.element)
         program = code_snippet.render(
             is_bias = is_bias,
             DataName = library.DataTypeTag[self.A.element],
             gemm = gemm,
+            extra_kind=extra_kind_code
         )
         return program
 
