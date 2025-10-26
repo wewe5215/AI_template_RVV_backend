@@ -20,10 +20,19 @@ import logging
 import math
 import os
 import unittest
-
+import numpy as np
+import os
 import torch
 import torch.nn.functional as F
-
+from aitemplate.utils.remote_send_receive_files import (
+    transfer_folder, 
+    check_remote_file_exists, 
+    retrieve_confirmation_file, 
+    poll_for_confirmation,
+    TARGET_USER,
+    TARGET_IP,
+    remote_run_program_send_back_result
+)
 from aitemplate.compiler import compile_model, Model, ops
 from aitemplate.compiler.ops.common.epilogue import FuncEnum
 from aitemplate.frontend import IntVar, Tensor
@@ -195,7 +204,7 @@ def ref_attention_bmhk(q, k, v, attn_bias):
     return out.permute((0, 2, 1, 3))
 
 def test_flash_attention_rvv(
-        batch_size=16,
+        batch_size=1,
         nheads=16,
         seqlen=1024,
         n=1024,
@@ -275,35 +284,54 @@ def test_flash_attention_rvv(
             Y = flash_attention_op(X1, X2)
             Y._attrs["is_output"] = True
             Y._attrs["name"] = "output"
-
-            if rebuild:
-                target = detect_target()
-                module = compile_model(Y, target, "./tmp", test_name)
-            else:
-                module = Model(os.path.join("./tmp", test_name, "test.so"))
-
             x1 = qkv_unpad.to(torch_dtype)
             x2 = cu_seqlens.to(torch.int32)
-            inputs = {"qkv": x1, "cu_seqlens": x2}
             y = torch.empty(
                 [total, num_heads, head_size],
                 dtype=torch_dtype,
             )
-            module.run_with_tensors(inputs, [y])
-
-            # # Warm up.
+            if dt.IS_REMOTE_COMPILE is False:
+                if rebuild:
+                    target = detect_target(xnnpack_path="/Users/wewe5215/Desktop/XNNPACK")
+                    module = compile_model(Y, target, "./tmp", test_name)
+                else:
+                    module = Model(os.path.join("./tmp", test_name, "test.so"))
+                inputs = {"qkv": x1, "cu_seqlens": x2}
+                module.run_with_tensors(inputs, [y])
+                y = y.reshape((batch_size, -1, nheads, d))
+            else:
+                target = detect_target()
+                module = compile_model(Y, target, "./tmp", test_name, remote_compile=dt.IS_REMOTE_COMPILE)
+                io_data = {}
+                io_data["qkv"] = x1.cpu().numpy()
+                io_data["cu_seqlens"] = x2.cpu().numpy()
+                io_data["y"] = y.cpu().numpy()
+                metadata_folder = f"metadata_{test_name}_{batch_size}"
+                if not os.path.exists(metadata_folder):
+                    os.makedirs(metadata_folder, exist_ok=True)
+                    print(f"Created directory: {metadata_folder}")
+                else:
+                    print(f"Directory already exists: {metadata_folder}")
+                target_dir  = f"/home/{TARGET_USER}/Desktop/AITemplate_Benchmark_on_XNNPACK"
+                io_file = f"{metadata_folder}/io_tensors_{batch_size}.npz"
+                np.savez_compressed(io_file, **io_data)
+                transfer_folder(metadata_folder, TARGET_USER, TARGET_IP, target_dir)
+                remote_run_program_send_back_result(target_dir, "static/test_correctness_flash_atten_on_riscv.py", test_name, batch_size)
+                output_file = f"output_file_{test_name}_{batch_size}.npz"
+                output_np = np.load(output_file, allow_pickle=True)
+                y = torch.from_numpy(output_np["y_output"].reshape((batch_size, -1, nheads, d)))
+            # Warm up.
             # for _ in range(5):
             #     module.run_with_tensors(inputs, [y])
             # # Benchmark.
             # time_per_iter_ms, time_std, _ = module.benchmark_with_tensors(
             #     inputs,
             #     [y],
-            #     count=100,
+            #     count=10,
             # )
             # _LOGGER.info(f"benchmark flash-attn time: {time_per_iter_ms}")
-
-            y = y.reshape((batch_size, -1, nheads, d))
-            torch.testing.assert_close(y, y_pt, atol=1e-3, rtol=1e-3)
+            torch.testing.assert_close(y, y_pt, atol=1e-6, rtol=1e-6)
+            print("pass!!!")
             if benchmark_pt:
                 from aitemplate.testing.benchmark_pt import benchmark_torch_function
 
@@ -322,6 +350,8 @@ def test_flash_attention_rvv(
 import importlib
 dt = importlib.import_module("aitemplate.testing.detect_target")
 dt.IS_CPU_BACKEND = True
+dt = importlib.import_module("aitemplate.compiler.compiler")
+dt.IS_REMOTE_COMPILE = True
 class AttentionTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -1138,6 +1168,6 @@ class AttentionTestCase(unittest.TestCase):
             rtol=rtol,
         )
 
-
 if __name__ == "__main__":
-    unittest.main()
+    # unittest.main()
+    test_flash_attention_rvv(rebuild=True)
