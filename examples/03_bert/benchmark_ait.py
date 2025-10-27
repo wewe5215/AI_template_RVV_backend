@@ -30,8 +30,16 @@ import importlib
 dt = importlib.import_module("aitemplate.testing.detect_target")
 dt.IS_CPU_BACKEND = True
 dt = importlib.import_module("aitemplate.compiler.compiler")
-dt.IS_REMOTE_COMPILE = False
-
+dt.IS_REMOTE_COMPILE = True
+from aitemplate.utils.remote_send_receive_files import (
+    transfer_folder, 
+    check_remote_file_exists, 
+    retrieve_confirmation_file, 
+    poll_for_confirmation,
+    TARGET_USER,
+    TARGET_IP,
+    remote_run_program_send_back_result
+)
 def mark_output(y: Tensor) -> None:
     if type(y) is not tuple:
         y = (y,)
@@ -149,29 +157,57 @@ def benchmark(
     mod: Model,
     graph_mode: bool,
     encoders_only: bool,
+    activation: str,
 ):
     if encoders_only:
         inputs = create_bert_encoders_inputs_pt(batch_size, seq_length, hidden_size)
     else:
         inputs = create_bert_inputs_pt(batch_size, seq_length)
-    outputs = [torch.empty(mod.get_output_maximum_shape(0))]
+    if dt.IS_REMOTE_COMPILE == False:
+        outputs = [torch.empty(mod.get_output_maximum_shape(0))]
+        # warm up
+        t, _, __ = mod.benchmark_with_tensors(
+            inputs,
+            outputs,
+            count=100,
+            repeat=4,
+            graph_mode=graph_mode,
+        )
+        # benchmark
+        t, _, __ = mod.benchmark_with_tensors(
+            inputs,
+            outputs,
+            count=100,
+            repeat=4,
+            graph_mode=graph_mode,
+        )
+    else:
+        model_name = f"BERT_{activation}_{batch_size}_{seq_length}"
+        metadata_folder = f"metadata_{model_name}_{batch_size}"
+        io_file = f"{metadata_folder}/io_tensors_{batch_size}.npz"
+        x_input_np = {}
+        for name, tensor in inputs.items():
+            # Move to CPU and detach if it's a tensor
+            if hasattr(tensor, "cpu"):
+                array = tensor.detach().cpu().numpy()
+            else:
+                # already a NumPy array, scalar, or something else
+                array = np.array(tensor)
 
-    # warm up
-    t, _, __ = mod.benchmark_with_tensors(
-        inputs,
-        outputs,
-        count=100,
-        repeat=4,
-        graph_mode=graph_mode,
-    )
-    # benchmark
-    t, _, __ = mod.benchmark_with_tensors(
-        inputs,
-        outputs,
-        count=100,
-        repeat=4,
-        graph_mode=graph_mode,
-    )
+            # Cast to float32 *only* if it’s a floating type
+            if np.issubdtype(array.dtype, np.floating):
+                array = array.astype(np.float32)
+            elif np.issubdtype(array.dtype, np.integer):
+                array = array.astype(np.int64)   # or np.int64 if your model expects that
+            # you can add more cases if needed (bool, etc.)
+            elif np.issubdtype(array.dtype, np.bool_):
+                array = array.astype(np.bool_)
+
+            x_input_np[name] = array
+        y_ait = torch.zeros([batch_size, seq_length, hidden_size], dtype=torch.float32, device="cpu")
+        y_output_np = y_ait.cpu().detach().numpy().astype(np.float32)
+        io_data = {"x_input": x_input_np, "y_output": y_output_np}
+        np.savez_compressed(io_file, **io_data)
     print(f"batch_size: {batch_size}, seq_length: {seq_length}, latency: {t}")
     dev_flag = os.environ.get("HIP_VISIBLE_DEVICES", "-1")
     dev_flag = dev_flag.replace(",", "_")
@@ -187,9 +223,14 @@ def compile_module(
     use_fp16_acc: bool,
     encoders_only: bool,
     pt_model: torch.nn.Module,
+    is_remote_compile: bool,
+    metadata_folder: str,
 ) -> None:
     model_name = f"BERT_{activation}_{batch_size}_{seq_length}"
-    target = detect_target(use_fp16_acc=use_fp16_acc, xnnpack_path="/Users/wewe5215/Desktop/XNNPACK", is_remote_compile=False)
+    if is_remote_compile:
+        target = detect_target(use_fp16_acc=use_fp16_acc)
+    else:
+        target = detect_target(use_fp16_acc=use_fp16_acc, xnnpack_path="/Users/wewe5215/Desktop/XNNPACK", is_remote_compile=is_remote_compile)
 
     if encoders_only:
         inputs = create_bert_encoders_input(batch_size, seq_length, hidden_size)
@@ -210,11 +251,33 @@ def compile_module(
 
     params = map_pt_params(model, pt_model, batch_size, seq_length)
 
-    mod = compile_model(y, target, "./tmp", model_name)
+    mod = compile_model(y, target, "./tmp", model_name, remote_compile=is_remote_compile)
 
-    mod.set_many_constants_with_tensors(params)
-    mod.fold_constants(sync=True)
+    if is_remote_compile == False:
+        mod.set_many_constants_with_tensors(params)
+        mod.fold_constants(sync=True)
+    else:
+        np_weights = {}
+        for name, tensor in params.items():
+            # Move to CPU and detach if it's a tensor
+            if hasattr(tensor, "cpu"):
+                array = tensor.detach().cpu().numpy()
+            else:
+                # already a NumPy array, scalar, or something else
+                array = np.array(tensor)
 
+            # Cast to float32 *only* if it’s a floating type
+            if np.issubdtype(array.dtype, np.floating):
+                array = array.astype(np.float32)
+            elif np.issubdtype(array.dtype, np.integer):
+                array = array.astype(np.int32)   # or np.int64 if your model expects that
+            # you can add more cases if needed (bool, etc.)
+            elif np.issubdtype(array.dtype, np.bool_):
+                array = array.astype(np.bool_)
+
+            np_weights[name] = array
+        weights_file = f"{metadata_folder}/weights_file_{batch_size}.npz"
+        np.savez_compressed(weights_file, **np_weights)
     return mod
 
 
@@ -224,7 +287,7 @@ def compile_module(
 @click.option(
     "--activation",
     type=str,
-    default="fast_gelu",
+    default="gelu",
     help="Activation function applied on BERT, currently only support fast_gelu on Rocm. CUDA supports both gelu and fast_gelu. No effect if framework is pt.",
 )
 @click.option(
@@ -292,10 +355,11 @@ def compile_and_benchmark(
                 use_fp16_acc,
                 encoders_only,
                 pt_model,
+                is_remote_compile = dt.IS_REMOTE_COMPILE
             )
-            benchmark(bs, seq_length, hidden_size, mod, graph_mode, encoders_only)
+            benchmark(bs, seq_length, hidden_size, mod, graph_mode, encoders_only, activation)
 
 
 if __name__ == "__main__":
     torch.manual_seed(4896)
-    compile_and_benchmark()
+    compile_and_benchmark(batch_size=1, seq_length = 64)
