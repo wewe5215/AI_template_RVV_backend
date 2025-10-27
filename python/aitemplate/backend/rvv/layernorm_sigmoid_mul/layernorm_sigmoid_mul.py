@@ -33,14 +33,16 @@ FUNC_TEMPLATE = jinja2.Template(
     """
 #include "logging.h"
 #include "xnnpack.h"
-#include "rvv_utils.h"
 #include <assert.h>
 #include <cmath>
 #include <iostream>
 #include <vector>
 #include <cmath>
 #include <cassert>
+{% if is_remote_compile %}
+#include "rvv_utils.h"
 #include <riscv_vector.h>
+{% endif %}
 #include <thread>
 #include <pthreadpool.h>
 template<typename T>
@@ -78,7 +80,7 @@ void layer_norm(
         }
     }
 }
-
+{% if is_remote_compile %}
 template<>
 void layer_norm<float>(
     float* input,
@@ -172,7 +174,7 @@ void layer_norm<float>(
     xnn_status_success, xnn_setup_transpose_nd_x32(transpose_op, output_T.data(), output));
     CHECK_EQ(xnn_status_success, xnn_run_operator(transpose_op, /*threadpool=*/pthreadpool_));
 }
-
+{% endif %}
 {{func_signature}}
 {
     float* in = static_cast<float*>(input);
@@ -223,10 +225,11 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 @registry.reg("rvv.layernorm.gen_function")
 def layernorm_gen_function(func_attrs: Dict[str, Any]) -> str:
     backend_spec = RVVSpec()
-
+    from aitemplate.compiler.compiler import IS_REMOTE_COMPILE
     return FUNC_TEMPLATE.render(
         func_signature=FUNC_SIGNATURE.render(func_name=func_attrs["name"]),
         fuse_sigmoid_mul=False,
+        is_remote_compile=IS_REMOTE_COMPILE,
     )
 
 
