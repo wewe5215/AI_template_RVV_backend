@@ -45,6 +45,8 @@ FUNC_TEMPLATE = jinja2.Template(
 {% endif %}
 #include <thread>
 #include <pthreadpool.h>
+
+{% if is_remote_compile == False %}
 template<typename T>
 void layer_norm(
     T* input,
@@ -80,18 +82,14 @@ void layer_norm(
         }
     }
 }
+{% endif %}
+{{func_signature}}
+{
+    float* in = static_cast<float*>(input);
+    float* out_f32 = static_cast<float*>(output);
+    int hidden_size = n;
+    float epsilon = eps;
 {% if is_remote_compile %}
-template<>
-void layer_norm<float>(
-    float* input,
-    float* output,
-    const float* gamma,
-    const float* beta,
-    int m,
-    int hidden_size,
-    float epsilon,
-    pthreadpool* pthreadpool_
-) {
     uint32_t nr = __riscv_vsetvlmax_e32m8();
     uint32_t nr_byte = nr << 2;
     std::vector<float> kernel_packed(hidden_size * round_up(m, nr));
@@ -99,7 +97,7 @@ void layer_norm<float>(
     xnn_x32_pack_transpose_ukernel_x8v__rvv_u8(
         /*g=*/1, m, hidden_size,
         nr, 1, 1,
-        reinterpret_cast<uint32_t*>(input),
+        reinterpret_cast<uint32_t*>(in),
         /*scale=*/nullptr,
         reinterpret_cast<uint32_t*>(kernel_packed.data()),
         /*extra_bytes=*/0,
@@ -171,19 +169,15 @@ void layer_norm<float>(
     xnn_status_success, xnn_reshape_transpose_nd_x32(
     transpose_op, shape.size(), shape.data(), perm.data(), pthreadpool_));
     CHECK_EQ(
-    xnn_status_success, xnn_setup_transpose_nd_x32(transpose_op, output_T.data(), output));
+    xnn_status_success, xnn_setup_transpose_nd_x32(transpose_op, output_T.data(), out_f32));
     CHECK_EQ(xnn_status_success, xnn_run_operator(transpose_op, /*threadpool=*/pthreadpool_));
-}
-{% endif %}
-{{func_signature}}
-{
-    float* in = static_cast<float*>(input);
-    float* out = static_cast<float*>(output);
+{% else %}
     layer_norm<float>(
-      in, out,
+      in, out_f32,
       gamma, beta,
       m, n, eps, pthreadpool_
     );
+{% endif %}
 
     return;
 }

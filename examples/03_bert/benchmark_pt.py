@@ -86,7 +86,7 @@ def benchmark_pt_encoders_only(pretrained=True, batchsize=0):
         for batch_size in candidate_batch_sizes:
             try:
                 encoder_input = (
-                    torch.randn([batch_size, seq_length, hidden_size]).cuda().half()
+                    torch.randn([batch_size, seq_length, hidden_size])
                 )
                 encoder.forward(encoder_input)
                 # warmup

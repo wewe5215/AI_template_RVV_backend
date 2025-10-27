@@ -12,6 +12,30 @@ import re
 if "numpy._core" not in sys.modules:
     sys.modules["numpy._core"] = np.core
 
+def load_data_bert(batch_size, model_name):
+    folder = f"metadata_{model_name}_{batch_size}"
+    weights_file = f"{folder}/weights_file_{batch_size}.npz"
+    io_file = f"{folder}/io_tensors_{batch_size}.npz"
+    
+    
+    if not os.path.exists(weights_file):
+        raise FileNotFoundError(f"Weight file not found: {weights_file}")
+    if not os.path.exists(io_file):
+        raise FileNotFoundError(f"Input tensor file not found: {io_file}")
+    
+    weight_data = np.load(weights_file, allow_pickle=True)
+    # The data is accessible via its keys:
+    weights = {key: FakeTorchTensor(weight_data[key]) for key in weight_data.files}
+    
+    # Depending on your shared library, you might need to convert tensors to numpy arrays.
+    data = np.load(io_file, allow_pickle=True)
+    x_input_obj = data["x_input"]
+    x_input = x_input_obj.item() if getattr(x_input_obj, "dtype", None) == object else x_input_obj
+    x_input = {k: FakeTorchTensor(v) for k, v in x_input.items()}
+    y_output = FakeTorchTensor(data["y_output"])
+
+    print(f"[Target] Loaded weights, input, and output data")
+    return weights, x_input, y_output
 
 def load_data(batch_size, model_name):
     folder = f"metadata_{model_name}_{batch_size}"
@@ -39,15 +63,22 @@ def load_data(batch_size, model_name):
 
 def run(model_name, batch_size, mod=None, graph_mode=True):
 #    match = re.search(r'(resnet(?:18|34|50|101|152))$', model_name)
-    weights, x_input, y_output = load_data(batch_size, model_name)
-    model_name = f"{model_name}_{batch_size}"
-    mod = Model(os.path.join(f"./{model_name}", "test.so"))
-    for name, param in weights.items():
-            mod.set_constant_with_tensor(name, param)
-
-
-    mod.fold_constants(sync=True)
-    mod.run_with_tensors([x_input], [y_output])
+    if "BERT" in model_name:
+        weights, x_input, y_output = load_data_bert(batch_size, model_name)
+        mod = Model(os.path.join(f"./{model_name}", "test.so"))
+        for name, param in weights.items():
+                mod.set_constant_with_tensor(name, param)
+        mod.fold_constants(sync=True)
+        mod.run_with_tensors(x_input, [y_output])
+        model_name = f"{model_name}_{batch_size}"
+    else:
+        model_name = f"{model_name}_{batch_size}"
+        weights, x_input, y_output = load_data(batch_size, model_name)
+        mod = Model(os.path.join(f"./{model_name}", "test.so"))
+        for name, param in weights.items():
+                mod.set_constant_with_tensor(name, param)
+        mod.fold_constants(sync=True)
+        mod.run_with_tensors([x_input], [y_output])
 
     output_file = f"output_file_{model_name}.npz"
     y_output_np = y_output.cpu().detach().numpy().astype(np.float32)

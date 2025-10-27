@@ -18,7 +18,7 @@ import unittest
 
 import torch
 
-from .demo import run_model
+from demo import run_model
 
 try:
     from libfb.py.asyncio.await_utils import await_sync
@@ -46,7 +46,7 @@ class BertBaseUncasedTest(unittest.TestCase):
                 )
         run_model(
             prompt="The quick brown fox jumps over the lazy dog.",
-            activation="fast_gelu",
+            activation="gelu",
             graph_mode=True,
             use_fp16_acc=True,
             verify=True,

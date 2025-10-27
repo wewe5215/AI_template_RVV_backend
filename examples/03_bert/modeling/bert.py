@@ -19,9 +19,11 @@ from aitemplate.frontend import nn, Tensor
 from aitemplate.testing import detect_target
 
 # pylint: disable=W0102
-
+import importlib
+dt = importlib.import_module("aitemplate.testing.detect_target")
+dt.IS_CPU_BACKEND = True
 USE_CUDA = detect_target().name() == "cuda"
-
+USE_RVV = detect_target().name() == "rvv"
 
 class BertSelfOutput(nn.Module):
     def __init__(self, hidden_size, layer_norm_eps):
@@ -32,7 +34,7 @@ class BertSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
 
     def forward(self, hidden_states: Tensor) -> Tensor:
-        if not USE_CUDA:
+        if not USE_CUDA and not USE_RVV:
             hidden_states = (
                 hidden_states
                 if hidden_states._rank() == 2

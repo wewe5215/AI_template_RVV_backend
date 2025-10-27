@@ -20,9 +20,9 @@ class BertBaseUncased:
     def __init__(self, model_path="bert-base-uncased", pretrained=True):
         if not pretrained:
             pretrained = AutoModelForMaskedLM.from_pretrained(model_path)
-            self._model = BertForMaskedLM(pretrained.config).cuda().half()
+            self._model = BertForMaskedLM(pretrained.config)
         else:
-            self._model = AutoModelForMaskedLM.from_pretrained(model_path).cuda().half()
+            self._model = AutoModelForMaskedLM.from_pretrained(model_path)
         self._vocab_size = 30522
 
     def forward(self, *args, **kwargs):
@@ -34,14 +34,13 @@ class BertBaseUncased:
         dtype = torch.long
         input_ids = torch.randint(
             0, self._vocab_size, (batch_size, seq_len), dtype=dtype
-        ).cuda()
-        token_type_ids = torch.zeros(input_ids.size(), dtype=dtype).cuda()
+        )
+        token_type_ids = torch.zeros(input_ids.size(), dtype=dtype)
         position_ids = (
             torch.arange(seq_len, dtype=dtype)
             .reshape((1, -1))
             .expand(batch_size, -1)
             .contiguous()
-            .cuda()
         )
         return (input_ids, token_type_ids, position_ids)
 

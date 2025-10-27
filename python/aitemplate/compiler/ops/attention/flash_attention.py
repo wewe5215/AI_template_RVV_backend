@@ -25,7 +25,7 @@ from aitemplate import backend
 from aitemplate.backend import registry
 from aitemplate.compiler.base import Operator, Tensor
 from aitemplate.utils import shape_utils
-
+from aitemplate.testing import detect_target
 # pylint: disable=C0103,W0221,W0102,W0223
 
 SHAPE_FUNC_TEMPLATE = jinja2.Template(
@@ -144,14 +144,17 @@ class flash_attention(Operator):
         assert head_size in [8, 16, 32, 64, 128]
         self._attrs["head_size"] = head_size
 
-        base_N = 256  # SM80
-        if max_seq_len <= 128:
-            seq_len = 128
-        elif max_seq_len <= 256:
-            seq_len = 256
+        if detect_target().name() == "cuda":
+            base_N = 256  # SM80
+            if max_seq_len <= 128:
+                seq_len = 128
+            elif max_seq_len <= 256:
+                seq_len = 256
+            else:
+                seq_len = ((max_seq_len + base_N - 1) // base_N) * base_N
         else:
-            seq_len = ((max_seq_len + base_N - 1) // base_N) * base_N
-        self._attrs["seq_len"] = seq_len
+            seq_len = max_seq_len
+            self._attrs["seq_len"] = max_seq_len
 
         self._attrs["workspace"] = (
             4 * num_heads * (total * head_size + batch_size * seq_len)

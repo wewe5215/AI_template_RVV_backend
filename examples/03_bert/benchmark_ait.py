@@ -24,9 +24,13 @@ from aitemplate.compiler import compile_model, Model
 from aitemplate.frontend import Tensor
 from aitemplate.testing import detect_target
 
-from .modeling.bert import BertBaseEncodersOnly, BertBaseUncased
-from .modeling.torch_model import BertBaseUncased as BertPt
-
+from modeling.bert import BertBaseEncodersOnly, BertBaseUncased
+from modeling.torch_model import BertBaseUncased as BertPt
+import importlib
+dt = importlib.import_module("aitemplate.testing.detect_target")
+dt.IS_CPU_BACKEND = True
+dt = importlib.import_module("aitemplate.compiler.compiler")
+dt.IS_REMOTE_COMPILE = False
 
 def mark_output(y: Tensor) -> None:
     if type(y) is not tuple:
@@ -63,7 +67,7 @@ def create_bert_inputs(
 
 
 def create_bert_encoders_input(
-    batch_size: int, seq_length: int, hidden: int, dtype: str = "float16"
+    batch_size: int, seq_length: int, hidden: int, dtype: str = "float32"
 ):
     encoder_input = Tensor(
         shape=[batch_size, seq_length, hidden],
@@ -77,9 +81,9 @@ def create_bert_encoders_input(
 def create_bert_inputs_pt(
     batch_size: int, seq_length: int, dtype: torch.dtype = torch.int64
 ) -> Dict[str, torch.Tensor]:
-    input_ids = torch.randn(batch_size, seq_length).to(dtype).cuda()
-    token_type_ids = torch.randn(batch_size, seq_length).to(dtype).cuda()
-    position_ids = torch.randn(batch_size, seq_length).to(dtype).cuda()
+    input_ids = torch.randn(batch_size, seq_length).to(dtype)
+    token_type_ids = torch.randn(batch_size, seq_length).to(dtype)
+    position_ids = torch.randn(batch_size, seq_length).to(dtype)
 
     return {
         "input_ids": input_ids,
@@ -91,7 +95,7 @@ def create_bert_inputs_pt(
 def create_bert_encoders_inputs_pt(
     batch_size: int, seq_length: int, hidden_size: int
 ) -> Dict[str, torch.Tensor]:
-    encoder_input = torch.randn([batch_size, seq_length, hidden_size]).cuda().half()
+    encoder_input = torch.randn([batch_size, seq_length, hidden_size])
     return {"input": encoder_input}
 
 
@@ -130,7 +134,7 @@ def map_pt_params(
             mapped_pt_params[ait_name] = pt_params[pt_name]
         elif name.endswith("cu_length"):
             cu_len = np.cumsum([0] + [seq_length] * batch_size).astype("int32")
-            mapped_pt_params[ait_name] = torch.from_numpy(cu_len).cuda()
+            mapped_pt_params[ait_name] = torch.from_numpy(cu_len)
         else:
             pt_param = pt_bert.get_parameter(name)
             mapped_pt_params[ait_name] = pt_param
@@ -150,7 +154,7 @@ def benchmark(
         inputs = create_bert_encoders_inputs_pt(batch_size, seq_length, hidden_size)
     else:
         inputs = create_bert_inputs_pt(batch_size, seq_length)
-    outputs = [torch.empty(mod.get_output_maximum_shape(0)).cuda().half()]
+    outputs = [torch.empty(mod.get_output_maximum_shape(0))]
 
     # warm up
     t, _, __ = mod.benchmark_with_tensors(
@@ -185,7 +189,7 @@ def compile_module(
     pt_model: torch.nn.Module,
 ) -> None:
     model_name = f"BERT_{activation}_{batch_size}_{seq_length}"
-    target = detect_target(use_fp16_acc=use_fp16_acc)
+    target = detect_target(use_fp16_acc=use_fp16_acc, xnnpack_path="/Users/wewe5215/Desktop/XNNPACK", is_remote_compile=False)
 
     if encoders_only:
         inputs = create_bert_encoders_input(batch_size, seq_length, hidden_size)
