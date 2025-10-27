@@ -57,6 +57,7 @@ class RVV(Target):
         arch="rv64gcv1_zfh_zvfh",
         RVV_version=None,
         ait_static_files_path=AIT_STATIC_FILES_PATH_CPU,
+        is_remote_compile=True,
         **kwargs,
     ):
         """RVV target init.
@@ -74,6 +75,7 @@ class RVV(Target):
         self._ait_include_path = ait_static_files_path
         self._arch = arch
         self._kwargs = kwargs
+        self._is_remote_compile = is_remote_compile
         self._compile_options = self._build_compile_options()
         self._link_options = self._build_link_options()
         if RVV_version is None:
@@ -131,8 +133,8 @@ class RVV(Target):
             os.path.join(self._pkg_path(), "cpuinfo"),
             os.path.join(self._pkg_path(), "pthreadpool"),
         ]
-        # if is_macos():
-        #     xnnpack_path.append(os.path.join(self._pkg_path(), "kleidiai"))
+        if is_macos() and self._is_remote_compile == False:
+            xnnpack_path.append(os.path.join(self._pkg_path(), "kleidiai"))
         return xnnpack_path
 
     def get_link_directories(self) -> List[str]:
@@ -142,7 +144,7 @@ class RVV(Target):
         options = [
             environ.get_compiler_opt_level(),
             "-std=c++17",
-            f"-march={self._arch}",
+            *(["-march=" + self._arch] if self._is_remote_compile else []),
             "-v",
         ]
         options.extend(self._get_clang_debug_options())
@@ -167,7 +169,10 @@ class RVV(Target):
         link_path = self.get_link_directories()
         for path in link_path:
             options.append("-L" + path)
-        options.append("-Wl,--start-group -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl,--end-group -g")
+        if self._is_remote_compile == False and is_macos():
+            options.append("-lxnnpack -lpthreadpool -lcpuinfo -lpthread -lkleidiai")
+        else:
+            options.append("-Wl,--start-group -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -Wl,--end-group -g")
         return " ".join(options)
 
     def src_extension(self):

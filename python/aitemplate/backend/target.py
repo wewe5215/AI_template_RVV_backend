@@ -446,7 +446,7 @@ class Target:
             csrc = os.path.join(self.static_files_path, "csrc")
             for fname in os.listdir(csrc):
                 fname_dst, ext = os.path.splitext(fname)
-                if ext != ".cpp":
+                if ext != ".cpp" or ("rvv_utils" in fname and self._is_remote_compile == False):
                     continue
                 # TODO: Remove this file when the linker error gets fixed in rocm backend.
                 # All files in csrc should be shared between the ROCM and CUDA backends.
@@ -475,7 +475,7 @@ class Target:
                 if ext != ".h":
                     continue
                 if "logging" not in fname:
-                    if self.name() == "rvv" and "rvv_utils" not in fname:
+                    if self.name() == "rvv" and ("rvv_utils" not in fname or self._is_remote_compile == False):
                         continue
                 fname_src = os.path.join(include, fname)
                 fname_dst = os.path.join(workdir, fname)

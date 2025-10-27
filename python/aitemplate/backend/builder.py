@@ -461,7 +461,13 @@ clean_constants:
         build_so_cmd = "$(CC) -shared $(fPIC_flag) $(CFLAGS) -o $@ $(obj_files)"
         for path in link_path:
             build_so_cmd += " -L" + path
-        build_so_cmd += " -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -g"
+        if Target.current().name() == "rvv":
+            if Target.current()._is_remote_compile == True:
+                build_so_cmd += " -lXNNPACK -lpthreadpool -lcpuinfo -lpthread -g"
+            else:
+                build_so_cmd += " -lxnnpack -lpthreadpool -lcpuinfo -lpthread -g"
+                if is_macos():
+                    build_so_cmd += " -lkleidiai"
         standalone_src = "standalone.cu"
         standalone_obj = "standalone.obj"
         windll_obj = "windll.obj"
