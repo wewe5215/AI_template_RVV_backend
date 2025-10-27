@@ -91,6 +91,7 @@ class MultiheadAttention(Module):
     """
 
     USE_CUDA = None
+    USE_RVV = None
 
     def __init__(
         self,
@@ -113,7 +114,8 @@ class MultiheadAttention(Module):
         ), f"dim {dim} should be divisible by num_heads {num_heads}"
         if MultiheadAttention.USE_CUDA is None:
             MultiheadAttention.USE_CUDA = detect_target().name() == "cuda"
-
+        if MultiheadAttention.USE_RVV is None:
+            MultiheadAttention.USE_RVV = detect_target().name() == "rvv"
         self.num_heads = num_heads
         head_dim = dim // num_heads
         self.scale = head_dim**-0.5
@@ -150,7 +152,7 @@ class MultiheadAttention(Module):
                 shape=[mask_seq, num_heads, head_dim], dtype=dtype
             )
 
-        if self.USE_CUDA:
+        if self.USE_CUDA or self.USE_RVV:
             # on CUDA flash_attention needs packed QKV as input,
             # then do split + permute inside flash_attn
             # input: (B, S, H)
@@ -192,7 +194,7 @@ class MultiheadAttention(Module):
         return shape
 
     def qkv_proj(self, x):
-        if self.USE_CUDA:
+        if self.USE_CUDA or self.USE_RVV:
             if self.use_flash:
                 batch, seq, hidden = self.get_shape(x)
                 out = self.qkv(x)
@@ -209,7 +211,7 @@ class MultiheadAttention(Module):
     def attention(self, x):
         # fused attention
         # output: (B, Seqlen, num_heads, head_dim)
-        if self.USE_CUDA and self.use_flash:
+        if (self.USE_CUDA or self.USE_RVV) and self.use_flash:
             # input(x): (B*seqlen, 3, num_heads, head_dim)
             # output: (B, Seqlen, num_heads, head_dim)
             return self.op(x, self.cu_length.tensor())
