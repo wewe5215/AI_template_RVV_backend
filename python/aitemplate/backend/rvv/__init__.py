@@ -28,7 +28,7 @@ from aitemplate.backend.rvv.conv2d_cnhw import *
 from aitemplate.backend.rvv.conv2d_cnhw_pruning import *
 # from aitemplate.backend.rvv.conv3d import *
 from aitemplate.backend.rvv.elementwise import *
-# from aitemplate.backend.rvv.embedding import *
+from aitemplate.backend.rvv.embedding import *
 # from aitemplate.backend.rvv.gemm_special import *
 from aitemplate.backend.rvv.gemm_universal import *
 # from aitemplate.backend.rvv.gemm_epilogue_vistor import *
@@ -43,6 +43,6 @@ from aitemplate.backend.rvv.tensor import *
 from aitemplate.backend.rvv.view_ops import *
 from aitemplate.backend.rvv.layernorm_sigmoid_mul import *
 # from aitemplate.backend.rvv.vision_ops import *
-# from aitemplate.backend.rvv.attention import *
+from aitemplate.backend.rvv.attention import *
 # from aitemplate.backend.rvv.groupnorm import *
 # from aitemplate.backend.rvv.b2b_bmm import *
