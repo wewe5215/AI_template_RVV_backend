@@ -40,8 +40,8 @@ class gemm_rcr_bias_add_relu(gemm_rcr_bias_broadcast):
         y = torch.nn.ReLU(linear + D0)
     """
 
-    def __init__(self):
+    def __init__(self, pruning_ratio=0.5):
         """Constructor for gemm_rcr_bias_add_relu"""
-        super().__init__()
+        super().__init__(pruning_ratio=pruning_ratio)
         self._attrs["op"] = "gemm_rcr_bias_add_relu"
         self._attrs["num_sources"] = 1

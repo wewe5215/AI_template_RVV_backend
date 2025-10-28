@@ -68,12 +68,17 @@ class Linear(Module):
         bias=True,
         specialization=None,
         dtype="float32",
+        pruning_ratio=0.5,
         **kwargs,
     ):
         super().__init__()
         if Linear.USE_CUDA is None:
             Linear.USE_CUDA = detect_target().name() == "cuda"
-        self.weight = Parameter(shape=[out_channels, in_channels], dtype=dtype)
+        self.weight = Parameter(shape=[out_channels, in_channels * (1 - pruning_ratio)], dtype=dtype)
+        self.weight_indice = Parameter( # out_channels / 8 stands for each tile is with 8 rows
+            shape=[out_channels, in_channels * (1 - pruning_ratio)],
+            dtype="uint16_t"
+        )
         op_name = "gemm_rcr_bias" if bias else "gemm_rcr"
         if specialization is not None:
             op_name += "_" + specialization

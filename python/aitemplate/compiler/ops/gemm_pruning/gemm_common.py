@@ -200,7 +200,7 @@ class gemm(Operator):
     """Base gemm operators"""
 
     def __init__(
-        self,
+        self, pruning_ratio=0.5
     ):
         super().__init__()
         self._attrs["op"] = "gemm"
@@ -213,6 +213,7 @@ class gemm(Operator):
         self._attrs["num_sources"] = 0
         self._attrs["alpha"] = 1.0
         self._attrs["permute_shape"] = ""
+        self._attrs["pruning_ratio"] = pruning_ratio
         self.exec_cond_template = EXEC_COND_TEMPLATE
 
     def _extract_epilogue_alignment(

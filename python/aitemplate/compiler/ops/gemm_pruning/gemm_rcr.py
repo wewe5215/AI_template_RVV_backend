@@ -35,8 +35,8 @@ class gemm_rcr(common.gemm):
         y = torch.nn.functional.linear(A, B)
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, pruning_ratio=0.5):
+        super().__init__(pruning_ratio=pruning_ratio)
         self._attrs["op"] = "gemm_rcr"
 
         def cal_align_ab(m, n, k):

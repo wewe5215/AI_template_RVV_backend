@@ -37,8 +37,8 @@ class gemm_rcr_bias(gemm_rcr):
         y = torch.nn.functional.linear(A, B, bias=Bias)
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, pruning_ratio=0.5):
+        super().__init__(pruning_ratio=pruning_ratio)
         self._attrs["op"] = "gemm_rcr_bias"
 
     @staticmethod

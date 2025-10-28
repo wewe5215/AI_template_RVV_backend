@@ -25,8 +25,8 @@ from aitemplate.compiler.tensor_accessor import TensorAccessor
 
 
 class gemm_rcr_bias_broadcast(gemm_rcr_bias):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, pruning_ratio=0.5):
+        super().__init__(pruning_ratio=pruning_ratio)
         self._attrs["epilogue"] = "LinearCombinationResidualBlock"
 
     @staticmethod

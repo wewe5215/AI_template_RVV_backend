@@ -35,8 +35,8 @@ class gemm_rcr_bias_gelu(gemm_rcr_bias):
         y = torch.nn.GELU(linear)
     """
 
-    def __init__(self):
+    def __init__(self, pruning_ratio=0.5):
         """Constructor for gemm_rcr_bias_gelu"""
-        super().__init__()
+        super().__init__(pruning_ratio=pruning_ratio)
         self._attrs["op"] = "gemm_rcr_bias_gelu"
         self._attrs["epilogue"] = "LinearCombinationGELU"
