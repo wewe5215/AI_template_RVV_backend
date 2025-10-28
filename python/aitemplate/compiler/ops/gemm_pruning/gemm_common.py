@@ -414,7 +414,7 @@ class gemm(Operator):
             # we don't use cache
             return f"{op_type}_{encoded_str}"
         else:
-            cache_ver = target.get_profile_cache_version("gemm")
+            cache_ver = target.get_profile_cache_version("gemm_pruning")
             return f"{op_type}_{encoded_str}_{cache_ver}"
 
     def _should_build_profiler(
@@ -456,6 +456,7 @@ class gemm(Operator):
                     epilogue=tmp_op.epilogue_functor.value,
                     exec_entry_sha1=exec_entry_sha1,
                     pshape=self._attrs["permute_shape"],
+                    pruning_ratio=self._attrs["pruning_ratio"],
                 )
                 cache_value = target.query_profile_cache("gemm", query.__dict__)
                 if cache_value is not None and not target.force_profile():
@@ -653,6 +654,7 @@ class gemm(Operator):
             epilogue=tmp_op.epilogue_functor.value,
             exec_entry_sha1=exec_entry_sha1,
             pshape=self._attrs["permute_shape"],
+            pruning_ratio=self._attrs["pruning_ratio"],
         )
         cache_value = target.query_profile_cache("gemm", query.__dict__)
         if cache_value is not None and not target.force_profile():
@@ -908,7 +910,7 @@ class GemmProfilerPostprocessingDelegate:
 
             tmp_op = next(iter(func_attrs["op_instance"].values()))
             exec_entry_sha1 = sha1(exec_key.encode("utf-8")).hexdigest()
-            cache_record = GemmRecordEntry(
+            cache_record = GemmPrunedRecordEntry(
                 exec_entry=exec_key,
                 exec_entry_sha1=exec_entry_sha1,
                 # 1 is subtracted from the type enum values for consistency with the existing
@@ -929,6 +931,7 @@ class GemmProfilerPostprocessingDelegate:
                 workspace=workspace,
                 split_k=split_k,
                 pshape=func_attrs["permute_shape"],
+                pruning_ratio=self._attrs["pruning_ratio"],
             )
             try:
                 target.insert_profile_cache("gemm", cache_record.__dict__)

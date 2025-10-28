@@ -378,6 +378,8 @@ class Target:
             return self._profile_cache.conv3d_cache_version
         elif op_class == "conv_cnhw_pruning":
             return self._profile_cache.conv_cnhw_pruning_cache_version
+        elif op_class == "gemm_pruning":
+            return self._profile_cache.gemm_pruning_cache_version
         raise NotImplementedError
 
     def query_profile_cache(
@@ -404,6 +406,8 @@ class Target:
         """
         if op_class == "gemm":
             return self._profile_cache.query_gemm(args)
+        if op_class == "gemm_pruning":
+            return self._profile_cache.query_gemm_pruned(args)
         if op_class == "conv":
             return self._profile_cache.query_conv(args)
         if op_class == "conv_cnhw_pruning":
@@ -418,6 +422,8 @@ class Target:
         """Insert the profile cache for the given op class and args."""
         if op_class == "gemm":
             self._profile_cache.insert_gemm(args)
+        elif op_class == "gemm_pruning":
+            self._profile_cache.insert_gemm_pruned(args)
         elif op_class == "conv":
             self._profile_cache.insert_conv(args)
         elif op_class == "conv_cnhw_pruning":

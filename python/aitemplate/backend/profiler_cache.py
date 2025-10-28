@@ -131,6 +131,98 @@ VALUES (
 """
 )
 
+GEMM_PRUNED_INIT_TEMPLATE = jinja2.Template(
+    """
+ CREATE TABLE IF NOT EXISTS {{dev}}_gemm_sparse_{{version}} (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  exec_entry VARCHAR(8192) NOT NULL,
+  exec_entry_sha1 VARCHAR(64) NOT NULL,
+  dtype_a INTEGER NOT NULL,
+  dtype_b INTEGER NOT NULL,
+  dtype_c INTEGER NOT NULL,
+  dtype_acc INTEGER NOT NULL,
+  major_a INTEGER NOT NULL,
+  major_b INTEGER NOT NULL,
+  major_c INTEGER NOT NULL,
+  op_type VARCHAR(512) NOT NULL,
+  epilogue VARCHAR(512) NOT NULL,
+  device VARCHAR(16) NOT NULL,
+  algo VARCHAR(512) NOT NULL,
+  workspace INTEGER DEFAULT 0,
+  duration FLOAT DEFAULT -1,
+  split_k INTEGER DEFAULT 1,
+  pshape VARCHAR(64) NOT NULL,
+  template_ver INTEGER NOT NULL DEFAULT 290,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  pruning_ratio FLOAT DEFAULT 0
+);
+"""
+)
+
+GEMM_PRUNED_QUERY_TEMPLATE = jinja2.Template(
+    """
+SELECT algo, workspace, split_k
+FROM {{dev}}_gemm_sparse_{{version}}
+WHERE
+dtype_a={{dtype_a}} AND
+dtype_b={{dtype_b}} AND
+dtype_c={{dtype_c}} AND
+dtype_acc={{dtype_acc}} AND
+major_a={{major_a}} AND
+major_b={{major_b}} AND
+major_c={{major_c}} AND
+op_type='{{op_type}}' AND
+device='{{device}}' AND
+epilogue={{epilogue}} AND
+pshape='{{pshape}}' AND
+exec_entry_sha1='{{exec_entry_sha1}}' AND
+pruning_ratio={{pruning_ratio}};
+"""
+)
+
+GEMM_PRUNED_INSERT_TEMPLATE = jinja2.Template(
+    """
+INSERT INTO {{dev}}_gemm_sparse_{{version}} (
+    exec_entry,
+    exec_entry_sha1,
+    dtype_a,
+    dtype_b,
+    dtype_c,
+    dtype_acc,
+    major_a,
+    major_b,
+    major_c,
+    op_type,
+    epilogue,
+    device,
+    algo,
+    workspace,
+    split_k,
+    pshape,
+    pruning_ratio
+)
+VALUES (
+    '{{exec_entry}}',
+    '{{exec_entry_sha1}}',
+    {{dtype_a}},
+    {{dtype_b}},
+    {{dtype_c}},
+    {{dtype_acc}},
+    {{major_a}},
+    {{major_b}},
+    {{major_c}},
+    '{{op_type}}',
+    {{epilogue}},
+    '{{device}}',
+    '{{algo}}',
+    {{workspace}},
+    {{split_k}},
+    '{{pshape}}',
+    {{pruning_ratio}}
+);
+"""
+)
+
 CONV_INIT_TEMPLATE = jinja2.Template(
     """
  CREATE TABLE IF NOT EXISTS {{dev}}_conv_{{version}} (
@@ -644,6 +736,7 @@ class ProfileCacheDB:
         self._conv_cache_version = ait_cache_version()
         self._conv3d_cache_version = ait_cache_version()
         self._conv_cnhw_pruning_cache_version = ait_cache_version()
+        self._gemm_pruning_cache_version = ait_cache_version()
         if uri is not None:
             self._mode = CacheMode.REMOTE
         if self._mode == CacheMode.LOCAL:
@@ -661,10 +754,15 @@ class ProfileCacheDB:
         self._create_conv_pruned_table()
         self._create_conv3d_table()
         self._create_norm_table()
+        self._create_gemm_pruned_table()
 
     @property
     def gemm_cache_version(self) -> int:
         return self._gemm_cache_version
+
+    @property
+    def gemm_pruning_cache_version(self) -> int:
+        return self._gemm_pruning_cache_version
 
     @property
     def conv_cache_version(self) -> int:
@@ -692,6 +790,26 @@ class ProfileCacheDB:
                 f"Creating a new gemm table with {version=}",
             )
             sql = GEMM_INIT_TEMPLATE.render(
+                dev=self._target,
+                version=version,
+            )
+            self._cur.execute(sql)
+            self._con.commit()
+
+    def _create_gemm_pruned_table(self):
+        """Creates sparse gemm table."""
+        version = self.gemm_pruning_cache_version
+        if not self._table_exists("gemm_sparse", version):
+            _LOGGER.info(
+                "Temporarily keeping the old gemm cache versions if exist",
+            )
+            # FIXME: will delete unmatched version once we get into production
+            # self._delete_existing_table("gemm")
+
+            _LOGGER.info(
+                f"Creating a new gemm table with {version=}",
+            )
+            sql = GEMM_PRUNED_INIT_TEMPLATE.render(
                 dev=self._target,
                 version=version,
             )
@@ -848,6 +966,26 @@ class ProfileCacheDB:
             **args,
         )
         return self._query(sql)
+    
+    def query_gemm_pruned(self, args: Dict[str, Any]) -> Tuple[str, int]:
+        """a function to query gemm op epilogue from cache
+
+        Parameters
+        ----------
+        args : Dict
+            gemm query entry
+
+        Returns
+        -------
+        Tuple
+            profiling results
+        """
+        sql = GEMM_PRUNED_QUERY_TEMPLATE.render(
+            dev=self._target,
+            version=self.gemm_cache_version,
+            **args,
+        )
+        return self._query(sql)
 
     def query_conv(self, args: Dict[str, Any]) -> Tuple[str, int]:
         """a function to query conv op epilogue from cache,
@@ -973,6 +1111,39 @@ class ProfileCacheDB:
             exec_entry_sha1=args["exec_entry_sha1"],
         )
         insert_sql = GEMM_INSERT_TEMPLATE.render(
+            dev=self._target,
+            version=self.gemm_cache_version,
+            **args,
+        )
+        self._insert(query_sql, insert_sql)
+
+    def insert_gemm_pruned(self, args: Dict[str, Any]) -> None:
+        """a function to insert gemm op epilogue into cache
+
+        Parameters
+        ----------
+        args : Dict
+            Gemm Record Entry
+        """
+        query_sql = GEMM_PRUNED_QUERY_TEMPLATE.render(
+            dev=self._target,
+            version=self.gemm_cache_version,
+            dtype_a=args["dtype_a"],
+            dtype_b=args["dtype_b"],
+            dtype_c=args["dtype_c"],
+            dtype_acc=args["dtype_acc"],
+            major_a=args["major_a"],
+            major_b=args["major_b"],
+            major_c=args["major_c"],
+            op_type=args["op_type"],
+            device=args["device"],
+            epilogue=args["epilogue"],
+            split_k=args["split_k"],
+            pshape=args["pshape"],
+            exec_entry_sha1=args["exec_entry_sha1"],
+            pruning_ratio=args["pruning_ratio"],
+        )
+        insert_sql = GEMM_PRUNED_INSERT_TEMPLATE.render(
             dev=self._target,
             version=self.gemm_cache_version,
             **args,
