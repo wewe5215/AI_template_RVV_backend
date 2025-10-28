@@ -31,6 +31,7 @@ from aitemplate.backend.rvv.elementwise import *
 from aitemplate.backend.rvv.embedding import *
 # from aitemplate.backend.rvv.gemm_special import *
 from aitemplate.backend.rvv.gemm_universal import *
+from aitemplate.backend.rvv.gemm_pruning import *
 # from aitemplate.backend.rvv.gemm_epilogue_vistor import *
 # from aitemplate.backend.rvv.jagged import *
 # from aitemplate.backend.rvv.layernorm_sigmoid_mul import *

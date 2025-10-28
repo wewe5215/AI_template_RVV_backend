@@ -23,6 +23,7 @@ from aitemplate.compiler.ops.conv_cnhw_pruning import *
 from aitemplate.compiler.ops.embedding import *
 from aitemplate.compiler.ops.gemm_special import *
 from aitemplate.compiler.ops.gemm_universal import *
+from aitemplate.compiler.ops.gemm_pruning import *
 from aitemplate.compiler.ops.gemm_epilogue_vistor import *
 from aitemplate.compiler.ops.jagged import *
 from aitemplate.compiler.ops.layernorm import *
