@@ -193,7 +193,7 @@ class Gemm_Pruning_Operation:
             extra_kind_code = generate_tensorOP(self.operation_kind, self.extra_kind, self.A.element)
             activation_code = gelu_op.render(
             DataName = library.DataTypeTag[self.A.element])
-            if self.operation_kind == library.GemmKind.GemmBiasGelu:
+            if self.operation_kind == library.GemmPruningKind.GemmPruningBiasGelu:
                 extra_kind_code += activation_code
             program = microkernel_computation.render(
                 MR = self.tile_size,

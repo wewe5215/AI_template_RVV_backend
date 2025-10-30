@@ -115,7 +115,7 @@ def gen_function_decl(func_attrs):
 
 
 def gen_function_call(func_attrs, indent="  "):
-    bias = func_attrs["inputs"][2]
+    bias = func_attrs["inputs"][3]
     return common.gen_function_call(
         func_attrs=func_attrs,
         indent=indent,

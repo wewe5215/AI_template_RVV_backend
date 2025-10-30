@@ -127,7 +127,7 @@ def gen_function_decl(func_attrs):
 
 @registry.reg("rvv.gemm_pruning_rcr_bias.func_call")
 def gen_function_call(func_attrs, indent="  "):
-    bias = func_attrs["inputs"][2]
+    bias = func_attrs["inputs"][3]
     return common.gen_function_call(
         func_attrs, indent, bias_ptr_arg=bias._attrs["name"]
     )
