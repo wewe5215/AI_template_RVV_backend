@@ -21,6 +21,7 @@ from aitemplate.compiler.ops.common.epilogue import FuncEnum
 from aitemplate.frontend import Tensor
 from aitemplate.frontend.nn.dropout import Dropout
 from aitemplate.frontend.nn.linear import Linear
+from aitemplate.frontend.nn.linear_pruning import LinearPruning
 from aitemplate.frontend.nn.module import Module
 from aitemplate.frontend.nn.parameter import Parameter
 from aitemplate.testing import detect_target
@@ -107,6 +108,8 @@ class MultiheadAttention(Module):
         mask_seq=0,
         use_mem_eff=False,
         dtype="float32",
+        with_pruning=False,
+        pruning_ratio=0.5,
     ):
         super().__init__()
         assert (
@@ -158,15 +161,27 @@ class MultiheadAttention(Module):
             # input: (B, S, H)
             # output: (B*S, 3, num_heads, head_dim)
             if self.use_flash:
-                self.qkv = Linear(dim, dim * 3, bias=qkv_bias, dtype=dtype)
+                if with_pruning:
+                    self.qkv = LinearPruning(dim, dim * 3, bias=qkv_bias, dtype=dtype, pruning_ratio=pruning_ratio)
+                else:
+                    self.qkv = Linear(dim, dim * 3, bias=qkv_bias, dtype=dtype)
             else:
-                self.qkv = Linear(
-                    dim,
-                    dim * 3,
-                    specialization="permute",
-                    shape=(seq_len, 3, self.num_heads),
-                    dtype=dtype,
-                )
+                if with_pruning:
+                    self.qkv =  LinearPruning(
+                                    dim,
+                                    dim * 3,
+                                    specialization="permute",
+                                    shape=(seq_len, 3, self.num_heads),
+                                    dtype=dtype, pruning_ratio=pruning_ratio
+                                )
+                else:
+                    self.qkv = Linear(
+                        dim,
+                        dim * 3,
+                        specialization="permute",
+                        shape=(seq_len, 3, self.num_heads),
+                        dtype=dtype,
+                    )
         else:
             # on ROCM ck attention (bmm_softmax_bmm) takes three inputs (Q, K, V)
             # here we generate packed QKV for splitting
@@ -184,9 +199,14 @@ class MultiheadAttention(Module):
             )
 
         self.attn_drop = Dropout(attn_drop, dtype=dtype)
-        self.proj = Linear(
-            dim, dim, specialization="add" if has_residual else None, dtype=dtype
-        )
+        if with_pruning:
+            self.proj = LinearPruning(
+                dim, dim, specialization="add" if has_residual else None, dtype=dtype, pruning_ratio=pruning_ratio
+            )
+        else:
+            self.proj = Linear(
+                dim, dim, specialization="add" if has_residual else None, dtype=dtype
+            )
         self.proj_drop = Dropout(proj_drop, dtype=dtype)
 
     def get_shape(self, x):

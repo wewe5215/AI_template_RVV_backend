@@ -21,7 +21,7 @@ from aitemplate.frontend.nn.parameter import Parameter
 from aitemplate.testing import detect_target
 
 
-class Linear(Module):
+class LinearPruning(Module):
     r"""Applies a linear transformation to the incoming data: :math:`y = xA^T + b`
 
     Args:
@@ -72,21 +72,19 @@ class Linear(Module):
         **kwargs,
     ):
         super().__init__()
-        if Linear.USE_CUDA is None:
-            Linear.USE_CUDA = detect_target().name() == "cuda"
-        self.weight = Parameter(shape=[out_channels, in_channels * (1 - pruning_ratio)], dtype=dtype)
+        self.weight = Parameter(shape=[out_channels, int(in_channels * (1 - pruning_ratio))], dtype=dtype)
         self.weight_indice = Parameter( # out_channels / 8 stands for each tile is with 8 rows
-            shape=[out_channels, in_channels * (1 - pruning_ratio)],
+            shape=[out_channels, int(in_channels * (1 - pruning_ratio))],
             dtype="uint16_t"
         )
-        op_name = "gemm_rcr_bias" if bias else "gemm_rcr"
+        op_name = "gemm_pruning_rcr_bias" if bias else "gemm_pruning_rcr"
         if specialization is not None:
             op_name += "_" + specialization
         if bias:
             self.bias = Parameter(shape=[out_channels], dtype=dtype)
         op_func = getattr(ops, op_name)
         self._op_name = op_name
-        self.op = op_func(**kwargs)
+        self.op = op_func(pruning_ratio=pruning_ratio, **kwargs)
         self.use_bias = bias
         self.in_channels = in_channels
 
@@ -95,7 +93,7 @@ class Linear(Module):
         x = args[0]
         if not self.USE_CUDA and len(x._attrs["shape"]) != 2:
             x = ops.reshape()(x, [-1, self.in_channels])
-        inputs = [x, self.weight.tensor()]
+        inputs = [x, self.weight.tensor(), self.weight_indice.tensor()]
         if self.use_bias:
             inputs.append(self.bias.tensor())
         if len(args) == 2:
