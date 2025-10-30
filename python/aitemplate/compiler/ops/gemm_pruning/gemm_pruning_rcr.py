@@ -17,12 +17,12 @@ GEMM Specialization for A[RowMajor], B[ColMajor], C[RowMajor]
 """
 
 from aitemplate.compiler.base import IntImm, Tensor
-from aitemplate.compiler.ops.gemm_pruning import gemm_common as common
+from aitemplate.compiler.ops.gemm_pruning import gemm_pruning_common as common
 
 # pylint: disable=C0103,W0223,W0221,W0613
 
 
-class gemm_rcr(common.gemm):
+class gemm_pruning_rcr(common.gemm_pruning):
     """GEMM Specialization for A[RowMajor], B[ColMajor], C[RowMajor]
 
     This operator is equivalent to the following pytorch code:
@@ -37,7 +37,7 @@ class gemm_rcr(common.gemm):
 
     def __init__(self, pruning_ratio=0.5):
         super().__init__(pruning_ratio=pruning_ratio)
-        self._attrs["op"] = "gemm_rcr"
+        self._attrs["op"] = "gemm_pruning_rcr"
 
         def cal_align_ab(m, n, k):
             return common.default_align_ab(k, k, self._attrs["inputs"][0].dtype())

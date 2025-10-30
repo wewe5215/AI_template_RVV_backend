@@ -196,15 +196,15 @@ def _check_with_retries(
         sleep(delay_seconds)
 
 
-class gemm(Operator):
+class gemm_pruning(Operator):
     """Base gemm operators"""
 
     def __init__(
         self, pruning_ratio=0.5
     ):
         super().__init__()
-        self._attrs["op"] = "gemm"
-        self._attrs["has_profiler"] = True
+        self._attrs["op"] = "gemm_pruning"
+        self._attrs["has_profiler"] = False
         self._attrs["f_ab_alignment"] = None
         self._attrs["epilogue_alignment"] = 1
         self._attrs["epilogue"] = "LinearCombination"
@@ -459,7 +459,7 @@ class gemm(Operator):
                     pshape=self._attrs["permute_shape"],
                     pruning_ratio=self._attrs["pruning_ratio"],
                 )
-                cache_value = target.query_profile_cache("gemm", query.__dict__)
+                cache_value = target.query_profile_cache("gemm_pruning", query.__dict__)
                 if cache_value is not None and not target.force_profile():
                     _LOGGER.info(
                         f'Load profiling result for {self._attrs["name"]} '
@@ -559,24 +559,23 @@ class gemm(Operator):
     def _gen_profile_cmd(
         self, profiler_prefix, profiler_filename, exec_key, fbuild_cmd
     ):
-        exe_path = os.path.join(profiler_prefix, profiler_filename)
-        if not _check_with_retries(
-            condition=lambda: os.access(exe_path, os.X_OK),
-            max_attempts=3,
-            delay_seconds=5,
-        ):
-            raise RuntimeError("Profiler %s is not executable" % exe_path)
+        from aitemplate.utils.remote_send_receive_files import REMOTE_PROFILE_FOLDER
+        from aitemplate.compiler.compiler import IS_REMOTE_COMPILE
+        ssh_client = self.ssh_client
+        if IS_REMOTE_COMPILE and ssh_client is not None:
+            exe_path = os.path.join(REMOTE_PROFILE_FOLDER, "profiler", self._attrs["op"], profiler_filename)
+            if not _check_with_retries(
+                condition=lambda: os.access(exe_path, os.X_OK),
+                max_attempts=3,
+                delay_seconds=5,
+            ):
+                raise RuntimeError("Profiler %s is not executable" % exe_path)
 
-        cmd_args = fbuild_cmd(exec_key)
-        cmd = [exe_path]
-        # mnk
-        cmd.extend(cmd_args)
-        command = [str(x) for x in cmd]
-        # profiling gemm/bmm_permute with layout and shape for ROCM
-        if self._attrs.get("shape") is not None:
-            if backend.target.Target.current().name() == "rocm":
-                for x in self._attrs["shape"]:
-                    command.append(str(x))
+            cmd_args = fbuild_cmd(exec_key)
+            cmd = [exe_path]
+            # mnk
+            cmd.extend(cmd_args)
+            command = [str(x) for x in cmd]
         return command
 
     def _split_k_search_space(self, M, N, K):
@@ -657,7 +656,7 @@ class gemm(Operator):
             pshape=self._attrs["permute_shape"],
             pruning_ratio=self._attrs["pruning_ratio"],
         )
-        cache_value = target.query_profile_cache("gemm", query.__dict__)
+        cache_value = target.query_profile_cache("gemm_pruning", query.__dict__)
         if cache_value is not None and not target.force_profile():
             _LOGGER.debug(
                 f'Load profiling result for {self._attrs["name"]} '
@@ -766,6 +765,8 @@ class gemm(Operator):
             C++ source code of the function
         """
         target = backend.target.Target.current()
+        if self._attrs["has_profiler"] == False:
+            self._extract_exec_path(DynamicProfileStrategy.MAX)
         func_key = "{target}.{op}.gen_function".format(
             target=target.name(), op=self._attrs["op"]
         )
@@ -813,7 +814,7 @@ class gemm(Operator):
                 )
             )
 
-    def __call__(self, a: Tensor, b: Tensor) -> Tensor:
+    def __call__(self, a: Tensor, b: Tensor, w_idx: Tensor) -> Tensor:
         """Call the gemm op.
 
         Parameters
@@ -828,8 +829,8 @@ class gemm(Operator):
         Tensor
             Output tensor for the gemm operation.
         """
-        a, b = self._align_ab(a, b)
-        self._attrs["inputs"] = [a, b]
+        # a, b = self._align_ab(a, b)
+        self._attrs["inputs"] = [a, b, w_idx]
         # TensorAccessor(b) is for bmm or rare cases of gemm where b is not constant weight
         self._attrs["input_accessors"] = [TensorAccessor(a), TensorAccessor(b)]
         self._set_depth()
@@ -854,7 +855,7 @@ def _profiler_group_reduce_min_key(group):
     return group[0][1]  # elapsed runtime
 
 
-class GemmProfilerPostprocessingDelegate:
+class GemmPrunedProfilerPostprocessingDelegate:
     """
     Object which collects profiler results after profiler executables complete,
     updates profiler results cache and the gemm nodes' attrs after all profilers complete.
@@ -935,6 +936,6 @@ class GemmProfilerPostprocessingDelegate:
                 pruning_ratio=self._attrs["pruning_ratio"],
             )
             try:
-                target.insert_profile_cache("gemm", cache_record.__dict__)
+                target.insert_profile_cache("gemm_pruning", cache_record.__dict__)
             except Exception as e:
                 _LOGGER.warning(e)

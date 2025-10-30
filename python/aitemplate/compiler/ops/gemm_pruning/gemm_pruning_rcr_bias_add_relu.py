@@ -13,30 +13,35 @@
 #  limitations under the License.
 #
 """
-GEMM Specialization: ReLU(GEMM_RCR(A, B) + Bias)
+GEMM Specialization: RELU(GEMM_RCR(A, B) + Bias + D0)
 """
-from aitemplate.compiler.ops.gemm_pruning import gemm_rcr_bias
 
-# pylint: disable=C0103,W0223,W0221
+from aitemplate.compiler.ops.gemm_pruning.gemm_pruning_rcr_bias_broadcast import (
+    gemm_pruning_rcr_bias_broadcast,
+)
+
+# pylint: disable=C0103, W0223, W0221
 
 
-class gemm_rcr_bias_relu(gemm_rcr_bias):
-    """GEMM Specialization: ReLU(GEMM_RCR(A, B) + Bias)
+class gemm_pruning_rcr_bias_add_relu(gemm_pruning_rcr_bias_broadcast):
+    """GEMM Specialization: RELU(GEMM_RCR(A, B) + Bias + D0)
 
     This operator is equivalent to the following pytorch code:
 
     .. highlight:: python
     .. code-block:: python
+
         A = torch.randn(M, K).cuda().half()
         B = torch.randn(N, K).cuda().half()
         Bias = torch.randn(N).cuda().half()
+        D0 = torch.randn(M, N).cuda().half()
 
         linear = torch.nn.functional.linear(A, B, bias=Bias)
-        y = torch.nn.ReLU(linear)
+        y = torch.nn.ReLU(linear + D0)
     """
 
     def __init__(self, pruning_ratio=0.5):
-        """Constructor for gemm_rcr_bias_relu"""
+        """Constructor for gemm_pruning_rcr_bias_add_relu"""
         super().__init__(pruning_ratio=pruning_ratio)
-        self._attrs["op"] = "gemm_rcr_bias_relu"
-        self._attrs["epilogue"] = "LinearCombinationRelu"
+        self._attrs["op"] = "gemm_pruning_rcr_bias_add_relu"
+        self._attrs["num_sources"] = 1

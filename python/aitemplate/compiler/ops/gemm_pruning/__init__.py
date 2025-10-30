@@ -13,13 +13,13 @@
 #  limitations under the License.
 #
 # flake8: noqa
-from aitemplate.compiler.ops.gemm_pruning.gemm_rcr import gemm_rcr
-from aitemplate.compiler.ops.gemm_pruning.gemm_rcr_bias import gemm_rcr_bias
-from aitemplate.compiler.ops.gemm_pruning.gemm_rcr_bias_add import gemm_rcr_bias_add
+from aitemplate.compiler.ops.gemm_pruning.gemm_pruning_rcr import gemm_pruning_rcr
+from aitemplate.compiler.ops.gemm_pruning.gemm_pruning_rcr_bias import gemm_pruning_rcr_bias
+from aitemplate.compiler.ops.gemm_pruning.gemm_pruning_rcr_bias_add import gemm_pruning_rcr_bias_add
 
-from aitemplate.compiler.ops.gemm_pruning.gemm_rcr_bias_add_relu import (
-    gemm_rcr_bias_add_relu,
+from aitemplate.compiler.ops.gemm_pruning.gemm_pruning_rcr_bias_add_relu import (
+    gemm_pruning_rcr_bias_add_relu,
 )
-from aitemplate.compiler.ops.gemm_pruning.gemm_rcr_bias_gelu import gemm_rcr_bias_gelu
+from aitemplate.compiler.ops.gemm_pruning.gemm_pruning_rcr_bias_gelu import gemm_pruning_rcr_bias_gelu
 
-from aitemplate.compiler.ops.gemm_pruning.gemm_rcr_bias_relu import gemm_rcr_bias_relu
+from aitemplate.compiler.ops.gemm_pruning.gemm_pruning_rcr_bias_relu import gemm_pruning_rcr_bias_relu

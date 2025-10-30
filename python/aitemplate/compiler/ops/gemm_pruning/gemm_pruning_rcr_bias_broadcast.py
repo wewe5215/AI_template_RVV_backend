@@ -18,13 +18,13 @@ BinaryOp2(BinaryOp1(UnaryOp(TensorOp(X) + bias), residual1), residual2)
 """
 
 from aitemplate.compiler.base import Tensor
-from aitemplate.compiler.ops.gemm_pruning import gemm_rcr_bias
+from aitemplate.compiler.ops.gemm_pruning import gemm_pruning_rcr_bias
 from aitemplate.compiler.tensor_accessor import TensorAccessor
 
 # pylint: disable=C0103, W0223, W0221
 
 
-class gemm_rcr_bias_broadcast(gemm_rcr_bias):
+class gemm_pruning_rcr_bias_broadcast(gemm_pruning_rcr_bias):
     def __init__(self, pruning_ratio=0.5):
         super().__init__(pruning_ratio=pruning_ratio)
         self._attrs["epilogue"] = "LinearCombinationResidualBlock"
@@ -38,14 +38,14 @@ class gemm_rcr_bias_broadcast(gemm_rcr_bias):
             )
             return False, msg
 
-        gemm_rcr_bias_valid, msg = gemm_rcr_bias.is_valid_inputs(
+        gemm_rcr_bias_valid, msg = gemm_pruning_rcr_bias.is_valid_inputs(
             inputs[0], inputs[1], inputs[2]
         )
         if not gemm_rcr_bias_valid:
             return False, msg
 
         if len(inputs) > 3:
-            base_shape = gemm_rcr_bias()._infer_shapes(inputs[0], inputs[1], inputs[2])
+            base_shape = gemm_pruning_rcr_bias()._infer_shapes(inputs[0], inputs[1], inputs[2])
             for d in inputs[3:]:
                 d_shape = d.shape()
                 if d_shape != base_shape:
@@ -55,10 +55,10 @@ class gemm_rcr_bias_broadcast(gemm_rcr_bias):
         return True, msg
 
     def __call__(
-        self, a: Tensor, b: Tensor, bias: Tensor, d0: Tensor, d1: Tensor = None
+        self, a: Tensor, b: Tensor, w_idx: Tensor, bias: Tensor, d0: Tensor, d1: Tensor = None
     ) -> Tensor:
-        a, b = self._align_ab(a, b)
-        self._attrs["inputs"] = [a, b, bias, d0]
+        # a, b = self._align_ab(a, b)
+        self._attrs["inputs"] = [a, b, w_idx, bias, d0]
         if d1 is not None:
             self._attrs["inputs"].append(d1)
         self._attrs["input_accessors"] = [

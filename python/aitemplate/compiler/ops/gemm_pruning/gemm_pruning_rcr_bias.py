@@ -16,13 +16,13 @@
 GEMM Specialization: GEMM_RCR(A, B) + Bias
 """
 from aitemplate.compiler.base import IntImm, Tensor
-from aitemplate.compiler.ops.gemm_pruning import gemm_rcr
+from aitemplate.compiler.ops.gemm_pruning import gemm_pruning_rcr
 from aitemplate.compiler.tensor_accessor import TensorAccessor
 
 # pylint: disable=C0103,W0223,W0221,W0613
 
 
-class gemm_rcr_bias(gemm_rcr):
+class gemm_pruning_rcr_bias(gemm_pruning_rcr):
     """GEMM Specialization: GEMM_RCR(A, B) + Bias
     A[RowMajor], B[ColMajor], Bias[RowMajor], C[RowMajor]
 
@@ -39,7 +39,7 @@ class gemm_rcr_bias(gemm_rcr):
 
     def __init__(self, pruning_ratio=0.5):
         super().__init__(pruning_ratio=pruning_ratio)
-        self._attrs["op"] = "gemm_rcr_bias"
+        self._attrs["op"] = "gemm_pruning_rcr_bias"
 
     @staticmethod
     def is_valid_inputs(X: Tensor, W: Tensor, bias: Tensor):
@@ -55,7 +55,7 @@ class gemm_rcr_bias(gemm_rcr):
             msg = f"Bias should be fixed 1D vector! Current bias shape: {bias_shape}"
             return False, msg
 
-        outshape = gemm_rcr()._infer_shapes(X, W)
+        outshape = gemm_pruning_rcr()._infer_shapes(X, W)
         if outshape[-1] != bias_shape:
             msg = f"GEMM/Bias shape doesn't match! Gemm shape: {outshape}, bias shape: {bias_shape}"
             return False, msg
@@ -84,9 +84,9 @@ class gemm_rcr_bias(gemm_rcr):
             raise RuntimeError(msg)
         return super()._infer_shapes(a, b)
 
-    def __call__(self, a: Tensor, b: Tensor, bias: Tensor) -> Tensor:
-        a, b = self._align_ab(a, b)
-        self._attrs["inputs"] = [a, b, bias]
+    def __call__(self, a: Tensor, b: Tensor, w_idx: Tensor, bias: Tensor) -> Tensor:
+        # a, b = self._align_ab(a, b)
+        self._attrs["inputs"] = [a, b, w_idx, bias]
         self._attrs["input_accessors"] = [
             TensorAccessor(tensor) for tensor in self._attrs["inputs"]
         ]

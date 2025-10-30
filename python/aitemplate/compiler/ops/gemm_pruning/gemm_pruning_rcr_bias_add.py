@@ -16,14 +16,14 @@
 GEMM Specialization: GEMM_RCR(A, B) + Bias + D0
 """
 
-from aitemplate.compiler.ops.gemm_pruning.gemm_rcr_bias_broadcast import (
-    gemm_rcr_bias_broadcast,
+from aitemplate.compiler.ops.gemm_pruning.gemm_pruning_rcr_bias_broadcast import (
+    gemm_pruning_rcr_bias_broadcast,
 )
 
 # pylint: disable=C0103, W0223, W0221
 
 
-class gemm_rcr_bias_add(gemm_rcr_bias_broadcast):
+class gemm_pruning_rcr_bias_add(gemm_pruning_rcr_bias_broadcast):
     """GEMM Specialization: GEMM_RCR(A, B) + Bias + D0
 
     This operator is equivalent to the following pytorch code:
@@ -41,7 +41,7 @@ class gemm_rcr_bias_add(gemm_rcr_bias_broadcast):
     """
 
     def __init__(self, pruning_ratio=0.5):
-        """Constructor for gemm_rcr_bias_add"""
+        """Constructor for gemm_pruning_rcr_bias_add"""
         super().__init__(pruning_ratio=pruning_ratio)
-        self._attrs["op"] = "gemm_rcr_bias_add"
+        self._attrs["op"] = "gemm_pruning_rcr_bias_add"
         self._attrs["num_sources"] = 1
