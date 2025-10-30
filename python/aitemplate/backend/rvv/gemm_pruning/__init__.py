@@ -14,7 +14,8 @@
 #
 # flake8: noqa
 from aitemplate.backend.rvv.gemm_pruning import (
-    gemm_rcr_bias,
-    gemm_rcr_bias_elementwise,
-    gemm_rcr_bias_gelu,
+    gemm_pruning_rcr_bias,
+    gemm_pruning_rcr,
+    gemm_pruning_rcr_bias_elementwise,
+    gemm_pruning_rcr_bias_gelu,
 )

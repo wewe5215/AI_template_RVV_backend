@@ -20,9 +20,9 @@ from aitemplate.backend import registry
 from aitemplate.backend.backend_spec import RVVSpec
 from aitemplate.backend.rvv.gemm_pruning import common, common_bias_broadcast
 from aitemplate.backend.rvv.gemm_universal.layout import RCR
-from aitemplate.backend.rvv.gemm_pruning.gemm_rcr import get_input_addr_calculator
+from aitemplate.backend.rvv.gemm_pruning.gemm_pruning_rcr import get_input_addr_calculator
 # pylint: disable=C0103,C0415,W0613,C0301,R1705,R1703
-from aitemplate.backend.rvv.gemm_pruning import common, common_bias, gemm_rcr
+from aitemplate.backend.rvv.gemm_pruning import common, common_bias, gemm_pruning_rcr
 UNARY_IDENTITY = "Identity"
 UNARY_RELU = "ReLu"
 UNARY_SIGMOID = "Sigmoid"
@@ -58,10 +58,10 @@ def gen_gemm_rcr_config_template(name):
         import cpu_lib
         Layout = cpu_lib.library.LayoutType.RowMajor
         if name == "add":
-            op_kind = cpu_lib.library.GemmKind.GemmBiasAdd
+            op_kind = cpu_lib.library.GemmPruningKind.GemmPruningBiasAdd
             extra_kind = cpu_lib.library.TensorOperation.Add
         elif name == "add_relu":
-            op_kind = cpu_lib.library.GemmKind.GemmBiasAddRelu
+            op_kind = cpu_lib.library.GemmPruningKind.GemmPruningBiasAddRelu
             extra_kind = cpu_lib.library.TensorOperation.Add
         func_attrs["op_instance"] = common.extract_config(
             dtype=func_attrs["inputs"][0].dtype(),
@@ -94,6 +94,9 @@ def gen_function_template(name):
         exec_cond_template,
         dim_info_dict,
     ):
+        if func_attrs["has_profiler"] == False:
+            func = gen_gemm_rcr_config_template(name)
+            func(func_attrs, dtype="float32")
         input_addr_calculator = get_input_addr_calculator(func_attrs)
         input_ndims = len(func_attrs["input_accessors"][0].original_shapes)
         weight_ndims = len(func_attrs["input_accessors"][1].original_shapes)
@@ -149,15 +152,15 @@ def function_filter(cfg, func_attrs, ab_alignment):
 
 for conf in _CONFIGS:
     name, unary_op1, binary_op1, binary_op2, unary_op2 = conf
-    registry.reg(f"rvv.gemm_rcr_bias_{name}.config")(
+    registry.reg(f"rvv.gemm_pruning_rcr_bias_{name}.config")(
         gen_gemm_rcr_config_template(name)
     )
-    registry.reg(f"rvv.gemm_rcr_bias_{name}.gen_profiler")(
+    registry.reg(f"rvv.gemm_pruning_rcr_bias_{name}.gen_profiler")(
         gen_profiler_template(unary_op1, binary_op1, binary_op2, unary_op2)
     )
-    registry.reg(f"rvv.gemm_rcr_bias_{name}.gen_function")(
+    registry.reg(f"rvv.gemm_pruning_rcr_bias_{name}.gen_function")(
         gen_function_template(name)
     )
-    registry.reg(f"rvv.gemm_rcr_bias_{name}.func_decl")(gen_function_decl)
-    registry.reg(f"rvv.gemm_rcr_bias_{name}.func_call")(gen_function_call)
-    registry.reg(f"rvv.gemm_rcr_bias_{name}.filter")(function_filter)
+    registry.reg(f"rvv.gemm_pruning_rcr_bias_{name}.func_decl")(gen_function_decl)
+    registry.reg(f"rvv.gemm_pruning_rcr_bias_{name}.func_call")(gen_function_call)
+    registry.reg(f"rvv.gemm_pruning_rcr_bias_{name}.filter")(function_filter)

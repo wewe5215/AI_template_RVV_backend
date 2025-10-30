@@ -122,6 +122,48 @@ INSTANCE_TEMPLATE = jinja2.Template(
 """
 )
 
+FUNC_OP_TEMPLATE = jinja2.Template(
+    """
+void {{function_name}} (
+    void* a_ptr,
+    void* b_ptr,
+{% if has_bias %}
+    void* bias_ptr,
+{% endif %}
+{% if has_d %}
+    void* d_ptr,
+{% endif %}
+    void* weight_indice_ptr,
+    void* c_ptr,
+{% for idx in range(input_ndims) %}
+    int64_t* a_dim{{idx}},
+{% endfor %}
+{% for idx in range(weight_ndims) %}
+    int64_t* b_dim{{idx}},
+{% endfor %}
+{% for idx in range(output_ndims) %}
+    int64_t* c_dim{{idx}},
+{% endfor %}
+    float pruning_ratio,
+    pthreadpool* pthreadpool_
+  ) {
+  int64_t M = (*a_dim0);
+  int64_t N = (*b_dim0);
+  int64_t K = (*a_dim1);
+  {{input_addr_calculator}}
+  {{output_addr_calculator}}
+  {{extra_shape}}
+  {{input_output_checks}}
+  {{exec_paths}}
+return;
+  throw std::runtime_error(
+      "Unsupported workload for this {{function_name}} specialization."
+  );
+}
+""",
+    trim_blocks=True,
+    lstrip_blocks=True,
+)
 
 SRC_TEMPLATE = jinja2.Template(
     """
@@ -139,8 +181,6 @@ SRC_TEMPLATE = jinja2.Template(
 {{extra_code}}
 
 
-{{instances}}
-
 
 void {{function_name}} (
     void* a_ptr,
@@ -148,6 +188,7 @@ void {{function_name}} (
 {% if has_d %}
     void* d_ptr,
 {% endif %}
+    void* weight_indice_ptr,
     void* c_ptr,
 {% for idx in range(input_ndims) %}
     int64_t* a_dim{{idx}},
@@ -156,28 +197,20 @@ void {{function_name}} (
     int64_t* b_dim{{idx}},
 {% endfor %}
 {% for idx in range(output_ndims) %}
-    {% if idx == output_ndims - 1 %}
-    int64_t* c_dim{{idx}}
-    {% else %}
     int64_t* c_dim{{idx}},
-    {% endif %}
 {% endfor %}
+    float pruning_ratio,
+    pthreadpool* pthreadpool_
   ) {
-  {{shape_eval}}
+  int64_t M = (*a_dim0);
+  int64_t N = (*b_dim0);
+  int64_t K = (*a_dim1);
   {{input_addr_calculator}}
   {{output_addr_calculator}}
   {{extra_shape}}
   {{input_output_checks}}
   {{exec_paths}}
-  {% for idx in range(input_ndims) %}
-      std::cout << "input_ndims{{idx}}: " << *a_dim{{idx}} << std::endl;
-  {% endfor %}
-  {% for idx in range(weight_ndims) %}
-      std::cout << "weight_ndims{{idx}}: " << *b_dim{{idx}} << std::endl;
-  {% endfor %}
-  {% for idx in range(output_ndims) %}
-      std::cout << "output_ndims{{idx}}: " << *c_dim{{idx}} << std::endl;
-  {% endfor %}
+
   throw std::runtime_error(
       "Unsupported workload for this {{function_name}} specialization."
   );
@@ -191,8 +224,6 @@ void {{function_name}} (
 EXEC_TEMPLATE = jinja2.Template(
     """
 
-//{{instance}}
-{{instances}}
 {{indent}}return;
 """
 )
@@ -201,6 +232,7 @@ EXEC_TEMPLATE = jinja2.Template(
 FUNC_DECL_TEMPLATE = jinja2.Template(
     """
 void {{func_name}}(
+  void*,
   void*,
   void*,
   void*,
@@ -214,6 +246,7 @@ void {{func_name}}(
 {% for idx in range(input_ndims) %}
   int64_t*,
 {% endfor %}
+  float,
   pthreadpool*
 );
 """
@@ -230,6 +263,7 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {% if has_bias %}
 {{indent}}    {{bias_ptr}},
 {% endif %}
+{{indent}}    {{weight_indice_ptr}},
 {{indent}}    {{c_ptr}},
 {% for dim in adims %}
 {{indent}}    {{dim}},
@@ -240,7 +274,35 @@ FUNC_CALL_TEMPLATE = jinja2.Template(
 {% for dim in cdims %}
 {{indent}}    {{dim}},
 {% endfor %}
+{{indent}}    {{pruning_ratio}},
 {{indent}}    threadpool_.get());
+{{indent}}}
+"""
+)
+
+FUNC_CALL_TEMPLATE_PROFILER = jinja2.Template(
+    """
+{{indent}}{
+{{indent}}{{local_dim_defs}}
+{{indent}}{{func_name}}(
+{{indent}}    {{a_ptr}},
+{{indent}}    {{b_ptr}},
+{% if has_bias %}
+{{indent}}    {{bias_ptr}},
+{% endif %}
+{{indent}}    {{weight_indice_ptr}},
+{{indent}}    {{c_ptr}},
+{% for dim in adims %}
+{{indent}}    {{dim}},
+{% endfor %}
+{% for dim in bdims %}
+{{indent}}    {{dim}},
+{% endfor %}
+{% for dim in cdims %}
+{{indent}}    {{dim}},
+{% endfor %}
+{{indent}}    {{pruning_ratio}},
+{{indent}}    pthreadpool_);
 {{indent}}}
 """
 )
@@ -251,7 +313,6 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
 {{indent}}{
 {{indent}}
 {{indent}}int ret = 0;
-{{indent}}const xnn_status status_init = xnn_initialize(nullptr);
 {{indent}}try {
 {{indent}}ret = {{func_name}}(
 {{indent}}    memory_pool.get(),
@@ -262,11 +323,11 @@ BENCHMARK_INSTANCE_TEMPLATE = jinja2.Template(
 {{indent}}    {{dim}},
 {% endfor %}
 {% for dim in cdims %}
-{{indent}}    {{dim}}{% if not loop.last %},{% endif %}
+{{indent}}    {{dim}},
 {% endfor %}
+{{indent}}    threadpool_.get()
 {{indent}});
 {{indent}}} catch (...) {}
-{{indent}}xnn_deinitialize();
 {{indent}}if (ret != 0)
 {{indent}}  return ret;
 {{indent}}
@@ -307,6 +368,13 @@ PROFILER_TEMPLATE = jinja2.Template(
 #include <stdexcept>
 #include <cstring>
 #include <thread>
+#include <cstdio>
+#include <string>
+#include <pthreadpool.h>
+#include "xnnpack.h"
+#include "logging.h"
+#include "rvv_utils.h"
+
 size_t GLOBAL_WORKSPACE_SIZE = 0;
 template <typename DType>
 struct ProfilerMemoryPool {
@@ -356,24 +424,28 @@ struct ProfilerMemoryPool {
 };
 {{op_func}}
 
+{{benchmark_func}}
 
 
-int benchmark_{{function_name}} (
-{% if is_group_gemm %}
-    void **ptr_A,
-    void **ptr_B,
-    void **ptr_C,
-    {% if has_bias %}
-    void **ptr_bias,
-    {% endif %}
-    int64_t* lda,
-    int64_t* ldb,
-    int64_t* ldc,
-    {% if has_bias %}
-    int64_t* ldd,
-    {% endif %}
-    int occupancy
-{% else %}
+int main(int argc, char** argv) {
+  auto memory_pool = std::make_unique<ProfilerMemoryPool<{{elem_type}}>>();
+  {{args_parse}}
+
+  {{tensor_decl}}
+  size_t num_threads = std::thread::hardware_concurrency();
+  std::unique_ptr<pthreadpool, decltype(&pthreadpool_destroy)> threadpool_(
+      pthreadpool_create(num_threads), pthreadpool_destroy);
+  {{indent}}const xnn_status status_init = xnn_initialize(nullptr);
+  {{benchmark_instances}}
+  {{indent}}xnn_deinitialize();
+  return 0;
+}
+"""
+)
+
+BENCHMARK_TEMPLATE = jinja2.Template(
+    """
+int benchmark_{{func_name}} (
     ProfilerMemoryPool<{{elem_type}}>* memory_pool,
 {% for idx in range(input_ndims) %}
     int64_t* a_dim{{idx}},
@@ -382,13 +454,18 @@ int benchmark_{{function_name}} (
     int64_t* b_dim{{idx}},
 {% endfor %}
 {% for idx in range(output_ndims) %}
-    int64_t* c_dim{{idx}}{% if not loop.last %},{% endif %}
+    int64_t* c_dim{{idx}},
 {% endfor %}
-{% endif %}
+    pthreadpool* pthreadpool_
   ) {
-  size_t num_threads = std::thread::hardware_concurrency();
-  std::unique_ptr<pthreadpool, decltype(&pthreadpool_destroy)> threadpool_(
-      pthreadpool_create(num_threads), pthreadpool_destroy);
+  
+  float pruning_ratio = {{pruning_ratio}};
+  int64_t b_ptr_sz = (*b_dim0) * (*b_dim1);
+  Ptr pruned_weight_data = RAII_DeviceMalloc(b_ptr_sz << 2);
+  Ptr weight_indice_data = RAII_DeviceMalloc(((int)(*b_dim0) * (int)((*b_dim1) * (1 - pruning_ratio)) << 1));
+  auto* pruned_weight = static_cast<float*>(pruned_weight_data.get());
+  auto* weight_indice = static_cast<uint16_t*>(weight_indice_data.get());
+  f32_data_pruning_column_wise((float*)(memory_pool->RequestTensorByIdx(1)), (*b_dim0), (*b_dim1), pruned_weight, weight_indice, {{tile_size}}, pruning_ratio);
   // warmup
   for (int i = 0; i < 5; ++i) {
     {{func_call}}
@@ -406,26 +483,13 @@ int benchmark_{{function_name}} (
       "OOB in xnnpack."
     );
   }
-  std::cout << "OP:" << "gemm_rcr" << ",";
+  std::cout << "OP:" << "{{func_name}}" << ",";
   std::cout << "TIME:" << runtime_ms << ",";
   std::cout << "WS:" << GLOBAL_WORKSPACE_SIZE << std::endl;
   return 0;
 }
-
-
-int main(int argc, char** argv) {
-  auto memory_pool = std::make_unique<ProfilerMemoryPool<{{elem_type}}>>();
-  {{args_parse}}
-
-  {{tensor_decl}}
-
-  {{benchmark_instances}}
-  return 0;
-}
-"""
+    """
 )
-
-
 def has_d(func_attrs):
     if "has_d" in func_attrs:
         return func_attrs["has_d"]
@@ -501,10 +565,10 @@ def gen_function(
     func_name = func_attrs["name"]
     exec_path = func_attrs["exec_path"]
     op_instance = func_attrs["op_instance"]
-    # _LOGGER.info(f"exec_path = {exec_path}, op_instance = {op_instance}")
+    _LOGGER.info(f"exec_path = {exec_path}, op_instance = {op_instance}")
     for exec_item in exec_path.values():
-        fname = "f" + sha1(exec_item.exec_cond.encode()).hexdigest()
-        algo = exec_item.algo
+        # fname = "f" + sha1(exec_item.exec_cond.encode()).hexdigest()
+        # algo = exec_item.algo
         op_key = next(iter(op_instance.keys()))
         config = emit_instance(
             op_instance[op_key],
@@ -517,9 +581,6 @@ def gen_function(
             program=config,
         )
         exec_paths += exec_inst
-    shape_eval_func = gemm_common.gen_shape_eval_code(
-        indent=1, dtype="int64_t", dim_info_dict=dim_info_dict, is_ptr=True
-    )
     input_output_checks = INPUT_OUTPUT_CHECKS_TEMPLATE.render(
         input_ndims=input_ndims,
         weight_ndims=weight_ndims,
@@ -527,10 +588,8 @@ def gen_function(
     )
     match = re.search(r'(\d+)$', func_name)
     return src_template.render(
-        instances="",
         function_name=func_name,
         dtype="float",
-        shape_eval=shape_eval_func,
         input_addr_calculator=input_addr_calculator,
         output_addr_calculator=output_addr_calculator,
         input_output_checks=input_output_checks,
@@ -620,9 +679,6 @@ def gen_profiler(
     adims = ["&a_dim" + str(i) for i in range(ndims)]
     bdims = ["&b_dim" + str(i) for i in range(ndims)]
     cdims = ["&c_dim" + str(i) for i in range(ndims)]
-    shape_func = gemm_common.gen_shape_eval_code(
-        indent=2, dtype="int64_t", dim_info_dict=dim_info_dict, is_ptr=True
-    )
 
     has_bias = bias_ptr_arg is not None
     instance_name_base = "GemmInstance"
@@ -634,11 +690,15 @@ def gen_profiler(
     )
 
     function_name = "gemm"
-    instances = []
+    file_pairs = []
     benchmark_instances = []
+    func_ops = []
+    benchmark_funcs = []
     for instance_idx, (op_name, op) in enumerate(op_instance.items()):
         config = emit_instance(op)
+        tile_size = op.tile_size
         gemm_op = f"gemm_op_{instance_idx}"
+        function_name = f"{op_type}_{op_name}"
         benchmark_instance = BENCHMARK_INSTANCE_TEMPLATE.render(
             indent="  ",
             gemm_op=gemm_op,
@@ -648,48 +708,60 @@ def gen_profiler(
             bdims=bdims,
             cdims=cdims,
         )
-        instances.append(config)
         benchmark_instances.append(benchmark_instance)
-    # TODO: Render args_parse by caller.
-    args_parse = (
-        args_parser_template
-        if isinstance(args_parser_template, str)
-        else args_parser_template.render()
-    )
-    op_func = src_template.render(
-        is_profiler=True,
-        function_name=function_name,
-        input_ndims=ndims,
-        weight_ndims=ndims,
-        output_ndims=ndims,
-        shape_eval=shape_func,
-        input_output_checks=input_output_checks,
-        exec_paths="\n".join(instances),
-        output_addr_calculator=output_addr_calculator,
-        extra_code=extra_code,
-    )
-    benchmark_adims = ["a_dim" + str(i) for i in range(ndims)]
-    benchmark_bdims = ["b_dim" + str(i) for i in range(ndims)]
-    benchmark_cdims = ["c_dim" + str(i) for i in range(ndims)]
-    func_call = FUNC_CALL_TEMPLATE.render(
-        is_profiler=True,
-        func_name=function_name,
-        a_ptr="memory_pool->RequestTensorByIdx(0)",
-        b_ptr="memory_pool->RequestTensorByIdx(1)",
-        has_bias=has_bias,
-        bias_ptr=bias_ptr_arg,
-        c_ptr="memory_pool->RequestTensorByIdx(2)",
-        adims=benchmark_adims,
-        bdims=benchmark_bdims,
-        cdims=benchmark_cdims,
-    )
+        # TODO: Render args_parse by caller.
+        args_parse = (
+            args_parser_template
+            if isinstance(args_parser_template, str)
+            else args_parser_template.render()
+        )
+        op_func = FUNC_OP_TEMPLATE.render(
+            is_profiler=True,
+            function_name=function_name,
+            has_bias=has_bias,
+            input_ndims=ndims,
+            weight_ndims=ndims,
+            output_ndims=ndims,
+            input_output_checks=input_output_checks,
+            exec_paths=config,
+            output_addr_calculator=output_addr_calculator,
+        )
+        func_ops.append(op_func)
+        benchmark_adims = ["a_dim" + str(i) for i in range(ndims)]
+        benchmark_bdims = ["b_dim" + str(i) for i in range(ndims)]
+        benchmark_cdims = ["c_dim" + str(i) for i in range(ndims)]
+        func_call = FUNC_CALL_TEMPLATE_PROFILER.render(
+            is_profiler=True,
+            func_name=function_name,
+            a_ptr="memory_pool->RequestTensorByIdx(0)",
+            b_ptr="memory_pool->RequestTensorByIdx(1)",
+            has_bias=has_bias,
+            bias_ptr=bias_ptr_arg,
+            weight_indice_ptr="(void*)weight_indice",
+            c_ptr="memory_pool->RequestTensorByIdx(2)",
+            adims=benchmark_adims,
+            bdims=benchmark_bdims,
+            cdims=benchmark_cdims,
+            pruning_ratio=func_attrs["pruning_ratio"],
+        )
+        benchmark_func = BENCHMARK_TEMPLATE.render(
+            func_name=function_name,
+            input_ndims=ndims,
+            weight_ndims=ndims,
+            output_ndims=ndims,
+            elem_type=elem_type,
+            pruning_ratio=func_attrs["pruning_ratio"],
+            tile_size=tile_size,
+            func_call=func_call,
+        )
+        benchmark_funcs.append(benchmark_func)
     tensor_decl = TENSOR_DECL_TEMPLATE.render(
         elem_input_type=elem_input_type,
         elem_output_type=elem_output_type,
         has_bias=has_bias,
     )
     code = PROFILER_TEMPLATE.render(
-        op_func=op_func,
+        op_func="\n".join(func_ops),
         has_bias=has_bias,
         has_d=has_d(func_attrs),
         args_parse=args_parse,
@@ -700,12 +772,12 @@ def gen_profiler(
         func_call=func_call,
         name=instance_name_base,
         tensor_decl=tensor_decl,
+        benchmark_func="\n".join(benchmark_funcs),
         benchmark_instances="\n".join(benchmark_instances),
         elem_type=elem_type,
     )
     # FIXME: remove file_pairs once we have make -j ready for building
     # an entire graph
-    file_pairs = []
     add_profiler(file_pairs, workdir, op_type, profiler_filename, code)
     # build
     return build_profiler(file_pairs)
@@ -743,6 +815,7 @@ def gen_function_call(func_attrs, indent="  ", bias_ptr_arg=None):
     bshapes = func_attrs["input_accessors"][1].original_shapes
     c = func_attrs["outputs"][0]
     cshapes = func_attrs["output_accessors"][0].original_shapes
+    w_idx = func_attrs["inputs"][2]
     has_bias = bias_ptr_arg is not None
     # overwrite the global defs if we have input TensorAccessor
     local_dim_defs = gen_local_dim_defs(func_attrs, indent=indent)
@@ -756,10 +829,12 @@ def gen_function_call(func_attrs, indent="  ", bias_ptr_arg=None):
         b_ptr=b._attrs["name"],
         has_bias=has_bias,
         bias_ptr=bias_ptr_arg,
+        weight_indice_ptr=w_idx._attrs["name"],
         c_ptr=c._attrs["name"],
         adims=adims,
         bdims=bdims,
         cdims=cdims,
+        pruning_ratio=func_attrs["pruning_ratio"],
         indent=indent,
     )
 

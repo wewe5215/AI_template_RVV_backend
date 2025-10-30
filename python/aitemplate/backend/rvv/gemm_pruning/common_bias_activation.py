@@ -19,7 +19,7 @@ Common codegen functions for gemm_bias_activation.
 import jinja2
 
 from aitemplate.backend.backend_spec import RVVSpec
-from aitemplate.backend.rvv.gemm_pruning import common, common_bias, gemm_rcr
+from aitemplate.backend.rvv.gemm_pruning import common, common_bias, gemm_pruning_rcr
 from aitemplate.backend.rvv.gemm_universal.layout import RCR
 
 # pylint: disable=C0103,C0415,W0613,C0301,R1705,R1703
@@ -56,7 +56,7 @@ def gen_profiler(
         func_attrs["outputs"][0]._attrs["dtype"]
     )
     extra_code_header = ""
-    return gemm_rcr.common_gen_profiler(
+    return gemm_pruning_rcr.common_gen_profiler(
         func_attrs=func_attrs,
         workdir=workdir,
         profiler_filename=profiler_filename,

@@ -44,7 +44,7 @@ ARGS_PARSER_TEMPLATE = jinja2.Template(
 """
 )
 
-@registry.reg("rvv.gemm_rcr.config")
+@registry.reg("rvv.gemm_pruning_rcr.config")
 def gemm_rcr_config(func_attrs, dtype="float16"):
     func_attrs["op_instance"] = common.extract_config(
         dtype=func_attrs["inputs"][0].dtype(),
@@ -79,7 +79,7 @@ def common_gen_profiler(
     )
 
 
-@registry.reg("rvv.gemm_rcr.gen_profiler")
+@registry.reg("rvv.gemm_pruning_rcr.gen_profiler")
 def gen_profiler(func_attrs, workdir, profiler_filename, dim_info_dict):
     return common_gen_profiler(
         func_attrs=func_attrs,
@@ -124,12 +124,14 @@ def get_input_addr_calculator(func_attrs):
     return input_addr_calculator
 
 
-@registry.reg("rvv.gemm_rcr.gen_function")
+@registry.reg("rvv.gemm_pruning_rcr.gen_function")
 def gen_function(
     func_attrs,
     exec_cond_template,
     dim_info_dict,
 ):
+    if func_attrs["has_profiler"] == False:
+        gemm_rcr_config(func_attrs, dtype="float32")
     input_addr_calculator = get_input_addr_calculator(func_attrs)
     input_ndims = len(func_attrs["input_accessors"][0].original_shapes)
     weight_ndims = len(func_attrs["input_accessors"][1].original_shapes)
@@ -153,7 +155,7 @@ def gen_function(
     )
 
 
-@registry.reg("rvv.gemm_rcr.func_decl")
+@registry.reg("rvv.gemm_pruning_rcr.func_decl")
 def gen_function_decl(func_attrs):
     func_name = func_attrs["name"]
     input_ndims = len(func_attrs["input_accessors"][0].original_shapes)
@@ -166,12 +168,12 @@ def gen_function_decl(func_attrs):
     )
 
 
-@registry.reg("rvv.gemm_rcr.func_call")
+@registry.reg("rvv.gemm_pruning_rcr.func_call")
 def gen_function_call(func_attrs, indent="  "):
     return common.gen_function_call(func_attrs, indent)
 
 
-@registry.reg("rvv.gemm_rcr.filter")
+@registry.reg("rvv.gemm_pruning_rcr.filter")
 def function_filter(cfg, func_attrs, ab_alignment):
     """Generates function filter.
 

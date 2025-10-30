@@ -39,14 +39,20 @@ SRC_TEMPLATE = jinja2.Template(
 #include <cstdlib>
 #include <stdexcept>
 #include <cstring> // For memset
+#include <thread>
+#include <cstdio>
+#include <string>
+#include <pthreadpool.h>
 #include "xnnpack.h"
 #include "logging.h"
+#include "rvv_utils.h"
 {{extra_code}}
 
 void {{function_name}} (
     void* a_ptr,
     void* b_ptr,
     void* bias_ptr,
+    void* weight_indice_ptr,
     void* c_ptr,
 {% for idx in range(input_ndims) %}
     int64_t* a_dim{{idx}},
@@ -57,9 +63,12 @@ void {{function_name}} (
 {% for idx in range(input_ndims) %}
     int64_t* c_dim{{idx}},
 {% endfor %}
+    float pruning_ratio,
     pthreadpool* pthreadpool_
   ) {
-  {{shape_eval}}
+  int64_t M = (*a_dim0);
+  int64_t N = (*b_dim0);
+  int64_t K = (*a_dim1);
   {{input_addr_calculator}}
   {{output_addr_calculator}}
   {{extra_shape}}
@@ -87,6 +96,7 @@ void {{func_name}}(
   void*,
   void*,
   void*,
+  void*,
 {% for idx in range(input_ndims) %}
   int64_t*,
 {% endfor %}
@@ -96,6 +106,7 @@ void {{func_name}}(
 {% for idx in range(input_ndims) %}
     int64_t*,
 {% endfor %}
+    float,
     pthreadpool*
 );
 """
