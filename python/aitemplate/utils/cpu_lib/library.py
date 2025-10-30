@@ -263,6 +263,12 @@ class GemmKind(enum.Enum):
     DynamicGemm = auto()
     BatchGemm = auto()
 
+class GemmPruningKind(enum.Enum):
+    GemmPruning = auto()
+    GemmPruningBias = auto()
+    GemmPruningBiasAdd = auto()
+    GemmPruningBiasAddRelu = auto()
+    GemmPruningBiasGelu = auto()
 
 GemmKindNames = {
     GemmKind.Gemm: "gemm",
@@ -272,6 +278,14 @@ GemmKindNames = {
     GemmKind.GemmBiasGelu: "gemm_bias_gelu",
     GemmKind.BatchGemm: "batch_gemm",
     GemmKind.DynamicGemm: "dynamic_gemm",
+}
+
+GemmPruningKindNames = {
+    GemmPruningKind.GemmPruning: "gemm_pruning",
+    GemmPruningKind.GemmPruningBias: "gemm_pruning_bias",
+    GemmPruningKind.GemmPruningBiasAdd: "gemm_pruning_bias_add",
+    GemmPruningKind.GemmPruningBiasAddRelu: "gemm_pruning_bias_add_relu",
+    GemmPruningKind.GemmPruningBiasGelu: "gemm_pruning_bias_gelu",
 }
 
 

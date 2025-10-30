@@ -20,7 +20,19 @@ from typing import List
 
 import jinja2
 from aitemplate.utils.cpu_lib import library
-from aitemplate.utils.cpu_lib.conv2d_common import BINARY_OP_KIND, RELU_KINDS, RELU6_KINDS
+from aitemplate.utils.cpu_lib.conv2d_common import BINARY_OP_KIND
+BIAS_KINDS = {
+    library.GemmKind.GemmBias,
+    library.GemmKind.GemmBiasAdd,
+    library.GemmKind.GemmBiasGelu,
+    library.GemmPruningKind.GemmPruning,
+    library.GemmPruningKind.GemmPruningBias,
+    library.GemmPruningKind.GemmPruningBiasAdd,
+    library.GemmPruningKind.GemmPruningBiasGelu,
+}
+RELU_KINDS = {
+    library.GemmKind.GemmBiasAddRelu,
+}
 # import library
 # TODO : flag should be enabled for transposed weight
 template = jinja2.Template(
@@ -165,7 +177,7 @@ class GemmOperation:
             return template_kind.render(
                 indent="  ",
                 is_relu = (self.operation_kind in RELU_KINDS),
-                is_relu6 = (self.operation_kind in RELU6_KINDS),
+                is_relu6 = False,
                 operation = library.TensorOperationTag[operation_type],
                 DataType = library.DataTypeNames[element],
                 DataName = library.DataTypeTag[element],
@@ -185,11 +197,7 @@ class GemmOperation:
             GemmSpecialization=GemmSpecializationTag[self.gemm_specialization],
             epilogue_func=library.TensorOperationTag[self.epilogue_functor],
         )
-        is_bias = False
-        if self.operation_kind == library.GemmKind.GemmBias or \
-            self.operation_kind == library.GemmKind.GemmBiasAdd or \
-            self.operation_kind == library.GemmKind.GemmBiasGelu:
-          is_bias = True
+        is_bias  = self.operation_kind in BIAS_KINDS
         extra_kind_code = generate_tensorOP(self.operation_kind, self.extra_kind, self.A.element)
         activation_code = gelu_op.render(
             DataName = library.DataTypeTag[self.A.element])

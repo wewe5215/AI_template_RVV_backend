@@ -18,6 +18,7 @@ import copy
 from aitemplate.utils.cpu_lib import (
     conv2d_operation as conv,
     gemm_operation as gemm,
+    gemm_pruning_operation as gemm_prune,
     conv2d_pruning_operation as conv_prune,
     # groupnorm_operation as groupnorm,
     # layernorm_operation as layernorm,
@@ -165,6 +166,43 @@ def CreateGemmFwdOperator(manifest, operation_kind, out_element_op, out_data_op=
         operations.append(new_operation)
 
     return operations
+
+def CreateGemmPruningFwdOperator(manifest, operation_kind, out_element_op, LMUL, tile_size):
+    in_element_op = library.TensorOperation.PassThrough
+    gemm_specialization = gemm.GemmSpecialization.GemmRCR_f32
+    operations = []
+    data_type = library.DataType.f32
+
+    a_element_desc = library.TensorDesc(
+        data_type, library.LayoutType.RowMajor
+    )
+    b_element_desc = library.TensorDesc(
+        data_type, library.LayoutType.ColumnMajor
+    )
+    c_element_desc = library.TensorDesc(
+        data_type, library.LayoutType.RowMajor
+    )
+    # LMUL_Setting = [2, 4, 8]
+    # for LMUL in LMUL_Setting:
+    #     for tile_size in range(3, 13):
+    new_operation = gemm_prune.Gemm_Pruning_Operation(
+        operation_kind=operation_kind,
+        extra_kind=out_element_op,
+        A=a_element_desc,
+        B=b_element_desc,
+        C=c_element_desc,
+        a_elem_op=in_element_op,
+        b_elem_op=in_element_op,
+        epilogue_functor=out_element_op,
+        gemm_specialization=gemm_specialization,
+        LMUL=LMUL,
+        tile_size=tile_size
+    )
+    manifest.append(new_operation)
+    operations.append(new_operation)
+
+    return operations
+
 def GenerateTensorOp(manifest):
     # Conv2d
     CreateConv2dFwdOperator(
@@ -393,6 +431,31 @@ def GenerateTensorOp(manifest):
          manifest,
          library.GemmKind.GemmBiasGelu,
          library.TensorOperation.PassThrough,
+    )
+
+    CreateGemmPruningFwdOperator(
+         manifest,
+         library.GemmPruningKind.GemmPruningBias,
+         library.TensorOperation.PassThrough,
+         tile_size=10, LMUL=2
+    )
+    CreateGemmPruningFwdOperator(
+         manifest,
+         library.GemmPruningKind.GemmPruningBiasAdd,
+         library.TensorOperation.Add,
+         tile_size=10, LMUL=2
+    )
+    CreateGemmPruningFwdOperator(
+         manifest,
+         library.GemmPruningKind.GemmPruningBiasAddRelu,
+         library.TensorOperation.Add,
+         tile_size=10, LMUL=2
+    )
+    CreateGemmPruningFwdOperator(
+         manifest,
+         library.GemmPruningKind.GemmPruningBiasGelu,
+         library.TensorOperation.PassThrough,
+         tile_size=10, LMUL=2
     )
 
 
