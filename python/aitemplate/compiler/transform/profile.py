@@ -32,6 +32,10 @@ from aitemplate.compiler.ops.gemm_universal.gemm_common import (
     gemm,
     GemmProfilerPostprocessingDelegate,
 )
+from aitemplate.compiler.ops.gemm_pruning.gemm_pruning_common import (
+    gemm_pruning,
+    GemmPrunedProfilerPostprocessingDelegate
+)
 from aitemplate.utils.environ import force_profiler_cache
 
 # pylint: disable=C0103,W0613,W0102
@@ -101,13 +105,29 @@ def profile(
     )
 
     start_t = datetime.now()
-    gemms, non_gemms = _splitter(
-        funcs_to_profile.values(), lambda f: isinstance(f, gemm)
-    )
+    gemms, gemms_prune, non_gemms = [], [], []
+
+    for f in funcs_to_profile.values():
+        if isinstance(f, gemm):
+            gemms.append(f)
+        elif isinstance(f, gemm_pruning):
+            gemms_prune.append(f)
+        else:
+            non_gemms.append(f)
     for f in non_gemms:
         f.profile(
             workdir=profiler_dir,
             devices=devices,
+        )
+    profiler_runner = ProfilerRunner(
+        devices,
+        postprocessing_delegate=GemmPrunedProfilerPostprocessingDelegate(),
+        timeout=timeout,
+    )
+    for f in gemms_prune:
+        f.profile(
+            workdir=profiler_dir,
+            profiler_runner=profiler_runner,
         )
     profiler_runner = ProfilerRunner(
         devices,
@@ -127,11 +147,11 @@ def profile(
     record_dictionary = {}
     for node in sorted_graph:
         for func in node.src_ops():
+            fname = func._attrs["name"]
             if func._attrs["has_profiler"]:
                 func._attrs["exec_path"] = deepcopy(
                     funcs_to_profile[func._attrs["name"]]._attrs["exec_path"]
                 )
-                fname = func._attrs["name"]
                 if "pruning" in fname:
                     _LOGGER.info(f"fetching profile result of {fname}")
                     workloads = list(func._attrs["exec_path"].keys())
@@ -147,6 +167,10 @@ def profile(
                             f"{lmul}|{tile_size}|\n")
                         rows_for_record.append(row)
                         record_dictionary[f"{func._attrs['inputs'][1]._attrs['name']}_indice"] = tile_size
+            else:
+                if "pruning" in fname:
+                    tile_size = 10
+                    record_dictionary[f"{func._attrs['inputs'][1]._attrs['name']}_indice"] = tile_size
 
     if rows_for_record is not None:
         md_path = pathlib.Path(f"profile_summary_{test_name}.md")
