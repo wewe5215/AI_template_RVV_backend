@@ -243,6 +243,20 @@ typedef void (*xnn_pack_transpose_x4v_input_T)(
   uint32_t* packed_weights,
   size_t extra_bytes,
   const void* params);
+
+void xnn_x32_pack_transpose_ukernel_x2v__rvv_u8(
+  size_t g,
+  size_t nc,
+  size_t kc,
+  size_t nr,
+  size_t kr,
+  size_t sr,
+  uint32_t* weights,
+  const void* scale,
+  uint32_t* packed_weights,
+  size_t extra_bytes,
+  const void* params);
+
 void xnn_x32_pack_transpose_ukernel_x4v__rvv_u8(
   size_t g,
   size_t nc,
