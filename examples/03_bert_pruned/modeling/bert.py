@@ -17,7 +17,7 @@ from typing import Tuple
 from aitemplate.compiler import ops
 from aitemplate.frontend import nn, Tensor
 from aitemplate.testing import detect_target
-pruning_ratio = 0.5
+from ..demo import pruning_ratio
 # pylint: disable=W0102
 import importlib
 dt = importlib.import_module("aitemplate.testing.detect_target")

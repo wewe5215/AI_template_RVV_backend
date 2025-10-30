@@ -40,6 +40,60 @@ from aitemplate.utils.remote_send_receive_files import (
     TARGET_IP,
     remote_run_program_send_back_result
 )
+def f32_data_pruning_column_wise_with_ratio(weight, nr, mr, pruning_ratio):
+    """
+    Performs column-wise pruning on a 2D weight array using a given pruning ratio.
+    
+    Parameters:
+      weight: a 2D numpy array of shape (output_channel, input_channel)
+      nr: an integer multiplier for the recorded indices
+      mr: block size (number of rows per block)
+      pruning_ratio: fraction of columns to prune (e.g., 0.5 means prune bottom 50% columns)
+                     
+    Returns:
+      pruned_weight: a 1D numpy array containing the pruned weights (row-major order)
+      indices: a 1D numpy array (dtype uint16) with the recorded column indices
+    """
+    output_channel, input_channel = weight.shape
+    in_ch_after_pruning = input_channel * (1 - pruning_ratio)
+    pruned_weight = []   # List to store selected weight elements.
+    indices = []         # List to store selected column indices (for the first row in each block).
+    
+    # Process the weight array in blocks of mr rows.
+    for i in range(0, output_channel, mr):
+        end_offset = min(mr, output_channel - i)
+        block = weight[i:i+end_offset, :]  # Block shape: (end_offset, input_channel)
+        accumulator = np.sum(np.abs(block), axis=0)
+        # Determine how many columns to retain.
+        # For pruning_ratio = 0.5, we want to keep the top 50% columns.
+        keep_count = int(np.ceil((1 - pruning_ratio) * input_channel))
+        if np.all(accumulator == accumulator[0]):
+            for j in range(end_offset):
+                for k in range(keep_count):
+                    pruned_weight.append(block[j, k])
+                    if j == 0:
+                        indices.append(k)
+        else:
+            threshold = np.percentile(accumulator, pruning_ratio * 100)
+            for j in range(end_offset):
+                selected_in_ch = 0
+                for k in range(input_channel):
+                    # Use '>=' for even number of columns, '>' for odd (following the C-code logic).
+                    if input_channel % 2 == 0:
+                        select = accumulator[k] >= threshold
+                    else:
+                        select = accumulator[k] > threshold
+                    if select and selected_in_ch < in_ch_after_pruning:
+                        selected_in_ch = selected_in_ch + 1
+                        pruned_weight.append(block[j, k])
+                        # For the first row in the block, record the column index.
+                        if j == 0:
+                            indices.append(k)
+    
+    pruned_weight = np.array(pruned_weight, dtype=np.float32)
+    indices = np.array(indices, dtype=np.uint16)
+    return pruned_weight, indices
+
 def mark_output(y: Tensor) -> None:
     if type(y) is not tuple:
         y = (y,)
