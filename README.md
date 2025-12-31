@@ -1,7 +1,8 @@
 # AI_template_RVV_backend
 AI_template_RVV_backend is based on [AITemplate](https://github.com/facebookincubator/AITemplate).
 ## My Contributions
-- **Implemented the paper: [Efficient Column-Wise N:M Pruning on RISC-V CPU](https://arxiv.org/abs/2507.17301)**
+- **Publication / Implementation**: [Efficient Column-Wise N:M Pruning on RISC-V CPU](https://www.sciencedirect.com/science/article/pii/S138376212500339X) (Journal of Systems Architecture), **accepted Dec 18, 2025**.  
+  - arXiv: https://arxiv.org/abs/2507.17301
 - Added a CPU backend, which was not previously supported
 - Developed custom operations including:
   1. Sparse 2D convolution operators in CNHW layout
